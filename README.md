@@ -81,14 +81,14 @@ const { text } = await generateText({
 
 Any OpenAI-compatible endpoint works.
 
-- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off** every model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off**) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
+- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**30% off** every model)
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**30% off**) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
 
 ## Text model pricing
 
 USD per 1M tokens, input / output. Official rates as of 2026-05 — verify current rates with each provider. OpenRouter passes list price through; Kunavo is a flat 30% off the official rate.
 
-| Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | Cheapest |
+| Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | Cheapest |
 |---|---|---|---|---|
 | Gemini 3 Flash | $0.50 / $3.00 | no discount | −30% | ⭐ Kunavo |
 | Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −30% | ⭐ Kunavo |
@@ -104,7 +104,7 @@ Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to O
 
 USD per image, as of 2026-05 (provider list / retail; verify current rates). Kunavo is 30% off official. fal and Runware are compute providers — `ai-lcr` picks the cheapest per model (⭐).
 
-| Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | Cheapest |
+| Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | Cheapest |
 |---|---|---|---|---|
 | Nano Banana 2 | $0.080 | $0.069 | $0.047 | ⭐ Kunavo |
 | Nano Banana Pro | $0.080 | — | $0.094 | ⭐ fal |
@@ -146,7 +146,7 @@ USD per second, as of 2026-05 — verify current rates. Video billing differs by
 
 ## Affiliate disclosure
 
-`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)**, which — at 30% off official rates — is often (not always) the cheapest option, as the tables above show. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
+`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=victorimf)**, which — at 30% off official rates — is often (not always) the cheapest option, as the tables above show. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
 
 ## Development
 

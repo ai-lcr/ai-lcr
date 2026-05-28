@@ -81,14 +81,14 @@ const { text } = await generateText({
 
 任何 OpenAI 兼容的 endpoint 都可用。
 
-- **文本：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=hJ2uT3iW)（**全模型 7 折**）
-- **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=hJ2uT3iW)（**7 折**）· [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 路由功能在路线图中
+- **文本：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=victorimf)（**全模型 7 折**）
+- **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=victorimf)（**7 折**）· [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 路由功能在路线图中
 
 ## 文本模型价格
 
 单位为每 100 万 token 的美元价格，input / output。官方价格截至 2026-05——请向各 provider 核对当前价格。OpenRouter 直接透传列表价；Kunavo 在官方价基础上统一 7 折。
 
-| 模型 | 官方价（in / out） | OpenRouter | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | 最便宜 |
+| 模型 | 官方价（in / out） | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | 最便宜 |
 |---|---|---|---|---|
 | Gemini 3 Flash | $0.50 / $3.00 | 无折扣 | −30% | ⭐ Kunavo |
 | Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | 无折扣 | −30% | ⭐ Kunavo |
@@ -104,7 +104,7 @@ Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 
 
 单位为每张图的美元价格，截至 2026-05（provider 列表价 / 零售价；请核对当前价格）。Kunavo 为官方价 7 折。fal 与 Runware 是算力 provider——`ai-lcr` 为每个模型挑选最便宜的那个（⭐）。
 
-| 模型 | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | 最便宜 |
+| 模型 | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | 最便宜 |
 |---|---|---|---|---|
 | Nano Banana 2 | $0.080 | $0.069 | $0.047 | ⭐ Kunavo |
 | Nano Banana Pro | $0.080 | — | $0.094 | ⭐ fal |
@@ -146,7 +146,7 @@ Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 
 
 ## 联盟（Affiliate）披露
 
-`ai-lcr` 是 provider 中立的，可与任何 OpenAI 兼容的 endpoint 配合使用。作者与 **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)** 之间存在联盟（affiliate）关系——在官方价 7 折的情况下，它往往（但并非总是）是最便宜的选项，正如上面的表格所示。通过该链接注册可能会让作者获得一份分成。你完全不必使用它；自带 provider，路由功能照常工作。
+`ai-lcr` 是 provider 中立的，可与任何 OpenAI 兼容的 endpoint 配合使用。作者与 **[Kunavo](https://kunavo.com/?ref=victorimf)** 之间存在联盟（affiliate）关系——在官方价 7 折的情况下，它往往（但并非总是）是最便宜的选项，正如上面的表格所示。通过该链接注册可能会让作者获得一份分成。你完全不必使用它；自带 provider，路由功能照常工作。
 
 ## 开发
 
