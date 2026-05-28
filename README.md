@@ -1,4 +1,4 @@
-# ai-lcr — AI Least Cost Routing
+# AI-LCR — AI Least Cost Routing
 
 <p align="center">
   <b>English</b> · <a href="./README.zh-CN.md">简体中文</a>
@@ -19,8 +19,6 @@
 </p>
 
 The same model costs different amounts on different providers — and no single provider is cheapest for everything. `ai-lcr` keeps a cheapest-first list per model, routes to the cheapest healthy one (⭐ below), and falls through on failure — the way phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing) for decades.
-
-> 🚧 Early development — the API may change. Dogfooded in production before a stable release.
 
 ## Install
 

@@ -1,4 +1,4 @@
-# ai-lcr — AI 最低成本路由（Least Cost Routing）
+# AI-LCR — AI 最低成本路由（Least Cost Routing）
 
 <p align="center">
   <a href="./README.md">English</a> · <b>简体中文</b>
@@ -19,8 +19,6 @@
 </p>
 
 同一个模型在不同 provider 上的价格不同——而且没有任何单一 provider 在所有模型上都最便宜。`ai-lcr` 为每个模型维护一份「最便宜优先」的列表，路由到其中最便宜且健康的 provider（下表中的 ⭐），失败时向下穿透——这正是电话运营商几十年来一直在做的 [最低成本路由（Least Cost Routing）](https://en.wikipedia.org/wiki/Least-cost_routing)。
-
-> 🚧 早期开发阶段——API 可能变化。稳定版发布前会先在生产环境 dogfood。
 
 ## 安装
 
