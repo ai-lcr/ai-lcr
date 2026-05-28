@@ -262,6 +262,17 @@ a {
   height: 16px;
 }
 
+/* live status dot — reused in nav + footer; stays visible on mobile */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(79, 227, 154, 0.6);
+  animation: ping 2s ease-out infinite;
+  flex: 0 0 auto;
+}
+
 /* ───────────────────────── hero ───────────────────────── */
 .hero {
   padding: clamp(48px, 9vh, 110px) 0 8px;

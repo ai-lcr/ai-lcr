@@ -1,0 +1,265 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getPool } from "@/lib/db9";
+import { PROVIDERS } from "@/lib/providers";
+
+export const dynamic = "force-dynamic";
+
+export function generateStaticParams() {
+  return PROVIDERS.map((p) => ({ provider: p.id }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ provider: string }>;
+}): Promise<Metadata> {
+  const { provider } = await params;
+  const p = PROVIDERS.find((x) => x.id === provider);
+  if (!p) return { title: "ai-lcr — Provider Status" };
+  return {
+    title: `${p.label} status — ai-lcr`,
+    description: `Live uptime and latency for ${p.label} (${p.model}), pinged every 15 minutes by ai-lcr.`,
+  };
+}
+
+type Agg = { up: number; total: number; avg_latency: number | null };
+type Latest = {
+  ok: boolean;
+  latency_ms: number | null;
+  error: string | null;
+  checked_at: string;
+};
+type Strip = { ok: boolean; latency_ms: number | null; checked_at: string };
+type Failure = { error: string | null; checked_at: string };
+
+// `interval` is supplied only from the fixed literals below — never user input —
+// so inlining it is safe. db9's SQL parser rejects parameterized ::interval casts
+// and ordered-set aggregates (WITHIN GROUP), so we keep this to plain aggregates.
+async function aggFor(id: string, interval: "24 hours" | "7 days" | "30 days"): Promise<Agg> {
+  const pool = getPool();
+  const r = await pool.query<Agg>(
+    `SELECT count(*) FILTER (WHERE ok)::int AS up,
+            count(*)::int AS total,
+            avg(latency_ms) FILTER (WHERE ok) AS avg_latency
+     FROM provider_pings
+     WHERE provider = $1 AND checked_at > now() - interval '${interval}'`,
+    [id],
+  );
+  return r.rows[0] ?? { up: 0, total: 0, avg_latency: null };
+}
+
+function pct(a: Agg): string {
+  if (a.total === 0) return "—";
+  return ((a.up / a.total) * 100).toFixed(a.up === a.total ? 0 : 1) + "%";
+}
+function ms(n: number | null): string {
+  return n == null ? "—" : `${Math.round(n)}ms`;
+}
+function ago(iso?: string): string {
+  if (!iso) return "never";
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 90) return `${Math.round(s)}s ago`;
+  if (s < 5400) return `${Math.round(s / 60)}m ago`;
+  if (s < 129600) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+function when(iso: string): string {
+  return new Date(iso).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+}
+
+const C = { green: "var(--green)", red: "var(--red)", faint: "var(--faint)" };
+
+export default async function ProviderStatus({
+  params,
+}: {
+  params: Promise<{ provider: string }>;
+}) {
+  const { provider } = await params;
+  const p = PROVIDERS.find((x) => x.id === provider);
+  if (!p) notFound();
+
+  let latest: Latest | null = null;
+  let day: Agg = { up: 0, total: 0, avg_latency: null };
+  let week = day;
+  let month = day;
+  let strip: Strip[] = [];
+  let failures: Failure[] = [];
+  let dbError: string | null = null;
+
+  try {
+    const pool = getPool();
+    const [latestQ, d, w, m, stripQ, failQ] = await Promise.all([
+      pool.query<Latest>(
+        `SELECT ok, latency_ms, error, checked_at FROM provider_pings
+         WHERE provider = $1 ORDER BY checked_at DESC LIMIT 1`,
+        [p.id],
+      ),
+      aggFor(p.id, "24 hours"),
+      aggFor(p.id, "7 days"),
+      aggFor(p.id, "30 days"),
+      pool.query<Strip>(
+        `SELECT ok, latency_ms, checked_at FROM provider_pings
+         WHERE provider = $1 AND checked_at > now() - interval '48 hours'
+         ORDER BY checked_at ASC`,
+        [p.id],
+      ),
+      pool.query<Failure>(
+        `SELECT error, checked_at FROM provider_pings
+         WHERE provider = $1 AND ok = false
+         ORDER BY checked_at DESC LIMIT 12`,
+        [p.id],
+      ),
+    ]);
+    latest = latestQ.rows[0] ?? null;
+    day = d;
+    week = w;
+    month = m;
+    strip = stripQ.rows;
+    failures = failQ.rows;
+  } catch (e) {
+    dbError = (e as Error).message;
+  }
+
+  const known = !!latest;
+  const up = latest?.ok ?? false;
+  const color = known ? (up ? C.green : C.red) : C.faint;
+
+  return (
+    <>
+      <nav className="nav">
+        <div className="wrap nav__row">
+          <a className="brand" href="/" style={{ textDecoration: "none", color: "inherit" }}>
+            <span className="brand__word">ai<b>-lcr</b></span>
+          </a>
+          <div className="nav__links">
+            <a href="/status">All providers</a>
+          </div>
+        </div>
+      </nav>
+
+      <main className="wrap" style={{ paddingTop: 40, paddingBottom: 80 }}>
+        <a href="/status" style={{ color: "var(--muted)", fontSize: 13 }}>
+          ← All providers
+        </a>
+
+        <header style={{ margin: "18px 0 28px" }}>
+          <span className="eyebrow">
+            <span className="dot" style={{ background: color }} />
+            {known ? (up ? "Operational" : "Down") : "No data"}
+          </span>
+          <h1
+            className="h1"
+            style={{ fontSize: "clamp(28px,5vw,44px)", marginTop: 14, display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}
+          >
+            {p.link ? (
+              <a href={p.link} target="_blank" rel="noreferrer" style={{ color: "var(--text)" }}>
+                {p.label}
+              </a>
+            ) : (
+              p.label
+            )}
+            <code style={{ fontSize: 15, color: "var(--muted)", fontWeight: 400 }}>{p.model}</code>
+          </h1>
+          <p className="sub" style={{ marginTop: 6 }}>
+            {known
+              ? `${p.check} check · last heartbeat ${ago(latest!.checked_at)}${latest!.latency_ms != null ? ` · ${latest!.latency_ms}ms` : ""}${!up && latest!.error ? ` · ${latest!.error}` : ""}`
+              : `${p.check} check · awaiting first heartbeat`}
+          </p>
+        </header>
+
+        {dbError && (
+          <p style={{ color: C.red, fontFamily: "var(--font-mono)", fontSize: 13 }}>
+            status store unavailable: {dbError}
+          </p>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
+            gap: 12,
+            marginBottom: 28,
+          }}
+        >
+          <Stat label="Uptime · 24h" value={pct(day)} sub={`${day.up}/${day.total} checks`} />
+          <Stat label="Uptime · 7d" value={pct(week)} sub={`${week.up}/${week.total} checks`} />
+          <Stat label="Uptime · 30d" value={pct(month)} sub={`${month.up}/${month.total} checks`} />
+          <Stat label="Latency · avg 24h" value={ms(day.avg_latency)} sub={`7d avg ${ms(week.avg_latency)}`} />
+        </div>
+
+        <h2 style={{ fontSize: 14, color: "var(--muted)", margin: "0 0 10px" }}>
+          Last 48 hours
+        </h2>
+        {strip.length > 0 ? (
+          <div style={{ display: "flex", gap: 2, marginBottom: 32 }}>
+            {strip.map((s, i) => (
+              <span
+                key={i}
+                title={`${s.ok ? "up" : "down"}${s.latency_ms != null ? ` · ${s.latency_ms}ms` : ""} · ${when(s.checked_at)}`}
+                style={{
+                  flex: "1 1 0",
+                  height: 30,
+                  borderRadius: 3,
+                  background: s.ok ? C.green : C.red,
+                  opacity: s.ok ? 0.55 : 0.85,
+                  minWidth: 2,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: "var(--faint)", fontSize: 13, marginBottom: 32 }}>No checks yet.</p>
+        )}
+
+        <h2 style={{ fontSize: 14, color: "var(--muted)", margin: "0 0 10px" }}>
+          Recent failures
+        </h2>
+        {failures.length > 0 ? (
+          <div style={{ display: "grid", gap: 6 }}>
+            {failures.map((f, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  fontSize: 12.5,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--muted)",
+                  borderBottom: "1px solid var(--line)",
+                  paddingBottom: 6,
+                }}
+              >
+                <span style={{ color: "var(--faint)", flex: "0 0 auto" }}>{when(f.checked_at)}</span>
+                <span style={{ color: C.red, wordBreak: "break-word" }}>{f.error ?? "unknown error"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: "var(--faint)", fontSize: 13 }}>
+            No failures recorded in the last 30 days.
+          </p>
+        )}
+      </main>
+    </>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        background: "var(--panel)",
+        borderRadius: 12,
+        padding: "14px 16px",
+      }}
+    >
+      <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>{sub}</div>
+    </div>
+  );
+}

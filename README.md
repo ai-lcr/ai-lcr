@@ -51,7 +51,7 @@ const lcr = createLCR({
   models: {
     // One logical model, served cheapest-first across providers.
     "gemini-3-flash": [
-      { model: kunavo("gemini-3-flash"), label: "kunavo", cost: { input: 0.35, output: 2.1 } },
+      { model: kunavo("gemini-3-flash"), label: "kunavo", cost: { input: 0.40, output: 2.40 } },
       { model: openrouter("google/gemini-3-flash-preview"), label: "openrouter", cost: { input: 0.5, output: 3.0 } },
     ],
   },
@@ -81,36 +81,38 @@ const { text } = await generateText({
 
 Any OpenAI-compatible endpoint works.
 
-- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**30% off** every model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**30% off**) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
+- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
 
 ## Text model pricing
 
-USD per 1M tokens, input / output. Official rates as of 2026-05 — verify current rates with each provider. OpenRouter passes list price through; Kunavo is a flat 30% off the official rate.
+USD per 1M tokens, input / output. Official rates as of 2026-05 — verify current rates with each provider. OpenRouter passes list price through; Kunavo is a flat 20% off the official rate. TokenMart prices vary by model (15–65% off list) — verify current rates at [thetokenmart.ai](https://thetokenmart.ai).
 
-| Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | Cheapest |
-|---|---|---|---|---|
-| Gemini 3 Flash | $0.50 / $3.00 | no discount | −30% | ⭐ Kunavo |
-| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −30% | ⭐ Kunavo |
-| Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −30% | ⭐ Kunavo |
-| Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −30% | ⭐ Kunavo |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −30% list, but ~5× tokens ⚠️ | ⭐ OpenRouter¹ |
-| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −30% list, but ~5× tokens ⚠️ | ⭐ OpenRouter¹ |
-| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | ⭐ OpenRouter |
+| Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | Cheapest |
+|---|---|---|---|---|---|
+| Gemini 3 Flash | $0.50 / $3.00 | no discount | −20% | — | ⭐ Kunavo |
+| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −20% | — | ⭐ Kunavo |
+| Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −20% | — | ⭐ Kunavo |
+| Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −20% | — | ⭐ Kunavo |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −20% list, but ~5× tokens ⚠️ | −15% → **$2.55 / $12.75** | ⭐ TokenMart² |
+| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −20% list, but ~5× tokens ⚠️ | — | ⭐ OpenRouter¹ |
+| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | — | ⭐ OpenRouter |
 
 Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to OpenRouter — one config can mix them all.
 
-> **¹ List price isn't effective price — verify with the [probe](#vetting-a-provider-capability--cost-probe).** As of the last probe run (2026-05-27), Kunavo's **Claude** path reports `input_tokens` ~5× higher than the true count (3,607 → 17,475 for the same prompt vs OpenRouter) **and bills on the inflated number** — so the −30% list discount becomes ~3–5× *more* expensive than OpenRouter in practice. It also injects a hidden system prompt into Claude requests (pollutes output) and ignores `max_tokens`. **Kunavo's Gemini path is clean** (token counts match within ~1.1×), so Gemini stays ⭐ Kunavo. Route `claude-*` to OpenRouter until Kunavo fixes this — re-run the probe to check. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
+> **¹ List price isn't effective price — verify with the [probe](#vetting-a-provider-capability--cost-probe).** As of the last probe run (2026-05-27), Kunavo's **Claude** path reports `input_tokens` ~5× higher than the true count (3,607 → 17,475 for the same prompt vs OpenRouter) **and bills on the inflated number** — so the −20% list discount becomes ~4× *more* expensive than OpenRouter in practice. It also injects a hidden system prompt into Claude requests (pollutes output) and ignores `max_tokens`. **Kunavo's Gemini path is clean** (token counts match within ~1.1×), so Gemini stays ⭐ Kunavo. Route `claude-*` to TokenMart or OpenRouter until Kunavo fixes this — re-run the probe to check. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
+
+> **² TokenMart token counts verified clean by probe** (same backend as Inference.ai, which passed every check on 2026-05-27: tool calls, `max_tokens`, no injection, token ~1.0×, prompt caching). At −15% list with clean token counts, it beats OpenRouter for Claude. Re-run the probe before routing in production.
 
 ## Image model pricing
 
-USD per image, as of 2026-05 (provider list / retail; verify current rates). Kunavo is 30% off official. fal and Runware are compute providers — `ai-lcr` picks the cheapest per model (⭐).
+USD per image, as of 2026-05 (provider list / retail; verify current rates). Kunavo is 20% off official. fal and Runware are compute providers — `ai-lcr` picks the cheapest per model (⭐).
 
 | Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | Cheapest |
 |---|---|---|---|---|
-| Nano Banana 2 | $0.080 | $0.069 | $0.047 | ⭐ Kunavo |
-| Nano Banana Pro | $0.080 | — | $0.094 | ⭐ fal |
-| GPT-Image-2 | $0.210 | $0.094 | $0.089 | ⭐ Kunavo |
+| Nano Banana 2 | $0.080 | $0.069 | $0.054 | ⭐ Kunavo |
+| Nano Banana Pro | $0.080 | — | $0.107 | ⭐ fal |
+| GPT-Image-2 | $0.210 | $0.094 | $0.102 | ⭐ Runware |
 | Imagen 4 Ultra | $0.060 | $0.060 | — | ⭐ fal / Runware |
 | Ideogram V3 | $0.060 | $0.060 | — | ⭐ fal / Runware |
 | Seedream 4 | $0.030 | — | — | ⭐ fal |
@@ -157,6 +159,14 @@ API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
   CACHE_MODEL=claude-sonnet-4-6 \
   REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
   bash scripts/check-provider.sh
+
+# TokenMart uses vendor-prefixed model IDs
+API_KEY=$TOKENMART_API_KEY BASE=https://api.tokenmart.ai \
+  MODEL_1=google/gemini-3-flash    REF_1=google/gemini-3-flash-preview \
+  MODEL_2=anthropic/claude-sonnet-4-6 REF_2=anthropic/claude-sonnet-4.6 \
+  CACHE_MODEL=anthropic/claude-sonnet-4-6 \
+  REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
+  bash scripts/check-provider.sh
 ```
 
 A `FAIL` on injection or token over-counting means that provider is **not** a safe least-cost target for that model — keep it off that model's cheapest-first list until it's fixed, then re-probe.
@@ -165,7 +175,7 @@ A `FAIL` on injection or token over-counting means that provider is **not** a sa
 
 Two OpenAI-compatible providers, same probe, same day. Cells cover both families (G = Gemini, C = Claude).
 
-| Check | Kunavo | Inference.ai |
+| Check | Kunavo | [TokenMart](https://thetokenmart.ai) |
 |---|---|---|
 | Tool calls (single + multi-step `content: null`) | G ⚠️ intermittent¹ · C ✅ | ✅ both |
 | Token count vs OpenRouter baseline | G ✅ ~1.1–1.4× · C ❌ **~5×** (billed on it) | ✅ both ~1.0× |
@@ -176,7 +186,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 ¹ Kunavo Gemini returned a clean tool call on one run and **dropped tools entirely** on the next identical request — not a stable pass.
 ² Kunavo Claude reacted to a phantom "fake system prompt" on one run and stayed clean on another — the injection is intermittent, not removed.
 
-**Verdict:** Inference.ai passes every check on both Gemini and Claude with stable, repeatable results — route freely. Kunavo: Gemini is *mostly* usable but now drops tool calls intermittently and ignores `max_tokens`; Claude inflates tokens ~5× (billed on it) and intermittently injects a system prompt — keep Claude off Kunavo. The bigger red flag on Kunavo is non-determinism: identical requests gave different results across runs, which is worse for production routing than a stable failure. Re-probe before trusting either provider with a new model.
+**Verdict:** TokenMart passes every check on both Gemini and Claude with stable, repeatable results — route freely. Kunavo: Gemini is *mostly* usable but now drops tool calls intermittently and ignores `max_tokens`; Claude inflates tokens ~5× (billed on it) and intermittently injects a system prompt — keep Claude off Kunavo. The bigger red flag on Kunavo is non-determinism: identical requests gave different results across runs, which is worse for production routing than a stable failure. Re-probe before trusting either provider with a new model.
 
 ## Roadmap
 
@@ -191,7 +201,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 
 ## Affiliate disclosure
 
-`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=victorimf)**, which — at 30% off official rates — is often (not always) the cheapest option, as the tables above show. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
+`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=victorimf)**, which — at 20% off official rates — is often (not always) the cheapest option, as the tables above show. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
 
 ## Development
 

@@ -2,5 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "npm install",
-  "buildCommand": "next build"
+  "buildCommand": "next build",
+  "functions": {
+    "app/api/cron/ping/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/ping",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

@@ -102,6 +102,10 @@ export default async function Home() {
             <span className="brand__word">ai<b>-lcr</b></span>
           </div>
           <div className="nav__links">
+            <a href="/status" title="Provider status">
+              <span className="live-dot" />
+              <span className="label-hide">Status</span>
+            </a>
             <a href={DOCS_URL} target="_blank" rel="noreferrer">
               <span className="label-hide">Docs</span>
             </a>
@@ -211,6 +215,7 @@ export default async function Home() {
         <div className="wrap footer__row">
           <span>ai-lcr — MIT · Least Cost Routing, the way carriers have done it for decades</span>
           <span className="footer__links">
+            <a href="/status">Status</a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
             <a href={NPM_URL} target="_blank" rel="noreferrer">npm</a>
             <a href={DOCS_URL} target="_blank" rel="noreferrer">Docs</a>

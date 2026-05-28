@@ -51,7 +51,7 @@ const lcr = createLCR({
   models: {
     // 一个逻辑模型，跨多个 provider 最便宜优先地提供服务。
     "gemini-3-flash": [
-      { model: kunavo("gemini-3-flash"), label: "kunavo", cost: { input: 0.35, output: 2.1 } },
+      { model: kunavo("gemini-3-flash"), label: "kunavo", cost: { input: 0.40, output: 2.40 } },
       { model: openrouter("google/gemini-3-flash-preview"), label: "openrouter", cost: { input: 0.5, output: 3.0 } },
     ],
   },
@@ -81,12 +81,12 @@ const { text } = await generateText({
 
 任何 OpenAI 兼容的 endpoint 都可用。
 
-- **文本：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=victorimf)（**全模型 7 折**）
-- **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=victorimf)（**7 折**）· [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 路由功能在路线图中
+- **文本：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=victorimf)（**全模型 8 折**）· [TokenMart](https://thetokenmart.ai)（按模型 85 折–35 折不等）
+- **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=victorimf)（**8 折**）· [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 路由功能在路线图中
 
 ## 文本模型价格
 
-单位为每 100 万 token 的美元价格，input / output。官方价格截至 2026-05——请向各 provider 核对当前价格。OpenRouter 直接透传列表价；Kunavo 在官方价基础上统一 7 折。
+单位为每 100 万 token 的美元价格，input / output。官方价格截至 2026-05——请向各 provider 核对当前价格。OpenRouter 直接透传列表价；Kunavo 在官方价基础上统一 8 折。TokenMart 折扣按模型不同（85 折–35 折），请在 [thetokenmart.ai](https://thetokenmart.ai) 核对当前价格。
 
 | 模型 | 官方价（in / out） | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | 最便宜 |
 |---|---|---|---|---|
