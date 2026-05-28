@@ -4,47 +4,64 @@
 
 > 🚧 Early development — the API may change. Dogfooded in production before a stable release.
 
-The same model costs different amounts on different providers. `ai-lcr` keeps a cheapest-first list per model, routes to the cheapest healthy one, and falls through on failure — the way phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing) for decades.
+The same model costs different amounts on different providers — and for images, no single provider is cheapest for everything. `ai-lcr` keeps a cheapest-first list per model, routes to the cheapest healthy one (⭐ below), and falls through on failure — the way phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing) for decades.
 
 ## Supported providers
 
-Any OpenAI-compatible endpoint works. To start, `ai-lcr` targets three:
+Any OpenAI-compatible endpoint works.
 
-- **[OpenRouter](https://openrouter.ai)** — widest model coverage, list pricing
-- **[Inference.ai](https://inference.ai)** — discounted Claude
-- **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)** — **30% off** every model's official rate
+- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Inference.ai](https://inference.ai) (discounted Claude) · [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off** every model)
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off**) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
 
-## Pricing
+## Text model pricing
 
-Kunavo publishes a flat **30% off** the provider's official rate on every model. OpenRouter passes the official list price through. The **Official** column is the anchor; each provider column shows its discount. Official rates as of 2026-05 — verify current rates with each provider.
+USD per 1M tokens, input / output. Official rates as of 2026-05 — verify current rates with each provider. OpenRouter passes list price through; Kunavo is a flat 30% off the official rate.
 
-### Text models
+| Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | Cheapest |
+|---|---|---|---|---|
+| Gemini 3 Flash | $0.50 / $3.00 | no discount | −30% | ⭐ Kunavo |
+| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −30% | ⭐ Kunavo |
+| Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −30% | ⭐ Kunavo |
+| Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −30% | ⭐ Kunavo |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −30% | ⭐ Kunavo |
+| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −30% | ⭐ Kunavo |
+| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | ⭐ OpenRouter |
 
-| Model | Official (in / out, per 1M) | OpenRouter | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) |
-|---|---|---|---|
-| Gemini 3 Flash | $0.50 / $3.00 | no discount | **−30%** |
-| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | **−30%** |
-| Gemini 2.5 Pro | $1.25 / $10.00 | no discount | **−30%** |
-| Gemini 2.5 Flash | $0.30 / $2.50 | no discount | **−30%** |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | **−30%** |
-| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | **−30%** |
-| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried |
+Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to OpenRouter — one config can mix them all.
 
-Kunavo carries Anthropic + Google. DeepSeek (and OpenAI / Grok / Mistral) route to OpenRouter — `ai-lcr` picks the cheapest provider per model, so a single config can mix all of them.
+## Image model pricing
 
-### Image & video models
+USD per image, as of 2026-05 (provider list / retail; verify current rates). Kunavo is 30% off official. fal and Runware are compute providers — `ai-lcr` picks the cheapest per model (⭐).
 
-Billed per image / per second (not per token). Kunavo is **−30%** off the official rate here too; the Official column below is derived from Kunavo's published price.
+| Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | Cheapest |
+|---|---|---|---|---|
+| Nano Banana 2 | $0.080 | $0.069 | $0.047 | ⭐ Kunavo |
+| Nano Banana Pro | $0.080 | — | $0.094 | ⭐ fal |
+| GPT-Image-2 | $0.210 | $0.094 | $0.089 | ⭐ Kunavo |
+| Imagen 4 Ultra | $0.060 | $0.060 | — | ⭐ fal / Runware |
+| Ideogram V3 | $0.060 | $0.060 | — | ⭐ fal / Runware |
+| Seedream 4 | $0.030 | — | — | ⭐ fal |
+| Flux 1.1 Pro | $0.040 | $0.040 | — | ⭐ fal / Runware |
+| Flux Dev | $0.025 | $0.025 | — | ⭐ fal / Runware |
+| Flux Schnell | $0.0030 | $0.0013 | — | ⭐ Runware |
+| Qwen-Image | — | $0.0038 | — | ⭐ Runware |
+| FLUX.2 Klein 4B | — | $0.0006 | — | ⭐ Runware |
 
-| Model | Type | Official (≈) | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) |
-|---|---|---|---|
-| Nano Banana | image | ~$0.039 / image | **$0.0273 / image** |
-| Nano Banana 2 | image | from ~$0.067 / image | **from $0.0469 / image** |
-| Nano Banana Pro | image | from ~$0.134 / image | **from $0.0938 / image** |
-| GPT-Image-2 | image | ~$0.127 / image | **$0.0886 / image** |
-| Veo 3 Fast | video | from ~$0.40 / video | **from $0.28 / video** |
-| Veo 3 Quality | video | from ~$1.91 / video | **from $1.34 / video** |
-| Veo 3 Lite | video | from ~$0.24 / video | **from $0.168 / video** |
+## Video model pricing
+
+USD per second, as of 2026-05 (fal.ai routes; verify current rates). Kunavo also serves Veo 3 priced per clip (Fast ~$0.28, Lite ~$0.168, Quality ~$1.34).
+
+| Model | fal.ai ($/s) |
+|---|---|
+| Seedance Lite | $0.036 |
+| Hailuo 02 Standard | $0.045 |
+| LTX-2 | $0.060 |
+| Kling 2.6 Pro | $0.070 |
+| WAN 2.2 | $0.080 |
+| Veo 3.1 Lite | $0.080 |
+| Kling V3 Pro | $0.112 |
+| Seedance Pro | $0.124 |
+| Veo 3.1 (audio-on) | $0.400 |
 
 ## Install
 
@@ -102,11 +119,11 @@ const { text } = await generateText({
 - [ ] Auto cheapest-first ordering straight from the price table
 - [ ] Provider-quirk middleware (transparently patch known per-provider request quirks)
 - [ ] Offline capability probe (tool-calling / caching / streaming) → trust matrix
-- [ ] Image & video model routing
+- [ ] Image & video model routing (fal.ai / Runware / Kunavo)
 
 ## Affiliate disclosure
 
-`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)**, which — at 30% off official rates — is often the cheapest option for Gemini and Claude. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
+`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)**, which — at 30% off official rates — is often (not always) the cheapest option, as the tables above show. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
 
 ## License
 
