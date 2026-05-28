@@ -1,5 +1,9 @@
 # ai-lcr
 
+<p align="center">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr routes each request to the cheapest available provider and falls back on failure" width="820">
+</p>
+
 **Least Cost Routing for LLMs.** Route each model to the cheapest provider that can serve it, and fall back automatically when one fails. Built for the [Vercel AI SDK](https://ai-sdk.dev).
 
 > 🚧 Early development — the API may change. Dogfooded in production before a stable release.
@@ -10,7 +14,7 @@ The same model costs different amounts on different providers — and for images
 
 Any OpenAI-compatible endpoint works.
 
-- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Inference.ai](https://inference.ai) (discounted Claude) · [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off** every model)
+- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off** every model)
 - **Image / video:** [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) (**30% off**) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
 
 ## Text model pricing
@@ -49,7 +53,7 @@ USD per image, as of 2026-05 (provider list / retail; verify current rates). Kun
 
 ## Video model pricing
 
-USD per second, as of 2026-05 (fal.ai routes; verify current rates). Kunavo also serves Veo 3 priced per clip (Fast ~$0.28, Lite ~$0.168, Quality ~$1.34).
+USD per second, as of 2026-05 — verify current rates. Video billing differs by provider, so a clean cross-provider table isn't apples-to-apples: fal.ai and Runware charge per second, while Kunavo's Veo is per clip (Fast ~$0.28 / Lite ~$0.168 / Quality ~$1.34). Below are fal.ai's per-second rates (the video workhorse in testing); a normalized fal / Runware / Kunavo comparison is a TODO.
 
 | Model | fal.ai ($/s) |
 |---|---|

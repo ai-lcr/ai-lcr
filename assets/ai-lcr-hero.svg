@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" width="880" height="420" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="ai-lcr routes a request to the cheapest available provider and falls back on failure">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#11182f"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#58a6ff"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <radialGradient id="winGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#3fb950" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#3fb950" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="879" height="419" rx="18" fill="url(#bg)" stroke="#222b44"/>
+
+  <!-- title -->
+  <text x="40" y="52" fill="#e6edf3" font-size="30" font-weight="700">ai-lcr</text>
+  <text x="40" y="78" fill="#8b949e" font-size="15">Least Cost Routing for LLMs — route to the cheapest provider, fall back automatically</text>
+
+  <!-- ── connection paths ── -->
+  <!-- source → router -->
+  <path d="M206,256 H322" fill="none" stroke="url(#flow)" stroke-width="2.5" opacity="0.55"/>
+  <!-- router → Kunavo (winner, bright) -->
+  <path d="M512,240 C586,240 600,181 646,181" fill="none" stroke="#3fb950" stroke-width="3" opacity="0.85"/>
+  <!-- router → OpenRouter (fallback, dashed) -->
+  <path d="M512,256 H646" fill="none" stroke="#3d4665" stroke-width="2" stroke-dasharray="7 7" opacity="0.8">
+    <animate attributeName="stroke-dashoffset" from="28" to="0" dur="1.6s" repeatCount="indefinite"/>
+  </path>
+  <!-- router → Direct (fallback, dashed) -->
+  <path d="M512,272 C586,272 600,331 646,331" fill="none" stroke="#3d4665" stroke-width="2" stroke-dasharray="7 7" opacity="0.8">
+    <animate attributeName="stroke-dashoffset" from="28" to="0" dur="2s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- ── source node ── -->
+  <g>
+    <rect x="40" y="226" width="166" height="60" rx="12" fill="#161d31" stroke="#2b3552"/>
+    <text x="58" y="252" fill="#e6edf3" font-size="14" font-weight="600">Your app</text>
+    <text x="58" y="272" fill="#58a6ff" font-size="12.5" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">generateText()</text>
+  </g>
+
+  <!-- ── router node ── -->
+  <g>
+    <rect x="322" y="214" width="190" height="84" rx="14" fill="#141b2e" stroke="#2dd4bf" stroke-width="1.6"/>
+    <rect x="322" y="214" width="190" height="84" rx="14" fill="none" stroke="#2dd4bf" stroke-width="1.6" opacity="0.5">
+      <animate attributeName="opacity" values="0.15;0.6;0.15" dur="2.4s" repeatCount="indefinite"/>
+    </rect>
+    <text x="417" y="250" text-anchor="middle" fill="#e6edf3" font-size="17" font-weight="700">ai-lcr</text>
+    <text x="417" y="272" text-anchor="middle" fill="#7fe7d6" font-size="12">sort by price → route</text>
+  </g>
+
+  <!-- ── provider chips ── -->
+  <!-- Kunavo (winner) -->
+  <g>
+    <ellipse cx="748" cy="181" rx="120" ry="40" fill="url(#winGlow)">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="1.8s" repeatCount="indefinite"/>
+    </ellipse>
+    <rect x="648" y="155" width="200" height="52" rx="12" fill="#10241a" stroke="#3fb950" stroke-width="1.8"/>
+    <text x="666" y="178" fill="#e6edf3" font-size="14.5" font-weight="600">Kunavo</text>
+    <text x="666" y="196" fill="#3fb950" font-size="12">$0.35 / 1M · −30%</text>
+    <text x="820" y="188" text-anchor="middle" font-size="20">⭐</text>
+  </g>
+  <!-- OpenRouter -->
+  <g opacity="0.92">
+    <rect x="648" y="227" width="200" height="52" rx="12" fill="#161d31" stroke="#2b3552"/>
+    <text x="666" y="250" fill="#c9d1d9" font-size="14.5" font-weight="600">OpenRouter</text>
+    <text x="666" y="268" fill="#8b949e" font-size="12">$0.50 / 1M · list</text>
+  </g>
+  <!-- Direct / any OpenAI-compatible -->
+  <g opacity="0.8">
+    <rect x="648" y="305" width="200" height="52" rx="12" fill="#161d31" stroke="#2b3552"/>
+    <text x="666" y="328" fill="#c9d1d9" font-size="14.5" font-weight="600">Direct provider</text>
+    <text x="666" y="346" fill="#8b949e" font-size="12">$0.60 / 1M</text>
+  </g>
+
+  <!-- ── animated flow dots ── -->
+  <!-- request stream: app → router -->
+  <circle r="4.5" fill="#58a6ff">
+    <animateMotion dur="1.8s" repeatCount="indefinite" path="M206,256 H322"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="1.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="4.5" fill="#58a6ff">
+    <animateMotion dur="1.8s" begin="0.9s" repeatCount="indefinite" path="M206,256 H322"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="1.8s" begin="0.9s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- chosen route: router → Kunavo (glowing green) -->
+  <circle r="5.5" fill="#3fb950" filter="url(#soft)">
+    <animateMotion dur="1.4s" repeatCount="indefinite" path="M512,240 C586,240 600,181 646,181"/>
+  </circle>
+  <circle r="5.5" fill="#56d364" filter="url(#soft)">
+    <animateMotion dur="1.4s" begin="0.7s" repeatCount="indefinite" path="M512,240 C586,240 600,181 646,181"/>
+  </circle>
+
+  <!-- footer caption -->
+  <text x="40" y="392" fill="#6e7891" font-size="12.5">cheapest healthy provider wins · retryable error → next in line · built for the Vercel AI SDK</text>
+</svg>
