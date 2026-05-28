@@ -147,6 +147,8 @@ a {
   font-weight: 700;
   font-size: 17.5px;
   letter-spacing: -0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .brand__mark {
@@ -707,6 +709,11 @@ a {
   .nav__links .label-hide {
     display: none;
   }
+  /* Docs has no icon to fall back to once its label is hidden — drop it
+     entirely on mobile rather than leave an empty tap target. */
+  .nav__docs {
+    display: none;
+  }
 }
 
 @media (max-width: 520px) {
@@ -715,6 +722,17 @@ a {
   }
   .install {
     font-size: 13px;
+  }
+  /* Tighten the nav so brand + icons fit without horizontal overflow. */
+  .nav__links {
+    gap: 2px;
+  }
+  .nav__links a {
+    padding: 8px 8px;
+  }
+  /* Version is already shown in the hero CTA — redundant in the nav here. */
+  .count--ver {
+    display: none;
   }
 }
 

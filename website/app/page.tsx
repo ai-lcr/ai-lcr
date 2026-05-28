@@ -106,7 +106,7 @@ export default async function Home() {
               <span className="live-dot" />
               <span className="label-hide">Status</span>
             </a>
-            <a href={DOCS_URL} target="_blank" rel="noreferrer">
+            <a className="nav__docs" href={DOCS_URL} target="_blank" rel="noreferrer">
               <span className="label-hide">Docs</span>
             </a>
             <a href={NPM_URL} target="_blank" rel="noreferrer">
