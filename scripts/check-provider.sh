@@ -1,39 +1,58 @@
 #!/usr/bin/env bash
-# ai-lcr provider probe — vet an OpenAI/Anthropic-compatible provider before you
+# ai-lcr provider check — vet an OpenAI/Anthropic-compatible provider before you
 # trust it in a least-cost route.
 #
 # "Cheapest list price" is meaningless if the provider silently deviates from the
-# wire protocol. This probe catches the deviations that actually cost you money or
+# wire protocol. This check catches the deviations that actually cost you money or
 # corrupt output: dropped tool calls, broken multi-step loops, ignored max_tokens,
 # a hidden injected system prompt, and — the sneaky one — input-token over-counting
 # that inflates the bill so the "discount" provider is really the expensive one.
 #
+# Models are generic numbered slots — works for Gemini, Claude, GPT, Llama, etc.
+# Each MODEL_n may carry an optional REF_n (the matching model id on the trusted
+# baseline) to enable the token-inflation comparison for that model.
+#
 # Usage:
 #   API_KEY=sk-... BASE=https://api.kunavo.com \
-#     GEMINI=gemini-3-flash CLAUDE=claude-sonnet-4-6 \
-#     bash scripts/probe-provider.sh
+#     MODEL_1=gemini-3-flash MODEL_2=claude-sonnet-4-6 \
+#     bash scripts/check-provider.sh
 #
-#   # add a trusted baseline (e.g. OpenRouter) to enable the token-inflation check:
-#   API_KEY=sk-... BASE=https://api.kunavo.com GEMINI=gemini-3-flash CLAUDE=claude-sonnet-4-6 \
+#   # add a trusted baseline (e.g. OpenRouter) per model to enable token-inflation:
+#   API_KEY=sk-... BASE=https://api.kunavo.com \
+#     MODEL_1=gemini-3-flash    REF_1=google/gemini-3-flash-preview \
+#     MODEL_2=claude-sonnet-4-6 REF_2=anthropic/claude-sonnet-4.6 \
+#     CACHE_MODEL=claude-sonnet-4-6 \
 #     REF_API_KEY=sk-or-... REF_BASE=https://openrouter.ai/api \
-#     REF_GEMINI=google/gemini-3-flash-preview REF_CLAUDE=anthropic/claude-sonnet-4.6 \
-#     bash scripts/probe-provider.sh
+#     bash scripts/check-provider.sh
 #
+# CACHE_MODEL (optional): an Anthropic-style model id to run the native
+#   /v1/messages prompt-caching test against. Leave unset to skip it.
+# Slots MODEL_1..MODEL_8 / REF_1..REF_8 are scanned. Legacy GEMINI / CLAUDE
+#   (+ REF_GEMINI / REF_CLAUDE) still work and append to the slot list.
 # BASE / REF_BASE exclude /v1 (the script appends /v1/chat/completions and /v1/messages).
 # Requires: bash, curl, python3.
 set -uo pipefail
 
 KEY="${API_KEY:?set API_KEY}"
 BASE="${BASE:?set BASE e.g. https://api.kunavo.com}"
-GEMINI="${GEMINI:-}"          # a Google model id on this provider (optional)
-CLAUDE="${CLAUDE:-}"          # an Anthropic model id on this provider (optional)
 OAI="$BASE/v1/chat/completions"
 MSG="$BASE/v1/messages"
 
 REF_KEY="${REF_API_KEY:-}"
 REF_BASE="${REF_BASE:-}"
-REF_GEMINI="${REF_GEMINI:-}"
-REF_CLAUDE="${REF_CLAUDE:-}"
+
+# Collect models to probe: MODEL_1..MODEL_8 slots, each with optional REF_n.
+MODELS=(); REFS=()
+for i in 1 2 3 4 5 6 7 8; do
+  mvar="MODEL_$i"; rvar="REF_$i"
+  m="${!mvar:-}"; r="${!rvar:-}"
+  [ -n "$m" ] && { MODELS+=("$m"); REFS+=("$r"); }
+done
+# Legacy compat: GEMINI / CLAUDE (+ REF_GEMINI / REF_CLAUDE) still accepted.
+if [ -n "${GEMINI:-}" ]; then MODELS+=("$GEMINI"); REFS+=("${REF_GEMINI:-}"); fi
+if [ -n "${CLAUDE:-}" ]; then MODELS+=("$CLAUDE"); REFS+=("${REF_CLAUDE:-}"); fi
+# Anthropic-native prompt-caching test model; default to legacy CLAUDE if set.
+CACHE_MODEL="${CACHE_MODEL:-${CLAUDE:-}}"
 
 pass(){ echo "  ✅ PASS: $1"; }
 fail(){ echo "  ❌ FAIL: $1"; }
@@ -66,15 +85,16 @@ oai_prompt_tokens(){
   | python3 -c "import sys,json;t=sys.stdin.read();t=t[t.index('{'):] if '{' in t else t;print(json.loads(t).get('usage',{}).get('prompt_tokens',''))" 2>/dev/null
 }
 
-echo "===== ai-lcr provider probe ====="
-echo "BASE=$BASE  GEMINI=${GEMINI:-<none>}  CLAUDE=${CLAUDE:-<none>}"
+echo "===== ai-lcr provider check ====="
+echo "BASE=$BASE  models: ${MODELS[*]:-<none>}"
 [ -n "$REF_BASE" ] && echo "REF =$REF_BASE (token-inflation baseline enabled)" || echo "REF =<none> (token-inflation check skipped — set REF_* to enable)"
+[ -n "$CACHE_MODEL" ] && echo "CACHE_MODEL=$CACHE_MODEL (native /v1/messages caching test enabled)"
 echo
 
-probe_model(){           # $1=model id, $2=family label (gemini|claude)
-  local M="$1" FAM="$2"
+probe_model(){           # $1=model id, $2=ref model id on the baseline (optional)
+  local M="$1" REF_MODEL="$2"
   [ -z "$M" ] && return 0
-  echo "── $FAM: $M ──"
+  echo "── $M ──"
 
   # 1) single tool call
   local R
@@ -95,7 +115,7 @@ except: print('')" 2>/dev/null)
   fi
 
   # 3) max_tokens honored
-  local RM CT FR
+  local RM CT
   RM=$(curl -s --max-time 40 "$OAI" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "{\"model\":\"$M\",\"messages\":[{\"role\":\"user\",\"content\":\"Write five paragraphs about the ocean.\"}],\"max_tokens\":8}")
   CT=$(echo "$RM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('usage',{}).get('completion_tokens',0))" 2>/dev/null)
   if [ -n "$CT" ] && [ "$CT" -le 40 ] 2>/dev/null; then pass "max_tokens honored (completion_tokens=$CT for cap 8)"; else fail "max_tokens ignored (completion_tokens=$CT for cap 8)"; fi
@@ -113,10 +133,7 @@ except: print('')" 2>/dev/null)
     pass "no hidden-prompt injection (clean response to neutral input)"
   fi
 
-  # 5) token over-counting vs trusted baseline (only if REF_* provided)
-  local REF_MODEL=""
-  [ "$FAM" = "gemini" ] && REF_MODEL="$REF_GEMINI"
-  [ "$FAM" = "claude" ] && REF_MODEL="$REF_CLAUDE"
+  # 5) token over-counting vs trusted baseline (only if REF_* + a per-model ref provided)
   if [ -n "$REF_BASE" ] && [ -n "$REF_KEY" ] && [ -n "$REF_MODEL" ]; then
     local T_THIS T_REF
     T_THIS=$(oai_prompt_tokens "$BASE" "$KEY" "$M" "$NEUTRAL")
@@ -133,19 +150,20 @@ exit(0 if r<=1.5 else 1)" \
       warn "token-inflation check inconclusive (this=$T_THIS ref=$T_REF)"
     fi
   else
-    skip "token-inflation check ($FAM) — set REF_API_KEY/REF_BASE/REF_${FAM^^} to enable"
+    skip "token-inflation check — set REF_API_KEY/REF_BASE + a REF_n for this model to enable"
   fi
   echo
 }
 
-probe_model "$GEMINI" "gemini"
-probe_model "$CLAUDE" "claude"
+for idx in "${!MODELS[@]}"; do
+  probe_model "${MODELS[$idx]}" "${REFS[$idx]}"
+done
 
-# 6) prompt caching (Anthropic native /v1/messages) — only meaningful for Claude
-if [ -n "$CLAUDE" ]; then
-  echo "── caching (native /v1/messages, $CLAUDE) ──"
+# 6) prompt caching (Anthropic native /v1/messages) — only if CACHE_MODEL set
+if [ -n "$CACHE_MODEL" ]; then
+  echo "── caching (native /v1/messages, $CACHE_MODEL) ──"
   BIG=$(python3 -c "print('You are an expert assistant with detailed rules. Always be precise and consistent. ' * 250)")  # well above the 2048-token cache floor
-  PC=$(python3 -c "import json,sys;print(json.dumps({'model':'$CLAUDE','max_tokens':10,'system':[{'type':'text','text':sys.argv[1],'cache_control':{'type':'ephemeral'}}],'messages':[{'role':'user','content':'OK'}]}))" "$BIG")
+  PC=$(python3 -c "import json,sys;print(json.dumps({'model':'$CACHE_MODEL','max_tokens':10,'system':[{'type':'text','text':sys.argv[1],'cache_control':{'type':'ephemeral'}}],'messages':[{'role':'user','content':'OK'}]}))" "$BIG")
   CR=""
   for i in 1 2 3 4; do
     CR=$(echo "$PC" | curl -s --max-time 40 "$MSG" -H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "Content-Type: application/json" -d @-)

@@ -138,7 +138,7 @@ Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 
 
 ## 给 provider 做体检（能力 + 成本探测）
 
-折扣再大，如果 provider 偷偷破坏了协议就一文不值。`ai-lcr` 自带一个零依赖的探测脚本（`scripts/probe-provider.sh`，只需 `bash` + `curl` + `python3`），**逐模型**检查那些真正会让你多花钱或污染输出的点：
+折扣再大，如果 provider 偷偷破坏了协议就一文不值。`ai-lcr` 自带一个零依赖的检查脚本（`scripts/check-provider.sh`，只需 `bash` + `curl` + `python3`），**逐模型**核查那些真正会让你多花钱或污染输出的点：
 
 - **工具调用** —— 单次调用 + 带 `content: null` 的多步 round-trip（每个 agent 循环都会发的形态）
 - **`max_tokens` 是否生效** —— cap 必须能限制输出长度
@@ -147,12 +147,15 @@ Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 
 - **prompt 缓存** —— `cache_control` 在重复请求时是否真的产生 `cache_read`
 
 ```bash
-# 指向你要体检的 provider；加一个可信基线（如 OpenRouter）即可启用 token 超计检查
+# 指向你要体检的 provider；模型用通用编号槽位（Gemini / Claude / GPT / Llama 都行）。
+# 给某个模型配上 REF_n（可信基线上的对应模型 id）即可启用 token 超计检查。
+# CACHE_MODEL（可选）跑 Anthropic 原生 /v1/messages 的 prompt 缓存测试。
 API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
-  GEMINI=gemini-3-flash CLAUDE=claude-sonnet-4-6 \
+  MODEL_1=gemini-3-flash    REF_1=google/gemini-3-flash-preview \
+  MODEL_2=claude-sonnet-4-6 REF_2=anthropic/claude-sonnet-4.6 \
+  CACHE_MODEL=claude-sonnet-4-6 \
   REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
-  REF_GEMINI=google/gemini-3-flash-preview REF_CLAUDE=anthropic/claude-sonnet-4.6 \
-  bash scripts/probe-provider.sh
+  bash scripts/check-provider.sh
 ```
 
 注入或 token 超计这两项 `FAIL`，意味着该 provider 对那个模型来说**不是**安全的最低成本目标——在它修好之前，别把它放进那个模型的「最便宜优先」列表，修好后重新探测。
@@ -179,7 +182,7 @@ API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
 - [x] 自有 failover 引擎——最便宜优先路由 + 流式安全的 fallback，不依赖外部路由库
 - [x] 真实的逐次调用成本核算（`onCost`）
 - [x] 基于各 provider `cost` 的自动最便宜优先排序（`autoSort`）
-- [x] 离线能力 + 成本探测（`scripts/probe-provider.sh`）→ 逐模型信任矩阵
+- [x] 离线能力 + 成本检查（`scripts/check-provider.sh`）→ 逐模型信任矩阵
 - [ ] 内置价格表，实现零配置定价（省去手填 `cost` 数字）
 - [ ] provider 怪癖中间件（透明地修补已知怪癖，如 Kunavo 被忽略的 `max_tokens`）
 - [ ] 把 probe 结果自动接入路由（探测失败的 provider×model 自动从列表剔除）

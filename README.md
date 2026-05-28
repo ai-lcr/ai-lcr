@@ -138,7 +138,7 @@ USD per second, as of 2026-05 — verify current rates. Video billing differs by
 
 ## Vetting a provider (capability + cost probe)
 
-A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency probe (`scripts/probe-provider.sh`, just `bash` + `curl` + `python3`) that checks the things that actually cost you money or corrupt output, **per model**:
+A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency check (`scripts/check-provider.sh`, just `bash` + `curl` + `python3`) that vets the things that actually cost you money or corrupt output, **per model**:
 
 - **tool calling** — single call and a multi-step round-trip with `content: null` (the shape every agent loop sends)
 - **`max_tokens` honored** — caps must bound output
@@ -147,13 +147,16 @@ A discount is worthless if the provider quietly breaks the wire protocol. `ai-lc
 - **prompt caching** — whether `cache_control` actually produces a `cache_read` on repeats
 
 ```bash
-# point it at the provider you're vetting; add a trusted baseline (e.g. OpenRouter)
-# to enable the token-inflation check
+# point it at the provider you're vetting; models are generic numbered slots
+# (works for Gemini, Claude, GPT, Llama, …). Add a per-model REF_n on a trusted
+# baseline (e.g. OpenRouter) to enable the token-inflation check. CACHE_MODEL
+# (optional) runs the Anthropic-native /v1/messages prompt-caching test.
 API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
-  GEMINI=gemini-3-flash CLAUDE=claude-sonnet-4-6 \
+  MODEL_1=gemini-3-flash    REF_1=google/gemini-3-flash-preview \
+  MODEL_2=claude-sonnet-4-6 REF_2=anthropic/claude-sonnet-4.6 \
+  CACHE_MODEL=claude-sonnet-4-6 \
   REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
-  REF_GEMINI=google/gemini-3-flash-preview REF_CLAUDE=anthropic/claude-sonnet-4.6 \
-  bash scripts/probe-provider.sh
+  bash scripts/check-provider.sh
 ```
 
 A `FAIL` on injection or token over-counting means that provider is **not** a safe least-cost target for that model — keep it off that model's cheapest-first list until it's fixed, then re-probe.
@@ -180,7 +183,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 - [x] Own failover engine — cheapest-first routing + streaming-safe fallback, no external routing dependency
 - [x] Real per-call cost accounting (`onCost`)
 - [x] Auto cheapest-first ordering (`autoSort`) from per-provider `cost`
-- [x] Offline capability + cost probe (`scripts/probe-provider.sh`) → per-model trust matrix
+- [x] Offline capability + cost check (`scripts/check-provider.sh`) → per-model trust matrix
 - [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
 - [ ] Provider-quirk middleware (transparently patch known per-provider request quirks, e.g. Kunavo's ignored `max_tokens`)
 - [ ] Feed probe results into routing automatically (auto-exclude a model from a provider that fails its probe)
