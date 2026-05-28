@@ -40,6 +40,9 @@ export const metadata: Metadata = {
     title: "ai-lcr — Least Cost Routing for LLMs",
     description,
   },
+  verification: {
+    google: "UqGz5UGD4MAq8_l-V2YAGTpNqBTOHAOy9IixrLZzzgs",
+  },
 };
 
 export default function RootLayout({
