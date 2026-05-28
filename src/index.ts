@@ -7,7 +7,7 @@
  * below but land in P1 — see the roadmap in README.md. This package is
  * dogfooded in production before a stable release; expect the API to move.
  */
-import type { LanguageModel } from "ai";
+import type { LanguageModelV3 } from "@ai-sdk/provider";
 import { createFallback } from "ai-fallback";
 
 /** A single call's usage + computed cost, surfaced to `onCost`. Reserved — wired in P1. */
@@ -22,11 +22,11 @@ export interface CostEvent {
 export interface LCRConfig {
   /**
    * Map of logical model name -> providers to try, cheapest-first.
-   * Each entry is a standard AI SDK LanguageModel, e.g. from
+   * Each entry is a standard AI SDK model, e.g. from
    * `createOpenAICompatible(...)("model-id")`. Order is priority order:
    * the first provider that succeeds serves the request.
    */
-  models: Record<string, LanguageModel[]>;
+  models: Record<string, LanguageModelV3[]>;
   /** Idle window after which routing snaps back to the cheapest provider. Default 60s. */
   resetIntervalMs?: number;
   /** Called when a provider errors and routing falls through to the next. */
@@ -35,28 +35,30 @@ export interface LCRConfig {
   onCost?: (event: CostEvent) => void;
 }
 
-/** Resolve a logical model name to a routed AI SDK LanguageModel. */
-export type LCRRouter = (modelName: string) => LanguageModel;
+/** Resolve a logical model name to a routed model. */
+export type LCRRouter = (modelName: string) => LanguageModelV3;
 
 /**
  * Build a Least Cost Router. Returns a function that resolves a logical model
- * name to a routed `LanguageModel` usable anywhere in the Vercel AI SDK
- * (generateText, streamText, generateObject, tools, agents).
+ * name to a routed model usable anywhere in the Vercel AI SDK (generateText,
+ * streamText, generateObject, tools, agents).
  */
 export function createLCR(config: LCRConfig): LCRRouter {
   const { models, resetIntervalMs = 60_000, onError } = config;
 
-  const routed = new Map<string, LanguageModel>();
+  const routed = new Map<string, LanguageModelV3>();
   for (const [name, providers] of Object.entries(models)) {
     if (providers.length === 0) {
       throw new Error(`ai-lcr: model "${name}" has no providers`);
     }
-    const fallback = createFallback({
-      models: providers,
-      modelResetInterval: resetIntervalMs,
-      onError,
-    });
-    routed.set(name, fallback as unknown as LanguageModel);
+    routed.set(
+      name,
+      createFallback({
+        models: providers,
+        modelResetInterval: resetIntervalMs,
+        onError,
+      }),
+    );
   }
 
   return (modelName: string) => {

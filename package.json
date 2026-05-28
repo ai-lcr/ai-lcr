@@ -42,7 +42,9 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "ai-fallback": "^2.0.0"
@@ -52,7 +54,10 @@
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "^2.0.0",
+    "@ai-sdk/provider": "^3.0.0",
+    "ai": "^6.0.0",
     "tsup": "^8.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0"
   }
 }

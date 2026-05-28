@@ -129,6 +129,16 @@ const { text } = await generateText({
 
 `ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)**, which — at 30% off official rates — is often (not always) the cheapest option, as the tables above show. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
 
+## Development
+
+```bash
+npm install
+npm run typecheck
+npm test          # mocked routing/failover tests + live Kunavo tests
+```
+
+The suite covers cheapest-first routing, failover on retryable errors (and *not* failing over on a 400), exhausting the whole chain, and a real broken-provider → Kunavo recovery. Live tests run only when `KUNAVO_API_KEY` is set in the environment; otherwise they're skipped.
+
 ## License
 
 [MIT](./LICENSE) © Victor
