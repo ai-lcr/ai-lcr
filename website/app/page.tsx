@@ -65,10 +65,10 @@ function LogoMark() {
     <svg className="brand__mark" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M5.5 12 H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M11 12 C15 12 15.5 6 19 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M11 12 C15 12 15.5 18 19 18" stroke="var(--faint)" strokeWidth="2" strokeLinecap="round" />
+      <path d="M11 12 C15 12 15.5 18 19 18" stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" />
       <circle cx="5" cy="12" r="2.6" fill="currentColor" />
       <circle cx="19.4" cy="6" r="2.3" fill="currentColor" />
-      <circle cx="19.4" cy="18" r="2" fill="var(--faint)" />
+      <circle cx="19.4" cy="18" r="2" fill="var(--blue)" />
     </svg>
   );
 }
@@ -100,9 +100,6 @@ export default async function Home() {
           <div className="brand">
             <LogoMark />
             <span className="brand__word">ai<b>-lcr</b></span>
-            <a className="ver" href={NPM_URL} target="_blank" rel="noreferrer" title="latest on npm">
-              v{displayVersion}
-            </a>
           </div>
           <div className="nav__links">
             <a href={DOCS_URL} target="_blank" rel="noreferrer">
@@ -111,6 +108,7 @@ export default async function Home() {
             <a href={NPM_URL} target="_blank" rel="noreferrer">
               <NpmIcon />
               <span className="label-hide">npm</span>
+              <span className="count count--ver">v{displayVersion}</span>
             </a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">
               <GitHubIcon />
@@ -152,11 +150,17 @@ export default async function Home() {
             <a className="btn btn--primary" href={GITHUB_URL} target="_blank" rel="noreferrer">
               <GitHubIcon />
               Star on GitHub
-              {stars !== null && <span className="btn__count">{fmtStars(stars)}</span>}
+              {stars !== null && (
+                <span className="btn__count">
+                  <StarIcon />
+                  {fmtStars(stars)}
+                </span>
+              )}
             </a>
             <a className="btn btn--ghost" href={NPM_URL} target="_blank" rel="noreferrer">
               <NpmIcon />
               npm
+              <span className="btn__ver">v{displayVersion}</span>
               <ArrowIcon />
             </a>
           </div>

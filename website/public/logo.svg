@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 56" width="214" height="56" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+  <g fill="none" stroke-linecap="round" stroke-width="3.4">
+    <path d="M12 28 H24" stroke="#4fe39a"/>
+    <path d="M24 28 C33 28 33 17 42 17" stroke="#4fe39a"/>
+    <path d="M24 28 C33 28 33 39 42 39" stroke="#62a0ff"/>
+  </g>
+  <circle cx="12" cy="28" r="4.4" fill="#4fe39a"/>
+  <circle cx="42" cy="17" r="4" fill="#4fe39a"/>
+  <circle cx="42" cy="39" r="3.4" fill="#62a0ff"/>
+  <text x="62" y="38" font-size="31" font-weight="700" letter-spacing="-1.2">
+    <tspan fill="#e9eef9">ai</tspan><tspan fill="#4fe39a">-lcr</tspan>
+  </text>
+</svg>
