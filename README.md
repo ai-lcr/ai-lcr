@@ -1,7 +1,7 @@
 # ai-lcr
 
 <p align="center">
-  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr routes each request to the cheapest available provider and falls back on failure" width="820">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr routes each model to its own cheapest provider — Gemini to Kunavo, DeepSeek to OpenRouter, Seedream to fal, Flux Schnell to Runware — and falls back on failure" width="820">
 </p>
 
 **Least Cost Routing for LLMs.** Route each model to the cheapest provider that can serve it, and fall back automatically when one fails. Built for the [Vercel AI SDK](https://ai-sdk.dev).
