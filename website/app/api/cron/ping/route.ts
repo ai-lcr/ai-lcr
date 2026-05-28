@@ -48,7 +48,9 @@ async function ping(p: Provider, model: string): Promise<PingResult> {
             body: JSON.stringify({
               model,
               messages: [{ role: "user", content: "hi" }],
-              max_tokens: 1,
+              // 16, not 1: reasoning models (e.g. gpt-5.1) reject a cap below 16.
+              // Still a near-zero-cost heartbeat.
+              max_tokens: 16,
             }),
             signal: ctrl.signal,
           });

@@ -112,12 +112,20 @@ export const PROVIDERS: Provider[] = [
     },
   },
   {
+    // Also the integrity baseline for the discount providers above (referenced
+    // by URL, independent of its own check mode). GPT only actually serves here
+    // — Kunavo has no GPT text models, TokenMart's GPT 502s (upstream not
+    // provisioned) — so the mainstream GPT liveness lives on OpenRouter.
     id: "openrouter",
     label: "OpenRouter",
     base: "https://openrouter.ai/api",
     apiKeyEnv: "OPENROUTER_API_KEY",
-    check: "reachable",
-    models: [],
+    check: "inference",
+    models: [
+      { id: "openai/gpt-5.1" },
+      { id: "openai/gpt-4o" },
+      { id: "openai/gpt-4o-mini" },
+    ],
     link: "https://openrouter.ai",
   },
 ];
