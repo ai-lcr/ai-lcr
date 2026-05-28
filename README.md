@@ -12,34 +12,39 @@ Any OpenAI-compatible endpoint works. To start, `ai-lcr` targets three:
 
 - **[OpenRouter](https://openrouter.ai)** — widest model coverage, list pricing
 - **[Inference.ai](https://inference.ai)** — discounted Claude
-- **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)** — ~30% off list on Gemini & Claude
+- **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)** — **30% off** every model's official rate
 
-## Price comparison
+## Pricing
 
-USD per 1M tokens, input / output. Snapshot as of 2026-05 — **verify current rates with each provider**. OpenRouter passes list price through; Kunavo discounts ~30% off list on the models it carries.
+Kunavo publishes a flat **30% off** the provider's official rate on every model. OpenRouter passes the official list price through. The **Official** column is the anchor; each provider column shows its discount. Official rates as of 2026-05 — verify current rates with each provider.
 
 ### Text models
 
-| Model | List (official) | OpenRouter | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | Kunavo vs list |
-|---|---|---|---|---|
-| Gemini 3 Flash | 0.50 / 3.00 | 0.50 / 3.00 | **0.35 / 2.10** | 70% — 30% off |
-| Gemini 3 Pro | 2.00 / 12.00 | 2.00 / 12.00 | **1.40 / 8.40** | 70% — 30% off |
-| Claude Sonnet 4.6 | 3.00 / 15.00 | 3.00 / 15.00 | **2.10 / 10.50** | 70% — 30% off |
-| Claude Haiku 4.5 | 1.00 / 5.00 | 1.00 / 5.00 | **0.70 / 3.50** | 70% — 30% off |
-| DeepSeek V4 Flash | 0.10 / 0.20 | 0.10 / 0.20 | — | route via OpenRouter |
-| GPT-5.4 | 2.50 / 15.00 | 2.50 / 15.00 | — | route via OpenRouter |
+| Model | Official (in / out, per 1M) | OpenRouter | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) |
+|---|---|---|---|
+| Gemini 3 Flash | $0.50 / $3.00 | no discount | **−30%** |
+| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | **−30%** |
+| Gemini 2.5 Pro | $1.25 / $10.00 | no discount | **−30%** |
+| Gemini 2.5 Flash | $0.30 / $2.50 | no discount | **−30%** |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | **−30%** |
+| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | **−30%** |
+| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried |
 
-Kunavo carries Anthropic + Google. For OpenAI / DeepSeek / Grok / Mistral, `ai-lcr` routes to OpenRouter.
+Kunavo carries Anthropic + Google. DeepSeek (and OpenAI / Grok / Mistral) route to OpenRouter — `ai-lcr` picks the cheapest provider per model, so a single config can mix all of them.
 
 ### Image & video models
 
-Billed per image / per second (not per token), so prices aren't published on the token endpoints and need a per-provider quote. Image routing is on the roadmap.
+Billed per image / per second (not per token). Kunavo is **−30%** off the official rate here too; the Official column below is derived from Kunavo's published price.
 
-| Model | Provider | Billing |
-|---|---|---|
-| nano-banana / -2 / -pro | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | per image — quote |
-| gpt-image-2 | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | per image — quote |
-| veo-3 / -quality / -lite | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) | per second — quote |
+| Model | Type | Official (≈) | [Kunavo](https://kunavo.com/?ref=hJ2uT3iW) |
+|---|---|---|---|
+| Nano Banana | image | ~$0.039 / image | **$0.0273 / image** |
+| Nano Banana 2 | image | from ~$0.067 / image | **from $0.0469 / image** |
+| Nano Banana Pro | image | from ~$0.134 / image | **from $0.0938 / image** |
+| GPT-Image-2 | image | ~$0.127 / image | **$0.0886 / image** |
+| Veo 3 Fast | video | from ~$0.40 / video | **from $0.28 / video** |
+| Veo 3 Quality | video | from ~$1.91 / video | **from $1.34 / video** |
+| Veo 3 Lite | video | from ~$0.24 / video | **from $0.168 / video** |
 
 ## Install
 
@@ -101,7 +106,7 @@ const { text } = await generateText({
 
 ## Affiliate disclosure
 
-`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)**, which — because it discounts off list — is often the cheapest option for Gemini and Claude. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
+`ai-lcr` is provider-neutral and works with any OpenAI-compatible endpoint. The author holds an affiliate arrangement with **[Kunavo](https://kunavo.com/?ref=hJ2uT3iW)**, which — at 30% off official rates — is often the cheapest option for Gemini and Claude. Signing up through that link may earn the author a share. You're never required to use it; bring your own providers and routing works identically.
 
 ## License
 
