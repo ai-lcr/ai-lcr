@@ -94,11 +94,13 @@ USD per 1M tokens, input / output. Official rates as of 2026-05 — verify curre
 | Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −30% | ⭐ Kunavo |
 | Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −30% | ⭐ Kunavo |
 | Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −30% | ⭐ Kunavo |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −30% | ⭐ Kunavo |
-| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −30% | ⭐ Kunavo |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −30% list, but ~5× tokens ⚠️ | ⭐ OpenRouter¹ |
+| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −30% list, but ~5× tokens ⚠️ | ⭐ OpenRouter¹ |
 | DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | ⭐ OpenRouter |
 
 Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to OpenRouter — one config can mix them all.
+
+> **¹ List price isn't effective price — verify with the [probe](#vetting-a-provider-capability--cost-probe).** As of the last probe run (2026-05-27), Kunavo's **Claude** path reports `input_tokens` ~5× higher than the true count (3,607 → 17,475 for the same prompt vs OpenRouter) **and bills on the inflated number** — so the −30% list discount becomes ~3–5× *more* expensive than OpenRouter in practice. It also injects a hidden system prompt into Claude requests (pollutes output) and ignores `max_tokens`. **Kunavo's Gemini path is clean** (token counts match within ~1.1×), so Gemini stays ⭐ Kunavo. Route `claude-*` to OpenRouter until Kunavo fixes this — re-run the probe to check. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
 
 ## Image model pricing
 
@@ -134,14 +136,49 @@ USD per second, as of 2026-05 — verify current rates. Video billing differs by
 | Seedance Pro | $0.124 |
 | Veo 3.1 (audio-on) | $0.400 |
 
+## Vetting a provider (capability + cost probe)
+
+A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency probe (`scripts/probe-provider.sh`, just `bash` + `curl` + `python3`) that checks the things that actually cost you money or corrupt output, **per model**:
+
+- **tool calling** — single call and a multi-step round-trip with `content: null` (the shape every agent loop sends)
+- **`max_tokens` honored** — caps must bound output
+- **hidden-prompt injection** — sends a neutral message; flags the provider if the model starts reacting to a system prompt it was never given
+- **token over-counting** — compares reported `prompt_tokens` against a trusted baseline provider; >1.5× means the bill is inflated and the "discount" may be a loss
+- **prompt caching** — whether `cache_control` actually produces a `cache_read` on repeats
+
+```bash
+# point it at the provider you're vetting; add a trusted baseline (e.g. OpenRouter)
+# to enable the token-inflation check
+API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
+  GEMINI=gemini-3-flash CLAUDE=claude-sonnet-4-6 \
+  REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
+  REF_GEMINI=google/gemini-3-flash-preview REF_CLAUDE=anthropic/claude-sonnet-4.6 \
+  bash scripts/probe-provider.sh
+```
+
+A `FAIL` on injection or token over-counting means that provider is **not** a safe least-cost target for that model — keep it off that model's cheapest-first list until it's fixed, then re-probe.
+
+### Trust matrix — Kunavo (as of 2026-05-27)
+
+| Check | Kunavo Gemini | Kunavo Claude |
+|---|---|---|
+| Single + multi-step tool calls (`content: null`) | ✅ | ✅ |
+| Token count vs OpenRouter baseline | ✅ ~1.1× | ❌ **~4.8–5.1×** (billed on it) |
+| Hidden-prompt injection | ✅ none | ❌ injects a confidential system prompt |
+| `max_tokens` honored | ❌ ignored | ❌ ignored |
+| Prompt caching (`cache_control`) | n/a | ❌ not applied |
+
+**Verdict:** Gemini → Kunavo (the −30% is real). Claude → OpenRouter (token inflation + injection wipe out the discount). `max_tokens` being ignored is a provider-wide Kunavo quirk — bound output via prompt, not the parameter, until it's fixed.
+
 ## Roadmap
 
 - [x] Own failover engine — cheapest-first routing + streaming-safe fallback, no external routing dependency
 - [x] Real per-call cost accounting (`onCost`)
 - [x] Auto cheapest-first ordering (`autoSort`) from per-provider `cost`
+- [x] Offline capability + cost probe (`scripts/probe-provider.sh`) → per-model trust matrix
 - [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
-- [ ] Provider-quirk middleware (transparently patch known per-provider request quirks)
-- [ ] Offline capability probe (tool-calling / caching / streaming) → trust matrix
+- [ ] Provider-quirk middleware (transparently patch known per-provider request quirks, e.g. Kunavo's ignored `max_tokens`)
+- [ ] Feed probe results into routing automatically (auto-exclude a model from a provider that fails its probe)
 - [ ] Image & video model routing (fal.ai / Runware / Kunavo)
 
 ## Affiliate disclosure

@@ -94,11 +94,13 @@ const { text } = await generateText({
 | Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | 无折扣 | −30% | ⭐ Kunavo |
 | Gemini 2.5 Pro | $1.25 / $10.00 | 无折扣 | −30% | ⭐ Kunavo |
 | Gemini 2.5 Flash | $0.30 / $2.50 | 无折扣 | −30% | ⭐ Kunavo |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | 无折扣 | −30% | ⭐ Kunavo |
-| Claude Haiku 4.5 | $1.00 / $5.00 | 无折扣 | −30% | ⭐ Kunavo |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | 无折扣 | list 7 折，但 token ~5×⚠️ | ⭐ OpenRouter¹ |
+| Claude Haiku 4.5 | $1.00 / $5.00 | 无折扣 | list 7 折，但 token ~5×⚠️ | ⭐ OpenRouter¹ |
 | DeepSeek V4 | $0.43 / $0.87 | 无折扣 | 未提供 | ⭐ OpenRouter |
 
 Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 OpenRouter——一份配置即可混用全部。
+
+> **¹ list 价不等于有效价——用 [probe](#给-provider-做体检能力--成本探测) 验证。** 截至最近一次 probe（2026-05-27），Kunavo 的 **Claude** 路径上报的 `input_tokens` 比真实值高约 5×（同一段 prompt：OpenRouter 算 3,607 token，Kunavo 算 17,475）**且按膨胀后的数计费**——于是名义上的 7 折实际比 OpenRouter 原价还贵 3–5 倍。它还会往 Claude 请求里注入隐藏 system prompt（污染输出）、并忽略 `max_tokens`。**Kunavo 的 Gemini 路径是干净的**（token 计数在 ~1.1× 内吻合），所以 Gemini 仍然 ⭐ Kunavo。在 Kunavo 修复前，把 `claude-*` 路由到 OpenRouter——之后重跑 probe 确认。这正是为什么 `ai-lcr` 应按「实测行为」而非「标价」排序。
 
 ## 图像模型价格
 
@@ -134,14 +136,48 @@ Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 
 | Seedance Pro | $0.124 |
 | Veo 3.1（audio-on） | $0.400 |
 
+## 给 provider 做体检（能力 + 成本探测）
+
+折扣再大，如果 provider 偷偷破坏了协议就一文不值。`ai-lcr` 自带一个零依赖的探测脚本（`scripts/probe-provider.sh`，只需 `bash` + `curl` + `python3`），**逐模型**检查那些真正会让你多花钱或污染输出的点：
+
+- **工具调用** —— 单次调用 + 带 `content: null` 的多步 round-trip（每个 agent 循环都会发的形态）
+- **`max_tokens` 是否生效** —— cap 必须能限制输出长度
+- **隐藏 prompt 注入** —— 发一条中性消息，如果模型开始回应一段它从没收到过的 system prompt，就说明 provider 注入了东西
+- **token 超计** —— 把上报的 `prompt_tokens` 和一个可信基线 provider 对照，>1.5× 说明账单被灌水、"折扣"可能是亏本
+- **prompt 缓存** —— `cache_control` 在重复请求时是否真的产生 `cache_read`
+
+```bash
+# 指向你要体检的 provider；加一个可信基线（如 OpenRouter）即可启用 token 超计检查
+API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
+  GEMINI=gemini-3-flash CLAUDE=claude-sonnet-4-6 \
+  REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
+  REF_GEMINI=google/gemini-3-flash-preview REF_CLAUDE=anthropic/claude-sonnet-4.6 \
+  bash scripts/probe-provider.sh
+```
+
+注入或 token 超计这两项 `FAIL`，意味着该 provider 对那个模型来说**不是**安全的最低成本目标——在它修好之前，别把它放进那个模型的「最便宜优先」列表，修好后重新探测。
+
+### 信任矩阵 —— Kunavo（截至 2026-05-27）
+
+| 检查项 | Kunavo Gemini | Kunavo Claude |
+|---|---|---|
+| 单次 + 多步工具调用（`content: null`） | ✅ | ✅ |
+| token 计数 vs OpenRouter 基线 | ✅ ~1.1× | ❌ **~4.8–5.1×**（且按此计费） |
+| 隐藏 prompt 注入 | ✅ 无 | ❌ 注入机密 system prompt |
+| `max_tokens` 是否生效 | ❌ 被忽略 | ❌ 被忽略 |
+| prompt 缓存（`cache_control`） | 不适用 | ❌ 未生效 |
+
+**结论：** Gemini → Kunavo（7 折是真的）；Claude → OpenRouter（token 灌水 + 注入吃光折扣）。`max_tokens` 被忽略是 Kunavo 全局怪癖——在修复前用 prompt 而非该参数来控制输出长度。
+
 ## 路线图
 
 - [x] 自有 failover 引擎——最便宜优先路由 + 流式安全的 fallback，不依赖外部路由库
 - [x] 真实的逐次调用成本核算（`onCost`）
 - [x] 基于各 provider `cost` 的自动最便宜优先排序（`autoSort`）
+- [x] 离线能力 + 成本探测（`scripts/probe-provider.sh`）→ 逐模型信任矩阵
 - [ ] 内置价格表，实现零配置定价（省去手填 `cost` 数字）
-- [ ] provider 怪癖中间件（透明地修补已知的各 provider 请求怪癖）
-- [ ] 离线能力探测（工具调用 / 缓存 / 流式）→ 信任矩阵
+- [ ] provider 怪癖中间件（透明地修补已知怪癖，如 Kunavo 被忽略的 `max_tokens`）
+- [ ] 把 probe 结果自动接入路由（探测失败的 provider×model 自动从列表剔除）
 - [ ] 图像与视频模型路由（fal.ai / Runware / Kunavo）
 
 ## 联盟（Affiliate）披露
