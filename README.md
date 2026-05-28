@@ -158,17 +158,22 @@ API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
 
 A `FAIL` on injection or token over-counting means that provider is **not** a safe least-cost target for that model — keep it off that model's cheapest-first list until it's fixed, then re-probe.
 
-### Trust matrix — Kunavo (as of 2026-05-27)
+### Trust matrix (probed 2026-05-27)
 
-| Check | Kunavo Gemini | Kunavo Claude |
+Two OpenAI-compatible providers, same probe, same day. Cells cover both families (G = Gemini, C = Claude).
+
+| Check | Kunavo | Inference.ai |
 |---|---|---|
-| Single + multi-step tool calls (`content: null`) | ✅ | ✅ |
-| Token count vs OpenRouter baseline | ✅ ~1.1× | ❌ **~4.8–5.1×** (billed on it) |
-| Hidden-prompt injection | ✅ none | ❌ injects a confidential system prompt |
-| `max_tokens` honored | ❌ ignored | ❌ ignored |
-| Prompt caching (`cache_control`) | n/a | ❌ not applied |
+| Tool calls (single + multi-step `content: null`) | G ⚠️ intermittent¹ · C ✅ | ✅ both |
+| Token count vs OpenRouter baseline | G ✅ ~1.1–1.4× · C ❌ **~5×** (billed on it) | ✅ both ~1.0× |
+| Hidden-prompt injection | G ✅ none · C ❌ intermittent² | ✅ none |
+| `max_tokens` honored | ❌ ignored (both) | ✅ both |
+| Prompt caching (`cache_control`) | C ❌ not applied (endpoint also hung mid-probe) | C ✅ `cache_read` > 0 |
 
-**Verdict:** Gemini → Kunavo (the −30% is real). Claude → OpenRouter (token inflation + injection wipe out the discount). `max_tokens` being ignored is a provider-wide Kunavo quirk — bound output via prompt, not the parameter, until it's fixed.
+¹ Kunavo Gemini returned a clean tool call on one run and **dropped tools entirely** on the next identical request — not a stable pass.
+² Kunavo Claude reacted to a phantom "fake system prompt" on one run and stayed clean on another — the injection is intermittent, not removed.
+
+**Verdict:** Inference.ai passes every check on both Gemini and Claude with stable, repeatable results — route freely. Kunavo: Gemini is *mostly* usable but now drops tool calls intermittently and ignores `max_tokens`; Claude inflates tokens ~5× (billed on it) and intermittently injects a system prompt — keep Claude off Kunavo. The bigger red flag on Kunavo is non-determinism: identical requests gave different results across runs, which is worse for production routing than a stable failure. Re-probe before trusting either provider with a new model.
 
 ## Roadmap
 

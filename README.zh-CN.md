@@ -157,17 +157,22 @@ API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
 
 注入或 token 超计这两项 `FAIL`，意味着该 provider 对那个模型来说**不是**安全的最低成本目标——在它修好之前，别把它放进那个模型的「最便宜优先」列表，修好后重新探测。
 
-### 信任矩阵 —— Kunavo（截至 2026-05-27）
+### 信任矩阵（探测于 2026-05-27）
 
-| 检查项 | Kunavo Gemini | Kunavo Claude |
+两个 OpenAI 兼容 provider，同一脚本，同一天。单元格覆盖两个家族（G = Gemini，C = Claude）。
+
+| 检查项 | Kunavo | Inference.ai |
 |---|---|---|
-| 单次 + 多步工具调用（`content: null`） | ✅ | ✅ |
-| token 计数 vs OpenRouter 基线 | ✅ ~1.1× | ❌ **~4.8–5.1×**（且按此计费） |
-| 隐藏 prompt 注入 | ✅ 无 | ❌ 注入机密 system prompt |
-| `max_tokens` 是否生效 | ❌ 被忽略 | ❌ 被忽略 |
-| prompt 缓存（`cache_control`） | 不适用 | ❌ 未生效 |
+| 工具调用（单次 + 多步 `content: null`） | G ⚠️ 间歇性¹ · C ✅ | ✅ 两者 |
+| token 计数 vs OpenRouter 基线 | G ✅ ~1.1–1.4× · C ❌ **~5×**（且按此计费） | ✅ 两者 ~1.0× |
+| 隐藏 prompt 注入 | G ✅ 无 · C ❌ 间歇性² | ✅ 无 |
+| `max_tokens` 是否生效 | ❌ 被忽略（两者） | ✅ 两者 |
+| prompt 缓存（`cache_control`） | C ❌ 未生效（探测中途 endpoint 还卡死） | C ✅ `cache_read` > 0 |
 
-**结论：** Gemini → Kunavo（7 折是真的）；Claude → OpenRouter（token 灌水 + 注入吃光折扣）。`max_tokens` 被忽略是 Kunavo 全局怪癖——在修复前用 prompt 而非该参数来控制输出长度。
+¹ Kunavo Gemini 一次返回干净的工具调用，下一次相同请求却**完全丢掉了 tools**——不是稳定通过。
+² Kunavo Claude 一次对着幻觉中的"fake system prompt"作出反应，另一次又干净——注入是间歇性的，不是被移除了。
+
+**结论：** Inference.ai 在 Gemini 和 Claude 两条路上每一项都通过，且结果稳定可复现——可以放心路由。Kunavo：Gemini *大体*可用，但现在会间歇性丢工具调用、且忽略 `max_tokens`；Claude token 灌水 ~5×（且按此计费）+ 间歇性注入 system prompt——Claude 别走 Kunavo。Kunavo 更大的危险信号是**不确定性**：相同请求跨运行给出不同结果，这对生产路由比稳定失败更糟。在用任一 provider 跑新模型前都先重新探测。
 
 ## 路线图
 
