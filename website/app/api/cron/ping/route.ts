@@ -16,12 +16,12 @@ type PingResult = {
   error: string | null;
 };
 
-// One liveness heartbeat. For "reachable" providers, `model` is the sentinel
-// REACHABILITY_MODEL; for "inference" providers it's a real model id.
-//  - "inference": a real max_tokens:1 completion — proves the inference path
-//    works (not just the gateway). For discount / quirky providers.
+// One liveness heartbeat.
+//  - "inference": a real max_tokens:16 completion against `model` — proves the
+//    inference path works (not just the gateway). For discount / quirky providers.
 //  - "reachable": a free GET /v1/models — endpoint + auth reachable, 0 tokens.
-async function ping(p: Provider, model: string): Promise<PingResult> {
+//    `model` is the sentinel REACHABILITY_MODEL.
+async function ping(p: Provider, model: string, mode: "inference" | "reachable"): Promise<PingResult> {
   const key = process.env[p.apiKeyEnv];
   const base = { provider: p.id, model };
   if (!key) {
@@ -33,7 +33,7 @@ async function ping(p: Provider, model: string): Promise<PingResult> {
   const t0 = Date.now();
   try {
     const r =
-      p.check === "reachable"
+      mode === "reachable"
         ? await fetch(`${p.base}/v1/models`, {
             method: "GET",
             headers: { Authorization: `Bearer ${key}` },
@@ -62,10 +62,10 @@ async function ping(p: Provider, model: string): Promise<PingResult> {
     }
     const j = await r.json();
     const ok =
-      p.check === "reachable"
+      mode === "reachable"
         ? Array.isArray(j?.data) && j.data.length > 0
         : Array.isArray(j?.choices) && j.choices.length > 0;
-    const failMsg = p.check === "reachable" ? "no models in response" : "no choices in response";
+    const failMsg = mode === "reachable" ? "no models in response" : "no choices in response";
     return { ...base, ok, latency_ms, error: ok ? null : failMsg };
   } catch (e) {
     const err = e as Error;
@@ -80,16 +80,15 @@ async function ping(p: Provider, model: string): Promise<PingResult> {
   }
 }
 
-// Flatten providers into individual (provider, model) liveness checks.
-// "reachable" providers contribute one reachability check; "inference"
-// providers contribute one check per listed model.
+// Flatten providers into individual liveness checks: one inference ping per
+// listed model, plus a free reachability ping when check==="reachable" or the
+// provider opts in via `reachable` (so OpenRouter gets both GPT + endpoint up).
 function pingTasks(): Array<Promise<PingResult>> {
   const tasks: Array<Promise<PingResult>> = [];
   for (const p of PROVIDERS) {
-    if (p.check === "reachable" || p.models.length === 0) {
-      tasks.push(ping(p, REACHABILITY_MODEL));
-    } else {
-      for (const m of p.models) tasks.push(ping(p, m.id));
+    for (const m of p.models) tasks.push(ping(p, m.id, "inference"));
+    if (p.check === "reachable" || p.reachable) {
+      tasks.push(ping(p, REACHABILITY_MODEL, "reachable"));
     }
   }
   return tasks;

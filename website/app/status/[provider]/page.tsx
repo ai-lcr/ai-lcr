@@ -77,8 +77,11 @@ export default async function ProviderStatus({
   const p = PROVIDERS.find((x) => x.id === provider);
   if (!p) notFound();
 
-  const liveModels =
-    p.check === "reachable" || p.models.length === 0 ? [REACHABILITY_MODEL] : p.models.map((m) => m.id);
+  const liveModels = (() => {
+    const ids = p.models.map((m) => m.id);
+    if (p.check === "reachable" || p.reachable) ids.push(REACHABILITY_MODEL);
+    return ids.length > 0 ? ids : [REACHABILITY_MODEL];
+  })();
 
   let latest = new Map<string, LatestRow>();
   const day = new Map<string, AggRow>();

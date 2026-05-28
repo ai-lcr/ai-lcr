@@ -41,6 +41,12 @@ export type Provider = {
   check: CheckMode;
   /** Models to liveness-ping ("inference" mode). Empty for pure "reachable". */
   models: LiveModel[];
+  /**
+   * Also run a free GET /v1/models reachability ping (0 tokens), in addition to
+   * any per-model inference checks. Lets an "inference" provider keep a
+   * token-free "is the endpoint up" signal alongside its model checks.
+   */
+  reachable?: boolean;
   /** Optional homepage link. */
   link?: string;
   /** Daily integrity suite config. Omit for providers we only liveness-check. */
@@ -126,6 +132,8 @@ export const PROVIDERS: Provider[] = [
       { id: "openai/gpt-4o" },
       { id: "openai/gpt-4o-mini" },
     ],
+    // Plus a free, token-free endpoint reachability ping.
+    reachable: true,
     link: "https://openrouter.ai",
   },
 ];
