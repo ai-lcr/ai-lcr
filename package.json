@@ -1,0 +1,58 @@
+{
+  "name": "ai-lcr",
+  "version": "0.0.1",
+  "description": "Least Cost Routing for LLMs — route every model call to the cheapest available provider, fall back automatically, and track real cost. Built for the Vercel AI SDK.",
+  "keywords": [
+    "ai",
+    "llm",
+    "vercel-ai-sdk",
+    "ai-sdk",
+    "router",
+    "least-cost-routing",
+    "lcr",
+    "fallback",
+    "openrouter",
+    "cost-optimization",
+    "openai-compatible"
+  ],
+  "license": "MIT",
+  "author": "Victor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/victorzhrn/ai-lcr.git"
+  },
+  "homepage": "https://github.com/victorzhrn/ai-lcr#readme",
+  "bugs": {
+    "url": "https://github.com/victorzhrn/ai-lcr/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai-fallback": "^2.0.0"
+  },
+  "peerDependencies": {
+    "ai": "^6.0.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0"
+  }
+}
