@@ -94,15 +94,15 @@ USD per 1M tokens, input / output. Official rates as of 2026-05 — verify curre
 | Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −20% | — | ⭐ Kunavo |
 | Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −20% | — | ⭐ Kunavo |
 | Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −20% | — | ⭐ Kunavo |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −20% list, but ~5× tokens ⚠️ | −15% → **$2.55 / $12.75** | ⭐ TokenMart² |
-| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −20% list, but ~5× tokens ⚠️ | — | ⭐ OpenRouter¹ |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
+| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −20% | — | ⭐ Kunavo |
 | DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | — | ⭐ OpenRouter |
 
 Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to OpenRouter — one config can mix them all.
 
-> **¹ List price isn't effective price — verify with the [probe](#vetting-a-provider-capability--cost-probe).** As of the last probe run (2026-05-27), Kunavo's **Claude** path reports `input_tokens` ~5× higher than the true count (3,607 → 17,475 for the same prompt vs OpenRouter) **and bills on the inflated number** — so the −20% list discount becomes ~4× *more* expensive than OpenRouter in practice. It also injects a hidden system prompt into Claude requests (pollutes output) and ignores `max_tokens`. **Kunavo's Gemini path is clean** (token counts match within ~1.1×), so Gemini stays ⭐ Kunavo. Route `claude-*` to TokenMart or OpenRouter until Kunavo fixes this — re-run the probe to check. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
+> **Note:** List price ≠ effective price — always verify with the [probe](#vetting-a-provider-capability--cost-probe). As of 2026-05-28, Kunavo token counts are clean for both Gemini (~1.1–1.4×) and Claude (~1.0×). Remaining caveats: `max_tokens` is still ignored on both models, and hidden-prompt injection appears intermittently for Claude — re-probe before routing in production. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
 
-> **² TokenMart token counts verified clean by probe** (same backend as Inference.ai, which passed every check on 2026-05-27: tool calls, `max_tokens`, no injection, token ~1.0×, prompt caching). At −15% list with clean token counts, it beats OpenRouter for Claude. Re-run the probe before routing in production.
+> **Note:** TokenMart token counts are also verified clean (same backend as Inference.ai, all checks passed 2026-05-27: tool calls, `max_tokens`, no injection, token ~1.0×, prompt caching) — a reliable second provider for Claude at −15% list. Re-probe before routing in production.
 
 ## Image model pricing
 
@@ -178,7 +178,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 | Check | Kunavo | [TokenMart](https://thetokenmart.ai) |
 |---|---|---|
 | Tool calls (single + multi-step `content: null`) | G ⚠️ intermittent¹ · C ✅ | ✅ both |
-| Token count vs OpenRouter baseline | G ✅ ~1.1–1.4× · C ❌ **~5×** (billed on it) | ✅ both ~1.0× |
+| Token count vs OpenRouter baseline | G ✅ ~1.1–1.4× · C ✅ ~1.0× | ✅ both ~1.0× |
 | Hidden-prompt injection | G ✅ none · C ❌ intermittent² | ✅ none |
 | `max_tokens` honored | ❌ ignored (both) | ✅ both |
 | Prompt caching (`cache_control`) | C ❌ not applied (endpoint also hung mid-probe) | C ✅ `cache_read` > 0 |
@@ -186,7 +186,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 ¹ Kunavo Gemini returned a clean tool call on one run and **dropped tools entirely** on the next identical request — not a stable pass.
 ² Kunavo Claude reacted to a phantom "fake system prompt" on one run and stayed clean on another — the injection is intermittent, not removed.
 
-**Verdict:** TokenMart passes every check on both Gemini and Claude with stable, repeatable results — route freely. Kunavo: Gemini is *mostly* usable but now drops tool calls intermittently and ignores `max_tokens`; Claude inflates tokens ~5× (billed on it) and intermittently injects a system prompt — keep Claude off Kunavo. The bigger red flag on Kunavo is non-determinism: identical requests gave different results across runs, which is worse for production routing than a stable failure. Re-probe before trusting either provider with a new model.
+**Verdict:** TokenMart passes every check on both Gemini and Claude with stable, repeatable results — route freely. Kunavo: token counts are now clean for Claude (re-probed 2026-05-28); at −20% list, Kunavo is the cheapest option for Claude. Remaining caveats: `max_tokens` is ignored on both models, hidden-prompt injection appears intermittently for Claude, and Gemini drops tool calls intermittently — re-probe before routing a new model in production.
 
 ## Roadmap
 

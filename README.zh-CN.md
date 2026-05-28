@@ -94,15 +94,15 @@ const { text } = await generateText({
 | Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | 无折扣 | −20% | — | ⭐ Kunavo |
 | Gemini 2.5 Pro | $1.25 / $10.00 | 无折扣 | −20% | — | ⭐ Kunavo |
 | Gemini 2.5 Flash | $0.30 / $2.50 | 无折扣 | −20% | — | ⭐ Kunavo |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | 无折扣 | list 8 折，但 token ~5×⚠️ | −15% → **$2.55 / $12.75** | ⭐ TokenMart² |
-| Claude Haiku 4.5 | $1.00 / $5.00 | 无折扣 | list 8 折，但 token ~5×⚠️ | — | ⭐ OpenRouter¹ |
+| Claude Sonnet 4.6 | $3.00 / $15.00 | 无折扣 | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
+| Claude Haiku 4.5 | $1.00 / $5.00 | 无折扣 | −20% | — | ⭐ Kunavo |
 | DeepSeek V4 | $0.43 / $0.87 | 无折扣 | 未提供 | — | ⭐ OpenRouter |
 
 Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 OpenRouter——一份配置即可混用全部。
 
-> **¹ list 价不等于有效价——用 [probe](#给-provider-做体检能力--成本探测) 验证。** 截至最近一次 probe（2026-05-27），Kunavo 的 **Claude** 路径上报的 `input_tokens` 比真实值高约 5×（同一段 prompt：OpenRouter 算 3,607 token，Kunavo 算 17,475）**且按膨胀后的数计费**——于是名义上的 8 折实际比 OpenRouter 原价还贵约 4 倍。它还会往 Claude 请求里注入隐藏 system prompt（污染输出）、并忽略 `max_tokens`。**Kunavo 的 Gemini 路径是干净的**（token 计数在 ~1.1× 内吻合），所以 Gemini 仍然 ⭐ Kunavo。在 Kunavo 修复前，把 `claude-*` 路由到 TokenMart 或 OpenRouter——之后重跑 probe 确认。这正是为什么 `ai-lcr` 应按「实测行为」而非「标价」排序。
+> **注：** list 价 ≠ 有效价——请始终用 [probe](#给-provider-做体检能力--成本探测) 验证。截至 2026-05-28，Kunavo 在 Gemini（~1.1–1.4×）和 Claude（~1.0×）两条路上的 token 计数均已干净。现存问题：两个模型均忽略 `max_tokens`，Claude 隐藏 prompt 注入仍为间歇性——生产路由前请重新 probe。
 
-> **² TokenMart token 计数经 probe 验证为干净**（后端与 Inference.ai 相同，2026-05-27 全项通过：工具调用、`max_tokens`、无注入、token ~1.0×、prompt 缓存）。list 价 −15%、token 计数干净，Claude 走 TokenMart 比 OpenRouter 更便宜。生产路由前请重新 probe 确认。
+> **注：** TokenMart token 计数同样经 probe 验证干净（后端与 Inference.ai 相同，2026-05-27 全项通过：工具调用、`max_tokens`、无注入、token ~1.0×、prompt 缓存）——如需 Claude 的第二 provider，TokenMart 是可靠备选。生产路由前请重新 probe 确认。
 
 ## 图像模型价格
 
@@ -177,7 +177,7 @@ API_KEY=$TOKENMART_API_KEY BASE=https://api.tokenmart.ai \
 | 检查项 | Kunavo | [TokenMart](https://thetokenmart.ai) |
 |---|---|---|
 | 工具调用（单次 + 多步 `content: null`） | G ⚠️ 间歇性¹ · C ✅ | ✅ 两者 |
-| token 计数 vs OpenRouter 基线 | G ✅ ~1.1–1.4× · C ❌ **~5×**（且按此计费） | ✅ 两者 ~1.0× |
+| token 计数 vs OpenRouter 基线 | G ✅ ~1.1–1.4× · C ✅ ~1.0× | ✅ 两者 ~1.0× |
 | 隐藏 prompt 注入 | G ✅ 无 · C ❌ 间歇性² | ✅ 无 |
 | `max_tokens` 是否生效 | ❌ 被忽略（两者） | ✅ 两者 |
 | prompt 缓存（`cache_control`） | C ❌ 未生效（探测中途 endpoint 还卡死） | C ✅ `cache_read` > 0 |
@@ -185,7 +185,7 @@ API_KEY=$TOKENMART_API_KEY BASE=https://api.tokenmart.ai \
 ¹ Kunavo Gemini 一次返回干净的工具调用，下一次相同请求却**完全丢掉了 tools**——不是稳定通过。
 ² Kunavo Claude 一次对着幻觉中的"fake system prompt"作出反应，另一次又干净——注入是间歇性的，不是被移除了。
 
-**结论：** TokenMart 在 Gemini 和 Claude 两条路上每一项都通过，且结果稳定可复现——可以放心路由。Kunavo：Gemini *大体*可用，但现在会间歇性丢工具调用、且忽略 `max_tokens`；Claude token 灌水 ~5×（且按此计费）+ 间歇性注入 system prompt——Claude 别走 Kunavo。Kunavo 更大的危险信号是**不确定性**：相同请求跨运行给出不同结果，这对生产路由比稳定失败更糟。在用任一 provider 跑新模型前都先重新探测。
+**结论：** TokenMart 在 Gemini 和 Claude 两条路上每一项都通过，且结果稳定可复现——可以放心路由。Kunavo：Claude token 计数已干净（2026-05-28 重新 probe），按 8 折 list 价，Kunavo 现在是 Claude 模型的最便宜选择。现存问题：两个模型均忽略 `max_tokens`、Claude 隐藏 prompt 注入仍为间歇性、Gemini 也会间歇性丢工具调用——用新模型前先重新探测。
 
 ## 路线图
 
