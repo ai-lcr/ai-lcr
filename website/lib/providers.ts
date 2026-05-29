@@ -101,7 +101,6 @@ export const PROVIDERS: Provider[] = [
     // aren't provisioned on this account, so we don't monitor them as "down".
     models: [
       { id: "claude-sonnet-4-6" },
-      { id: "claude-opus-4-7" },
       { id: "claude-haiku-4-5-20251001" },
       { id: "gemini-3-flash-preview" },
       { id: "gemini-2.5-pro" },
