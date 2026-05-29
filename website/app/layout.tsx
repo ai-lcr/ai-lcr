@@ -39,6 +39,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ai-lcr — Least Cost Routing for LLMs",
     description,
+    images: ["/ai-lcr-hero.svg"],
   },
   verification: {
     google: "UqGz5UGD4MAq8_l-V2YAGTpNqBTOHAOy9IixrLZzzgs",

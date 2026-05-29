@@ -1,5 +1,8 @@
 import Switchboard from "./components/Switchboard";
 import CopyInstall from "./components/CopyInstall";
+import CodeSample from "./components/CodeSample";
+import SavingsCalculator from "./components/SavingsCalculator";
+import { MODEL_COUNT, TEXT_MODEL_COUNT, textSavings } from "@/lib/prices";
 
 const REPO = "victorzhrn/ai-lcr";
 const PKG = "ai-lcr";
@@ -92,6 +95,8 @@ function ArrowIcon() {
 export default async function Home() {
   const [stars, version] = await Promise.all([getStars(), getVersion()]);
   const displayVersion = version ?? FALLBACK_VERSION;
+  const savings = textSavings();
+  const topSaving = savings[0];
 
   return (
     <>
@@ -105,6 +110,9 @@ export default async function Home() {
             <a href="/status" title="Provider status">
               <span className="live-dot" />
               <span className="label-hide">Status</span>
+            </a>
+            <a href="/prices" title="Cheapest provider per model">
+              <span className="label-hide">Prices</span>
             </a>
             <a className="nav__docs" href={DOCS_URL} target="_blank" rel="noreferrer">
               <span className="label-hide">Docs</span>
@@ -191,22 +199,131 @@ export default async function Home() {
           </p>
         </section>
 
+        <section className="block">
+          <div className="block__head">
+            <span className="eyebrow">
+              <span className="dot" style={{ background: "var(--blue)" }} />
+              Drop-in · one config
+            </span>
+            <h2 className="h2">
+              List your providers <span className="accent">cheapest-first</span>. Call it like any
+              AI SDK model.
+            </h2>
+            <p className="sub" style={{ marginTop: 12 }}>
+              Mix a vendor&apos;s own official API with aggregators in one list. <code className="ic">lcr(&quot;…&quot;)</code>{" "}
+              returns a standard model — it works with <code className="ic">generateText</code>,{" "}
+              <code className="ic">streamText</code>, <code className="ic">generateObject</code>, tools and agents,
+              unchanged.
+            </p>
+          </div>
+          <CodeSample />
+        </section>
+
+        <section className="block">
+          <div className="block__head">
+            <span className="eyebrow">
+              <span className="dot" style={{ background: "var(--green)" }} />
+              What you&apos;d save
+            </span>
+            <h2 className="h2">
+              {topSaving
+                ? <>Cut your bill up to <span className="accent">−{topSaving.discountPct}%</span> — without changing a line of app code.</>
+                : <>See what you&apos;d <span className="accent">save</span>.</>}
+            </h2>
+            <p className="sub" style={{ marginTop: 12 }}>
+              The same model costs different amounts on different providers. Pick yours and your
+              monthly spend — ai-lcr routes to the cheapest <strong>verified</strong> route and tracks
+              the real cost per call.
+            </p>
+          </div>
+          <SavingsCalculator models={savings} />
+        </section>
+
+        <section className="block">
+          <div className="block__head">
+            <span className="eyebrow">
+              <span className="dot" style={{ background: "var(--amber)" }} />
+              Same model, fully tested at a cheaper price
+            </span>
+            <h2 className="h2">
+              A discount is worthless if the provider <span className="accent">quietly breaks the wire</span>.
+            </h2>
+            <p className="sub" style={{ marginTop: 12 }}>
+              List price ≠ effective price. ai-lcr ships a zero-dependency probe that vets the things
+              that actually cost you money or corrupt output — <strong>per model</strong> — so a cheaper
+              route only gets ranked if it behaves. Results are live on the{" "}
+              <a href="/status" className="ilink">status page</a>.
+            </p>
+          </div>
+          <div className="checks">
+            {[
+              ["Tool calls", "single + multi-step round-trips with content: null — the shape every agent loop sends"],
+              ["max_tokens honored", "the cap actually bounds output, so you aren't billed past your limit"],
+              ["No hidden-prompt injection", "flags providers that react to a system prompt you never sent"],
+              ["Token over-counting", "compares reported tokens to a trusted baseline — >1.5× means the bill is inflated"],
+              ["Prompt caching", "checks that cache_control produces a real cache_read on repeats"],
+              ["Native features intact", "route to a vendor's own API — no markup, no silently-stripped capabilities"],
+            ].map(([title, desc]) => (
+              <div className="check" key={title}>
+                <span className="check__tick" aria-hidden>✓</span>
+                <div>
+                  <div className="check__title">{title}</div>
+                  <div className="check__desc">{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="stats">
           <div className="stat reveal" style={{ "--accent": "var(--green)", animationDelay: "0.1s" } as React.CSSProperties}>
-            <div className="num">−30%</div>
-            <div className="lbl">on Anthropic + Google models via Kunavo</div>
+            <div className="num">0 markup</div>
+            <div className="lbl">route straight to each vendor&apos;s own API — you keep your keys, provider-neutral</div>
           </div>
-          <div className="stat reveal" style={{ "--accent": "var(--blue)", animationDelay: "0.16s" } as React.CSSProperties}>
-            <div className="num">11+</div>
-            <div className="lbl">image models, cheapest provider per model</div>
-          </div>
+          <a href="/prices" className="stat reveal" style={{ "--accent": "var(--blue)", animationDelay: "0.16s", textDecoration: "none", color: "inherit" } as React.CSSProperties}>
+            <div className="num">{TEXT_MODEL_COUNT + MODEL_COUNT}</div>
+            <div className="lbl">text, image &amp; video models priced — cheapest route per model →</div>
+          </a>
           <div className="stat reveal" style={{ "--accent": "var(--amber)", animationDelay: "0.22s" } as React.CSSProperties}>
             <div className="num">auto</div>
-            <div className="lbl">failover the moment a provider errors</div>
+            <div className="lbl">streaming-safe failover the moment a provider errors</div>
           </div>
           <div className="stat reveal" style={{ "--accent": "var(--violet)", animationDelay: "0.28s" } as React.CSSProperties}>
             <div className="num">USD</div>
             <div className="lbl">real per-call cost tracking, built in</div>
+          </div>
+        </section>
+
+        <section className="finale reveal">
+          <span className="eyebrow">
+            <span className="dot" />
+            MIT · drop-in · zero lock-in
+          </span>
+          <h2 className="finale__h">
+            Stop paying list price for the <span className="accent">same tokens</span>.
+          </h2>
+          <p className="finale__sub">
+            One config across every provider, cheapest healthy route on every call, automatic
+            failover, and the receipts to prove the discount is real. Add it in one line.
+          </p>
+          <div className="finale__install">
+            <CopyInstall />
+          </div>
+          <div className="cta cta--center">
+            <a className="btn btn--primary" href={GITHUB_URL} target="_blank" rel="noreferrer">
+              <GitHubIcon />
+              Star on GitHub
+              {stars !== null && (
+                <span className="btn__count">
+                  <StarIcon />
+                  {fmtStars(stars)}
+                </span>
+              )}
+            </a>
+            <a className="btn btn--ghost" href={DOCS_URL} target="_blank" rel="noreferrer">
+              Read the docs
+              <ArrowIcon />
+            </a>
           </div>
         </section>
       </main>
@@ -216,6 +333,7 @@ export default async function Home() {
           <span>ai-lcr — MIT · Least Cost Routing, the way carriers have done it for decades</span>
           <span className="footer__links">
             <a href="/status">Status</a>
+            <a href="/prices">Prices</a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
             <a href={NPM_URL} target="_blank" rel="noreferrer">npm</a>
             <a href={DOCS_URL} target="_blank" rel="noreferrer">Docs</a>

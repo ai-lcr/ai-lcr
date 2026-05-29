@@ -18,6 +18,40 @@ import {
 
 export type { CostEvent, ProviderCost } from "./fallback";
 
+// ── Image & video Least Cost Routing (parallel to the text router above) ──
+// The text router is LanguageModelV3-bound (token-billed). Media (image/video)
+// is a separate, self-contained side — file outputs, mixed pricing units, and
+// async video jobs. See ./media for the rationale.
+export {
+  createMediaLCR,
+  comparePrices,
+  rankRoutes,
+  cheapestRoute,
+  normalizedCents,
+  referenceMegapixels,
+  DEFAULT_REFERENCE,
+} from "./media";
+export type {
+  MediaModality,
+  MediaUnit,
+  MediaPricing,
+  MediaRoute,
+  MediaModelDef,
+  MediaRegistry,
+  ReferenceSpec,
+  RankedRoute,
+  PriceComparisonRow,
+  MediaGenerateRequest,
+  MediaOutput,
+  MediaGenerateResult,
+  MediaAdapter,
+  MediaCostEvent,
+  MediaLCRConfig,
+  MediaRunResult,
+} from "./media";
+export { MEDIA_PRICING } from "./media-registry";
+export { createKunavoMediaAdapter } from "./adapters/kunavo-media";
+
 /**
  * A provider for a model: either a bare AI SDK model (e.g.
  * `createOpenAICompatible(...)("id")`), or that model wrapped with price/label

@@ -18,7 +18,7 @@ function wire(my: number, py: number) {
 type Provider = { id: string; name: string; sub: string; y: number };
 
 const providers: Provider[] = [
-  { id: "kunavo", name: "Kunavo", sub: "−30% EVERY MODEL", y: 110 },
+  { id: "kunavo", name: "Kunavo", sub: "−20% EVERY MODEL", y: 110 },
   { id: "openrouter", name: "OpenRouter", sub: "WIDEST COVERAGE", y: 250 },
   { id: "fal", name: "fal.ai", sub: "IMAGE · VIDEO", y: 390 },
   { id: "runware", name: "Runware", sub: "CHEAPEST COMPUTE", y: 520 },
@@ -43,7 +43,7 @@ const models: Model[] = [
     y: 80,
     color: "var(--blue)",
     to: "kunavo",
-    price: "−30% → Kunavo",
+    price: "−20% → Kunavo",
     fb: { to: "openrouter", toName: "OpenRouter" },
   },
   {
