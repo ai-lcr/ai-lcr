@@ -129,8 +129,8 @@ export const PROVIDERS: Provider[] = [
     apiKeyEnv: "DEEPSEEK_API_KEY",
     check: "inference",
     models: [
-      { id: "deepseek-chat", label: "DeepSeek V3" },
-      { id: "deepseek-reasoner", label: "DeepSeek R1" },
+      { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+      { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
     ],
     link: "https://platform.deepseek.com",
   },
