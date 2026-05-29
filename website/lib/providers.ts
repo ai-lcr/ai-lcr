@@ -95,16 +95,18 @@ export const PROVIDERS: Provider[] = [
     base: "https://model.service-inference.ai",
     apiKeyEnv: "INFERENCE_API_KEY",
     check: "inference",
-    // Mainstream models this key can actually serve. TokenMart lists GPT /
-    // DeepSeek / Qwen in /v1/models, but inference on them returns HTTP 502
-    // "Upstream authentication error" (ERR_PROVIDER_005) — those upstreams
-    // aren't provisioned on this account, so we don't monitor them as "down".
+    // Mainstream models this key can actually serve. GPT upstreams are now
+    // provisioned on this account (gpt-5.5 etc. serve fine), so we monitor
+    // gpt-5.5 here. DeepSeek / Qwen are still listed in /v1/models but their
+    // inference 502s ("Upstream authentication error" ERR_PROVIDER_005) —
+    // those upstreams aren't provisioned, so we don't monitor them as "down".
     models: [
       { id: "claude-sonnet-4-6" },
       { id: "claude-haiku-4-5-20251001" },
       { id: "gemini-3-flash-preview" },
       { id: "gemini-2.5-pro" },
       { id: "glm-4.6" },
+      { id: "gpt-5.5" },
     ],
     link: "https://thetokenmart.ai",
     integrity: {
