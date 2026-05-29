@@ -119,6 +119,22 @@ export const PROVIDERS: Provider[] = [
     },
   },
   {
+    // DeepSeek's own official API — OpenAI-compatible. Inference checks are
+    // near-zero cost: deepseek-chat at $0.27/$1.10 per 1M i/o is ~$0.002/day
+    // at the 15-min cadence. No integrity suite needed — this is the vendor's
+    // own endpoint, not a discount aggregator.
+    id: "deepseek",
+    label: "DeepSeek",
+    base: "https://api.deepseek.com",
+    apiKeyEnv: "DEEPSEEK_API_KEY",
+    check: "inference",
+    models: [
+      { id: "deepseek-chat", label: "DeepSeek V3" },
+      { id: "deepseek-reasoner", label: "DeepSeek R1" },
+    ],
+    link: "https://platform.deepseek.com",
+  },
+  {
     // Also the integrity baseline for the discount providers above (referenced
     // by URL, independent of its own check mode). GPT only actually serves here
     // — Kunavo has no GPT text models, TokenMart's GPT 502s (upstream not
