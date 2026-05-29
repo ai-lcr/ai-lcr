@@ -67,6 +67,37 @@ const { text } = await generateText({
 
 `cost` and `label` are optional — pass bare models (`kunavo("gemini-3-flash")`) if you don't need cost accounting or `autoSort`. `lcr("gemini-3-flash")` returns a standard AI SDK model, so it works with `generateText`, `streamText`, `generateObject`, tools, and agents.
 
+## Route to a model vendor's own API (native providers)
+
+A "provider" doesn't have to be an aggregator. A model vendor's **own official API** is just another entry in the list — often the cheapest, since there's no aggregator markup, and the least likely to silently break native features (prompt caching, tool calls). Any AI SDK provider package returns a standard model, so a vendor's native API and an OpenAI-compatible aggregator sit side by side in the same list:
+
+```ts
+import { createLCR } from "ai-lcr";
+import { createDeepSeek } from "@ai-sdk/deepseek";          // DeepSeek's own API
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY });
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    "deepseek-v4": [
+      // Official API first — no markup, full native features (caching, off-peak discounts).
+      { model: deepseek("deepseek-chat"), label: "deepseek", cost: { input: 0.43, output: 0.87 } },
+      // Aggregator as a fallback for uptime + breadth.
+      { model: openrouter("deepseek/deepseek-v4"), label: "openrouter", cost: { input: 0.43, output: 0.87 } },
+    ],
+  },
+});
+```
+
+The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. They all return `LanguageModelV3`, so you can mix a native vendor API with aggregators in one model's list. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad. **Official-first + aggregator-fallback** is the natural LCR shape.
+
 ## How it routes
 
 1. **Cheapest first.** Providers are tried in order — list them cheapest-first, or set `autoSort: true` to order them by `cost` automatically.
@@ -79,9 +110,10 @@ const { text } = await generateText({
 
 ## Supported providers
 
-Any OpenAI-compatible endpoint works.
+Any OpenAI-compatible endpoint works — and so does any AI SDK provider package, including a model vendor's own official API.
 
-- **Text:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
+- **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
+- **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
 - **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
 
 ## Text model pricing
@@ -91,14 +123,15 @@ USD per 1M tokens, input / output. Official rates as of 2026-05 — verify curre
 | Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | Cheapest |
 |---|---|---|---|---|---|
 | Gemini 3 Flash | $0.50 / $3.00 | no discount | −20% | — | ⭐ Kunavo |
-| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −20% | — | ⭐ Kunavo |
+| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −20% | −20% → **$2.40 / $9.60** | ⭐ Kunavo |
 | Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −20% | — | ⭐ Kunavo |
 | Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −20% | — | ⭐ Kunavo |
+| Claude Opus 4.7 | $15.00 / $75.00 | no discount | −20% | **$4.25 / $21.25** | ⭐ TokenMart |
 | Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
 | Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −20% | — | ⭐ Kunavo |
-| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | — | ⭐ OpenRouter |
+| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | — | ⭐ DeepSeek (official) |
 
-Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to OpenRouter — one config can mix them all.
+Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to their **own official APIs** (cheapest, full native features) with OpenRouter as a broad fallback — one config can mix native vendors and aggregators.
 
 > **Note:** List price ≠ effective price — always verify with the [probe](#vetting-a-provider-capability--cost-probe). As of 2026-05-28, Kunavo token counts are clean for both Gemini (~1.1–1.4×) and Claude (~1.0×). Remaining caveats: `max_tokens` is still ignored on both models, and hidden-prompt injection appears intermittently for Claude — re-probe before routing in production. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
 
@@ -108,19 +141,19 @@ Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to O
 
 USD per image, as of 2026-05 (provider list / retail; verify current rates). Kunavo is 20% off official. fal and Runware are compute providers — `ai-lcr` picks the cheapest per model (⭐).
 
-| Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | Cheapest |
-|---|---|---|---|---|
-| Nano Banana 2 | $0.080 | $0.069 | $0.054 | ⭐ Kunavo |
-| Nano Banana Pro | $0.080 | — | $0.107 | ⭐ fal |
-| GPT-Image-2 | $0.210 | $0.094 | $0.102 | ⭐ Runware |
-| Imagen 4 Ultra | $0.060 | $0.060 | — | ⭐ fal / Runware |
-| Ideogram V3 | $0.060 | $0.060 | — | ⭐ fal / Runware |
-| Seedream 4 | $0.030 | — | — | ⭐ fal |
-| Flux 1.1 Pro | $0.040 | $0.040 | — | ⭐ fal / Runware |
-| Flux Dev | $0.025 | $0.025 | — | ⭐ fal / Runware |
-| Flux Schnell | $0.0030 | $0.0013 | — | ⭐ Runware |
-| Qwen-Image | — | $0.0038 | — | ⭐ Runware |
-| FLUX.2 Klein 4B | — | $0.0006 | — | ⭐ Runware |
+| Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | Cheapest |
+|---|---|---|---|---|---|
+| Nano Banana 2 | $0.080 | $0.069 | $0.054 | **$0.050** | ⭐ TokenMart |
+| Nano Banana Pro | $0.080 | — | $0.107 | — | ⭐ fal |
+| GPT-Image-2 | $0.210 | $0.094 | $0.102 | — | ⭐ Runware |
+| Imagen 4 Ultra | $0.060 | $0.060 | — | — | ⭐ fal / Runware |
+| Ideogram V3 | $0.060 | $0.060 | — | — | ⭐ fal / Runware |
+| Seedream 4 | $0.030 | — | — | — | ⭐ fal |
+| Flux 1.1 Pro | $0.040 | $0.040 | — | — | ⭐ fal / Runware |
+| Flux Dev | $0.025 | $0.025 | — | — | ⭐ fal / Runware |
+| Flux Schnell | $0.0030 | $0.0013 | — | — | ⭐ Runware |
+| Qwen-Image | — | $0.0038 | — | — | ⭐ Runware |
+| FLUX.2 Klein 4B | — | $0.0006 | — | — | ⭐ Runware |
 
 ## Video model pricing
 

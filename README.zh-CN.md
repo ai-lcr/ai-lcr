@@ -67,6 +67,37 @@ const { text } = await generateText({
 
 `cost` 和 `label` 都是可选的——如果你不需要成本核算或 `autoSort`，可以直接传裸模型（`kunavo("gemini-3-flash")`）。`lcr("gemini-3-flash")` 返回一个标准的 AI SDK 模型，因此可与 `generateText`、`streamText`、`generateObject`、工具调用和 agent 一起使用。
 
+## 直连模型厂商官方 API（原生 provider）
+
+「provider」不一定是聚合器。模型厂商**自己的官方 API** 就是列表里的又一个 entry——往往是最便宜的那个（没有聚合器加价），也最不容易悄悄破坏原生特性（prompt 缓存、工具调用）。任何 AI SDK 的 provider 包都返回标准模型，所以厂商的原生 API 和 OpenAI 兼容的聚合器可以并排放在同一个列表里：
+
+```ts
+import { createLCR } from "ai-lcr";
+import { createDeepSeek } from "@ai-sdk/deepseek";          // DeepSeek 官方 API
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY });
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    "deepseek-v4": [
+      // 官方 API 优先——无加价，原生特性齐全（缓存、错峰折扣）。
+      { model: deepseek("deepseek-chat"), label: "deepseek", cost: { input: 0.43, output: 0.87 } },
+      // 聚合器作为兜底，保可用性 + 广覆盖。
+      { model: openrouter("deepseek/deepseek-v4"), label: "openrouter", cost: { input: 0.43, output: 0.87 } },
+    ],
+  },
+});
+```
+
+同样的模式适用于任何厂商的原生 SDK provider——`@ai-sdk/anthropic`、`@ai-sdk/google`、`@ai-sdk/openai`、`@ai-sdk/xai` 等等。它们都返回 `LanguageModelV3`，所以你可以在一个模型的列表里把厂商原生 API 和聚合器混着用。原生 API 覆盖窄（只有该厂商自己的模型）但特性全；聚合器覆盖广。**官方优先 + 聚合器兜底** 正是 LCR 最自然的形态。
+
 ## 它如何路由
 
 1. **最便宜优先。** provider 按顺序依次尝试——把它们排成最便宜优先，或设置 `autoSort: true` 让它按 `cost` 自动排序。
@@ -79,9 +110,10 @@ const { text } = await generateText({
 
 ## 支持的 provider
 
-任何 OpenAI 兼容的 endpoint 都可用。
+任何 OpenAI 兼容的 endpoint 都可用——任何 AI SDK 的 provider 包也都可用，包括模型厂商自己的官方 API。
 
-- **文本：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=victorimf)（**全模型 8 折**）· [TokenMart](https://thetokenmart.ai)（按模型 85 折–35 折不等）
+- **模型厂商官方 API（原生）：** 通过各自的 AI SDK provider 包直连 [DeepSeek](https://platform.deepseek.com)、[OpenAI](https://openai.com)、[Anthropic](https://anthropic.com)、[Google](https://ai.google.dev)、[xAI](https://x.ai) 等——无加价，原生特性齐全。见上方「直连模型厂商官方 API（原生 provider）」一节。
+- **文本聚合器：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=victorimf)（**全模型 8 折**）· [TokenMart](https://thetokenmart.ai)（按模型 85 折–35 折不等）
 - **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=victorimf)（**8 折**）· [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 路由功能在路线图中
 
 ## 文本模型价格
@@ -91,14 +123,15 @@ const { text } = await generateText({
 | 模型 | 官方价（in / out） | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | 最便宜 |
 |---|---|---|---|---|---|
 | Gemini 3 Flash | $0.50 / $3.00 | 无折扣 | −20% | — | ⭐ Kunavo |
-| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | 无折扣 | −20% | — | ⭐ Kunavo |
+| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | 无折扣 | −20% | −20% → **$2.40 / $9.60** | ⭐ Kunavo |
 | Gemini 2.5 Pro | $1.25 / $10.00 | 无折扣 | −20% | — | ⭐ Kunavo |
 | Gemini 2.5 Flash | $0.30 / $2.50 | 无折扣 | −20% | — | ⭐ Kunavo |
+| Claude Opus 4.7 | $15.00 / $75.00 | 无折扣 | −20% | **$4.25 / $21.25** | ⭐ TokenMart |
 | Claude Sonnet 4.6 | $3.00 / $15.00 | 无折扣 | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
 | Claude Haiku 4.5 | $1.00 / $5.00 | 无折扣 | −20% | — | ⭐ Kunavo |
-| DeepSeek V4 | $0.43 / $0.87 | 无折扣 | 未提供 | — | ⭐ OpenRouter |
+| DeepSeek V4 | $0.43 / $0.87 | 无折扣 | 未提供 | — | ⭐ DeepSeek（官方） |
 
-Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 OpenRouter——一份配置即可混用全部。
+Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到各自的**官方 API**（最便宜，原生特性齐全），以 OpenRouter 作为广覆盖兜底——一份配置即可混用原生厂商与聚合器。
 
 > **注：** list 价 ≠ 有效价——请始终用 [probe](#给-provider-做体检能力--成本探测) 验证。截至 2026-05-28，Kunavo 在 Gemini（~1.1–1.4×）和 Claude（~1.0×）两条路上的 token 计数均已干净。现存问题：两个模型均忽略 `max_tokens`，Claude 隐藏 prompt 注入仍为间歇性——生产路由前请重新 probe。
 
@@ -108,19 +141,19 @@ Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到 
 
 单位为每张图的美元价格，截至 2026-05（provider 列表价 / 零售价；请核对当前价格）。Kunavo 为官方价 8 折。fal 与 Runware 是算力 provider——`ai-lcr` 为每个模型挑选最便宜的那个（⭐）。
 
-| 模型 | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | 最便宜 |
-|---|---|---|---|---|
-| Nano Banana 2 | $0.080 | $0.069 | $0.054 | ⭐ Kunavo |
-| Nano Banana Pro | $0.080 | — | $0.107 | ⭐ fal |
-| GPT-Image-2 | $0.210 | $0.094 | $0.102 | ⭐ Runware |
-| Imagen 4 Ultra | $0.060 | $0.060 | — | ⭐ fal / Runware |
-| Ideogram V3 | $0.060 | $0.060 | — | ⭐ fal / Runware |
-| Seedream 4 | $0.030 | — | — | ⭐ fal |
-| Flux 1.1 Pro | $0.040 | $0.040 | — | ⭐ fal / Runware |
-| Flux Dev | $0.025 | $0.025 | — | ⭐ fal / Runware |
-| Flux Schnell | $0.0030 | $0.0013 | — | ⭐ Runware |
-| Qwen-Image | — | $0.0038 | — | ⭐ Runware |
-| FLUX.2 Klein 4B | — | $0.0006 | — | ⭐ Runware |
+| 模型 | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | 最便宜 |
+|---|---|---|---|---|---|
+| Nano Banana 2 | $0.080 | $0.069 | $0.054 | **$0.050** | ⭐ TokenMart |
+| Nano Banana Pro | $0.080 | — | $0.107 | — | ⭐ fal |
+| GPT-Image-2 | $0.210 | $0.094 | $0.102 | — | ⭐ Runware |
+| Imagen 4 Ultra | $0.060 | $0.060 | — | — | ⭐ fal / Runware |
+| Ideogram V3 | $0.060 | $0.060 | — | — | ⭐ fal / Runware |
+| Seedream 4 | $0.030 | — | — | — | ⭐ fal |
+| Flux 1.1 Pro | $0.040 | $0.040 | — | — | ⭐ fal / Runware |
+| Flux Dev | $0.025 | $0.025 | — | — | ⭐ fal / Runware |
+| Flux Schnell | $0.0030 | $0.0013 | — | — | ⭐ Runware |
+| Qwen-Image | — | $0.0038 | — | — | ⭐ Runware |
+| FLUX.2 Klein 4B | — | $0.0006 | — | — | ⭐ Runware |
 
 ## 视频模型价格
 
