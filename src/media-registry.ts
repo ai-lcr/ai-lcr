@@ -65,6 +65,29 @@ export const MEDIA_PRICING: MediaRegistry = {
     ],
   },
 
+  // ── Black Forest Labs FLUX (image) ──────────────────────────
+  // ⚠️ Prices need a provider-page audit before trusting the gap (same bar as
+  // the rest of this table). Runware figures are anchored to a sibling repo's
+  // measured cost (Schnell ~0.14¢, Kontext ~1.4¢ — Kontext ≈ 10× Schnell); the
+  // fal figures are list prices pending verification. Both are per 1MP image.
+  "bfl/flux-schnell": {
+    id: "bfl/flux-schnell",
+    modality: "image",
+    routes: [
+      { provider: "runware", externalId: "runware:100@1", pricing: { unit: "image", cents: 0.14 } },
+      { provider: "fal", externalId: "fal-ai/flux/schnell", pricing: { unit: "megapixel", cents: 0.3 }, note: "list price, verify" },
+    ],
+  },
+  "bfl/flux-kontext-dev": {
+    id: "bfl/flux-kontext-dev",
+    modality: "image",
+    routes: [
+      // Instruction-edit (i2i) model; restricted resolution set.
+      { provider: "runware", externalId: "runware:106@1", pricing: { unit: "image", cents: 1.4 } },
+      { provider: "fal", externalId: "fal-ai/flux-kontext/dev", pricing: { unit: "image", cents: 2.5 }, note: "list price, verify" },
+    ],
+  },
+
   // ── Google video (Veo) ──────────────────────────────────────
   // ⚠️ Version/SKU mismatch across providers: Kunavo bills "veo-3" per CALL
   // (flat fee per clip; Veo 3 generates ~8s, audio/res tier unconfirmed); fal
