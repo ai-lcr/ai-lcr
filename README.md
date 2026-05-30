@@ -101,7 +101,7 @@ The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthrop
 ## How it routes
 
 1. **Cheapest first.** Providers are tried in order — list them cheapest-first, or set `autoSort: true` to order them by `cost` automatically.
-2. **Fall through on failure.** On a retryable error (rate limit, 5xx, timeout) it advances to the next provider, streaming-safe. Hard errors (400, 401, 403, 422) pass through immediately.
+2. **Fall through on failure.** On a retryable error — rate limit, 5xx, timeout, or a **billing cap** (402 / out-of-credit / quota) — it advances to the next provider, streaming-safe. A caller's own bad request (e.g. 400, 422) passes through immediately.
 3. **Recover.** After an idle window (`resetIntervalMs`, default 60s) it snaps back to the cheapest provider.
 
 <p align="center">
@@ -114,7 +114,7 @@ Any OpenAI-compatible endpoint works — and so does any AI SDK provider package
 
 - **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
 - **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing on the roadmap
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — image routing available via `createMediaLCR` (Kunavo + Runware adapters); video on the roadmap
 
 ## Text model pricing
 

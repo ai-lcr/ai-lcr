@@ -1,6 +1,6 @@
 {
   "name": "ai-lcr",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Least Cost Routing for LLMs — route every model call to the cheapest available provider, fall back automatically, and track real cost. Built for the Vercel AI SDK.",
   "keywords": [
     "ai",

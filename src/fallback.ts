@@ -53,7 +53,10 @@ export interface FallbackOptions {
 }
 
 // Errors that mean "this provider can't serve right now" → try the next one.
-const RETRYABLE_STATUS = new Set([401, 403, 408, 409, 413, 429, 498, 500]);
+// 402 is included on purpose: a provider that's out of credit / over quota
+// can't serve, and the whole point of least-cost routing is to fall over to
+// the next one rather than fail the request.
+const RETRYABLE_STATUS = new Set([401, 402, 403, 408, 409, 413, 429, 498, 500]);
 const RETRYABLE_PATTERNS = [
   "overloaded",
   "service unavailable",
@@ -71,6 +74,12 @@ const RETRYABLE_PATTERNS = [
   "503",
   "504",
   "429",
+  // Billing caps — a capped provider should fall over, not kill the request.
+  "insufficient",
+  "credit",
+  "quota",
+  "billing",
+  "payment required",
 ];
 
 /** Default switch criterion: provider down / rate-limited / overloaded. */
