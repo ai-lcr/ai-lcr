@@ -12,11 +12,14 @@ import type { LanguageModelV3 } from "@ai-sdk/provider";
 import {
   LcrFallbackModel,
   type CostEvent,
+  type CallRecord,
   type ProviderCost,
   type RoutedProvider,
 } from "./fallback";
 
-export type { CostEvent, ProviderCost } from "./fallback";
+export type { CostEvent, CallRecord, RouteAttempt, ProviderCost } from "./fallback";
+export { classifyError } from "./fallback";
+export { formatCallRecord, type FormatOptions } from "./format";
 
 // ── Image & video Least Cost Routing (parallel to the text router above) ──
 // The text router is LanguageModelV3-bound (token-billed). Media (image/video)
@@ -82,6 +85,12 @@ export interface LCRConfig {
   onError?: (error: Error, provider: string) => void;
   /** Called after each successful call with the serving provider, tokens, and cost. */
   onCost?: (event: CostEvent) => void;
+  /**
+   * Called once per settled request (success OR final failure) with the full
+   * failover chain — the single correlated record `onError`/`onCost` can't give
+   * you. Pair with `formatCallRecord` for a one-line log. See {@link CallRecord}.
+   */
+  onCall?: (record: CallRecord) => void;
 }
 
 /** Resolve a logical model name to a routed model. */
@@ -112,7 +121,7 @@ function priceKey(p: RoutedProvider): number {
  * streamText, generateObject, tools, agents).
  */
 export function createLCR(config: LCRConfig): LCRRouter {
-  const { models, autoSort = false, resetIntervalMs, onError, onCost } = config;
+  const { models, autoSort = false, resetIntervalMs, onError, onCost, onCall } = config;
 
   const routed = new Map<string, LcrFallbackModel>();
   for (const [name, entries] of Object.entries(models)) {
@@ -122,7 +131,7 @@ export function createLCR(config: LCRConfig): LCRRouter {
     }
     routed.set(
       name,
-      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost }),
+      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost, onCall }),
     );
   }
 
