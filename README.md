@@ -135,6 +135,25 @@ const lcr = createLCR({
 onCall: (record) => console.log(JSON.stringify(record)),
 ```
 
+Or ship each record to an HTTP collector with the built-in `createHttpSink` (fire-and-forget, never throws, dashboard-agnostic):
+
+```ts
+import { createLCR, createHttpSink } from "ai-lcr";
+import { after } from "next/server"; // serverless: don't block the response
+
+const lcr = createLCR({
+  models: { /* … */ },
+  onCall: createHttpSink({
+    url: `${process.env.LCR_INGEST_URL}/api/ingest`,
+    headers: { authorization: `Bearer ${process.env.LCR_INGEST_KEY}` },
+    project: process.env.LCR_PROJECT, // optional tag if one collector serves several apps
+    dispatch: after,                  // run after the response is sent (serverless-safe)
+  }),
+});
+```
+
+Point `url` at anything that accepts the `CallRecord` JSON — including the self-hostable companion dashboard, **[ai-lcr-dashboard](https://github.com/victorzhrn/ai-lcr-dashboard)** (Spend / Calls / Failover rate + a live failover feed). You run your own instance, so the data never leaves your infrastructure; a [db9](https://db9.ai) database can be provisioned in seconds if you don't want to stand one up yourself.
+
 ```ts
 interface CallRecord {
   id: string;                // correlation id, one per request
