@@ -43,12 +43,53 @@ export interface CostEvent {
   costUsd: number;
 }
 
+/** One provider attempt within a single request. */
+export interface RouteAttempt {
+  /** Provider label that was tried (e.g. "tokenmart"). */
+  provider: string;
+  /** Did this provider serve the request? The last attempt is the winner when true. */
+  ok: boolean;
+  /** Wall time spent on this attempt, ms (for the winner of a stream, the full stream duration). */
+  latencyMs: number;
+  /** Normalized failure reason when `ok` is false (e.g. "502", "rate_limit", "timeout"). */
+  errorClass?: string;
+}
+
+/**
+ * One settled request, with its full failover chain. Emitted exactly once per
+ * `doGenerate`/`doStream` call (success OR final failure) via `onCall`. This is
+ * the single correlated record `onError` + `onCost` couldn't give you: it ties
+ * every attempt, the winner, the reasons, latency, and cost into one line.
+ * Pair it with `formatCallRecord` for a human-readable one-liner.
+ */
+export interface CallRecord {
+  /** Correlation id, unique per request (shared across a stream's failover recursion). */
+  id: string;
+  /** Logical model name (the key in createLCR's `models`). */
+  model: string;
+  /** Providers tried, in order. `attempts.length > 1` means a failover happened. */
+  attempts: RouteAttempt[];
+  /** Provider that served the request; undefined if every provider failed. */
+  winner?: string;
+  ok: boolean;
+  /** True when more than one provider was tried — the thing you want to spot at a glance. */
+  failedOver: boolean;
+  /** Total wall time across all attempts, ms. */
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** Computed from the winner's `cost`; 0 if no price was given or the call failed. */
+  costUsd: number;
+}
+
 export interface FallbackOptions {
   modelName: string;
   providers: RoutedProvider[];
   resetIntervalMs?: number;
   onError?: (error: Error, provider: string) => void;
   onCost?: (event: CostEvent) => void;
+  /** Called once per settled request with the full failover chain. See {@link CallRecord}. */
+  onCall?: (record: CallRecord) => void;
   shouldRetry?: (error: unknown) => boolean;
 }
 
@@ -101,6 +142,38 @@ function safeStringify(value: unknown): string {
   }
 }
 
+/**
+ * Normalize an error into a short, log-friendly class for {@link CallRecord}.
+ * An HTTP status wins (e.g. "502", "429"); otherwise the first matching
+ * retryable pattern (e.g. "rate_limit", "timeout"); otherwise "error".
+ * Reuses the same signals as {@link isRetryableError} — no new vocabulary.
+ */
+export function classifyError(error: unknown): string {
+  const e = error as { statusCode?: number; status?: number; message?: string } | undefined;
+  const status = e?.statusCode ?? e?.status;
+  if (typeof status === "number") return String(status);
+  const text = (e?.message ? String(e.message) : safeStringify(error)).toLowerCase();
+  return RETRYABLE_PATTERNS.find((p) => text.includes(p)) ?? "error";
+}
+
+// Per-request correlation id. crypto.randomUUID when available (Node/edge),
+// else a monotonic fallback — no external dependency, no Math.random.
+let callSeq = 0;
+function newCallId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return `lcr_${Date.now().toString(36)}_${(callSeq++).toString(36)}`;
+}
+
+/** Per-request accumulator: threaded through a stream's failover recursion so
+ * every attempt lands in one {@link CallRecord}. Must be per-call (the model
+ * instance is shared across concurrent requests), never instance state. */
+interface CallCtx {
+  id: string;
+  attempts: RouteAttempt[];
+  startedAt: number;
+}
+
 export class LcrFallbackModel implements LanguageModelV3 {
   readonly specificationVersion = "v3" as const;
 
@@ -146,23 +219,72 @@ export class LcrFallbackModel implements LanguageModelV3 {
     return (this.opts.shouldRetry ?? isRetryableError)(error);
   }
 
-  private emitCost(
+  private startCall(): CallCtx {
+    return { id: newCallId(), attempts: [], startedAt: Date.now() };
+  }
+
+  /** Record a failed attempt onto the call's chain (no event yet). */
+  private recordFail(
+    ctx: CallCtx,
     provider: RoutedProvider,
+    attemptStart: number,
+    error: unknown,
+  ): void {
+    ctx.attempts.push({
+      provider: provider.label,
+      ok: false,
+      latencyMs: Date.now() - attemptStart,
+      errorClass: classifyError(error),
+    });
+  }
+
+  /** Winner settled: record the attempt, fire `onCost` (compat) + `onCall`. */
+  private finalizeOk(
+    ctx: CallCtx,
+    provider: RoutedProvider,
+    attemptStart: number,
     usage: LanguageModelV3GenerateResult["usage"] | undefined,
   ): void {
-    const onCost = this.opts.onCost;
-    if (!onCost) return;
+    ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
     const inputTokens = usage?.inputTokens?.total ?? 0;
     const outputTokens = usage?.outputTokens?.total ?? 0;
     const costUsd = provider.cost
       ? (inputTokens / 1e6) * provider.cost.input + (outputTokens / 1e6) * provider.cost.output
       : 0;
-    onCost({
+    this.opts.onCost?.({
       model: this.opts.modelName,
       provider: provider.label,
       inputTokens,
       outputTokens,
       costUsd,
+    });
+    this.opts.onCall?.({
+      id: ctx.id,
+      model: this.opts.modelName,
+      attempts: ctx.attempts,
+      winner: provider.label,
+      ok: true,
+      failedOver: ctx.attempts.length > 1,
+      latencyMs: Date.now() - ctx.startedAt,
+      inputTokens,
+      outputTokens,
+      costUsd,
+    });
+  }
+
+  /** Every provider failed: fire `onCall` with no winner. */
+  private finalizeFail(ctx: CallCtx): void {
+    this.opts.onCall?.({
+      id: ctx.id,
+      model: this.opts.modelName,
+      attempts: ctx.attempts,
+      winner: undefined,
+      ok: false,
+      failedOver: ctx.attempts.length > 1,
+      latencyMs: Date.now() - ctx.startedAt,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
     });
   }
 
@@ -170,20 +292,30 @@ export class LcrFallbackModel implements LanguageModelV3 {
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3GenerateResult> {
     this.checkReset();
+    const ctx = this.startCall();
     const start = this.index;
     let lastError: unknown;
     for (;;) {
       const provider = this.current;
+      const attemptStart = Date.now();
       try {
         const result = await provider.model.doGenerate(options);
-        this.emitCost(provider, result.usage);
+        this.finalizeOk(ctx, provider, attemptStart, result.usage);
         return result;
       } catch (error) {
         lastError = error;
-        if (!this.shouldRetry(error)) throw error;
+        if (!this.shouldRetry(error)) {
+          this.recordFail(ctx, provider, attemptStart, error);
+          this.finalizeFail(ctx);
+          throw error;
+        }
         this.opts.onError?.(error as Error, provider.label);
+        this.recordFail(ctx, provider, attemptStart, error);
         this.switchNext();
-        if (this.index === start) throw lastError;
+        if (this.index === start) {
+          this.finalizeFail(ctx);
+          throw lastError;
+        }
       }
     }
   }
@@ -192,6 +324,16 @@ export class LcrFallbackModel implements LanguageModelV3 {
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3StreamResult> {
     this.checkReset();
+    return this.doStreamWithCtx(options, this.startCall());
+  }
+
+  // The stream's failover recursion re-enters here with the SAME `ctx`, so a
+  // mid-stream switch keeps appending to one CallRecord instead of starting a
+  // fresh one. `finalizeOk`/`finalizeFail` fire exactly once per outer request.
+  private async doStreamWithCtx(
+    options: LanguageModelV3CallOptions,
+    ctx: CallCtx,
+  ): Promise<LanguageModelV3StreamResult> {
     const self = this;
     const start = this.index;
 
@@ -199,20 +341,31 @@ export class LcrFallbackModel implements LanguageModelV3 {
     // pre-stream error (e.g. a 401/429 before the first chunk).
     let result: LanguageModelV3StreamResult;
     let serving: RoutedProvider;
+    let servingStart: number;
     for (;;) {
       serving = this.current;
+      servingStart = Date.now();
       try {
         result = await serving.model.doStream(options);
         break;
       } catch (error) {
-        if (!this.shouldRetry(error)) throw error;
+        if (!this.shouldRetry(error)) {
+          this.recordFail(ctx, serving, servingStart, error);
+          this.finalizeFail(ctx);
+          throw error;
+        }
         this.opts.onError?.(error as Error, serving.label);
+        this.recordFail(ctx, serving, servingStart, error);
         this.switchNext();
-        if (this.index === start) throw error;
+        if (this.index === start) {
+          this.finalizeFail(ctx);
+          throw error;
+        }
       }
     }
 
     const servingProvider = serving;
+    const servingAttemptStart = servingStart;
     let usage: LanguageModelV3GenerateResult["usage"] | undefined;
     let streamedAny = false;
 
@@ -234,19 +387,22 @@ export class LcrFallbackModel implements LanguageModelV3 {
             controller.enqueue(value);
             if (value.type !== "stream-start") streamedAny = true;
           }
-          self.emitCost(servingProvider, usage);
+          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage);
           controller.close();
         } catch (error) {
           self.opts.onError?.(error as Error, servingProvider.label);
+          self.recordFail(ctx, servingProvider, servingAttemptStart, error);
           if (!streamedAny) {
             self.switchNext();
             if (self.index === start) {
+              self.finalizeFail(ctx);
               controller.error(error);
               return;
             }
-            // Re-enter doStream on the next provider; it owns its own cost event.
+            // Re-enter on the next provider with the SAME ctx, so its attempts
+            // and final event belong to this one CallRecord.
             try {
-              const next = await self.doStream(options);
+              const next = await self.doStreamWithCtx(options, ctx);
               const nextReader = next.stream.getReader();
               try {
                 for (;;) {
@@ -263,6 +419,9 @@ export class LcrFallbackModel implements LanguageModelV3 {
             }
             return;
           }
+          // Already streamed user-visible output — can't fail over. Settle the
+          // record as failed (the recorded attempt carries the reason).
+          self.finalizeFail(ctx);
           controller.error(error);
         } finally {
           reader?.releaseLock();

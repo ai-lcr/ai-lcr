@@ -108,6 +108,48 @@ The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthrop
   <img src="assets/ai-lcr-routing.svg" alt="routing diagram: cheapest first, fallback on failure, recover after idle" width="820">
 </p>
 
+## See what happened (`onCall`)
+
+`onError`/`onCost` fire separately and uncorrelated, so a failover is hard to read after the fact. `onCall` gives you **one record per request** — the full chain, the winner, the reason for each failed hop, latency, and cost — and `formatCallRecord` turns it into a one-liner you can scan:
+
+```ts
+import { createLCR, formatCallRecord } from "ai-lcr";
+
+const lcr = createLCR({
+  models: { /* … */ },
+  onCall: (record) => console.log(formatCallRecord(record)),
+});
+```
+
+```text
+✓ text  tokenmart                      412ms  $0.0003
+⚠ text  tokenmart→openrouter           910ms  $0.0004  ⤷ tokenmart 502
+✗ text  deepseek→tokenmart→openrouter  1240ms FAILED   ⤷ deepseek 401, tokenmart 502, openrouter 429
+```
+
+`✓` served on the first try · `⚠` failed over but recovered · `✗` every provider failed. The `⤷` shows which provider died and why.
+
+**Persist it anywhere — zero lock-in.** `record` is a plain `CallRecord` object. Log the JSON and point any log drain at it (Axiom, Datadog, your own DB); ai-lcr never decides where it goes:
+
+```ts
+onCall: (record) => console.log(JSON.stringify(record)),
+```
+
+```ts
+interface CallRecord {
+  id: string;                // correlation id, one per request
+  model: string;             // logical model name
+  attempts: { provider: string; ok: boolean; latencyMs: number; errorClass?: string }[];
+  winner?: string;           // provider that served; undefined if all failed
+  ok: boolean;
+  failedOver: boolean;       // more than one provider was tried
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+```
+
 ## Supported providers
 
 Any OpenAI-compatible endpoint works — and so does any AI SDK provider package, including a model vendor's own official API.
@@ -225,6 +267,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 
 - [x] Own failover engine — cheapest-first routing + streaming-safe fallback, no external routing dependency
 - [x] Real per-call cost accounting (`onCost`)
+- [x] One correlated record per request with the full failover chain (`onCall` + `formatCallRecord`)
 - [x] Auto cheapest-first ordering (`autoSort`) from per-provider `cost`
 - [x] Offline capability + cost check (`scripts/check-provider.sh`) → per-model trust matrix
 - [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
