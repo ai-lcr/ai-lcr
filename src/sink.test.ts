@@ -13,6 +13,7 @@ function record(over: Partial<CallRecord> = {}): CallRecord {
     inputTokens: 5,
     outputTokens: 3,
     costUsd: 0.0001,
+    baselineUsd: 0.0003,
     ...over,
   };
 }

@@ -80,6 +80,14 @@ export interface CallRecord {
   outputTokens: number;
   /** Computed from the winner's `cost`; 0 if no price was given or the call failed. */
   costUsd: number;
+  /**
+   * What these same tokens would have cost at the **most expensive** configured
+   * provider for this model — the "if you never routed cheap" baseline. Savings
+   * = `baselineUsd - costUsd`. Equals `costUsd` (savings 0) when prices are
+   * missing or the priciest route is the one that served. Self-contained: no
+   * external price table needed.
+   */
+  baselineUsd: number;
 }
 
 export interface FallbackOptions {
@@ -238,6 +246,13 @@ export class LcrFallbackModel implements LanguageModelV3 {
     });
   }
 
+  /** Cost of one route for the given token counts; 0 if it has no price. */
+  private routeCost(p: RoutedProvider, inputTokens: number, outputTokens: number): number {
+    return p.cost
+      ? (inputTokens / 1e6) * p.cost.input + (outputTokens / 1e6) * p.cost.output
+      : 0;
+  }
+
   /** Winner settled: record the attempt, fire `onCost` (compat) + `onCall`. */
   private finalizeOk(
     ctx: CallCtx,
@@ -248,9 +263,13 @@ export class LcrFallbackModel implements LanguageModelV3 {
     ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
     const inputTokens = usage?.inputTokens?.total ?? 0;
     const outputTokens = usage?.outputTokens?.total ?? 0;
-    const costUsd = provider.cost
-      ? (inputTokens / 1e6) * provider.cost.input + (outputTokens / 1e6) * provider.cost.output
-      : 0;
+    const costUsd = this.routeCost(provider, inputTokens, outputTokens);
+    // Baseline = priciest configured route on the same tokens ("if you never
+    // routed cheap"). max() also guarantees baselineUsd >= costUsd.
+    const baselineUsd = this.opts.providers.reduce(
+      (max, p) => Math.max(max, this.routeCost(p, inputTokens, outputTokens)),
+      costUsd,
+    );
     this.opts.onCost?.({
       model: this.opts.modelName,
       provider: provider.label,
@@ -269,6 +288,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       inputTokens,
       outputTokens,
       costUsd,
+      baselineUsd,
     });
   }
 
@@ -285,6 +305,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       inputTokens: 0,
       outputTokens: 0,
       costUsd: 0,
+      baselineUsd: 0,
     });
   }
 

@@ -51,7 +51,8 @@ interface CallRecord {
   failedOver: boolean;
   latencyMs: number;
   inputTokens: number; outputTokens: number;
-  costUsd: number;
+  costUsd: number;       // winner's charge for these tokens
+  baselineUsd: number;   // priciest configured route on the same tokens → savings = baselineUsd - costUsd
 }
 ```
 
@@ -123,10 +124,10 @@ CREATE INDEX IF NOT EXISTS lcr_calls_project_ts ON lcr_calls (project, ts DESC);
 - Optional single-instance gate (`DASHBOARD_PASSWORD`) — within one self-hosted
   instance, `project` is a filter, not a security boundary (the box is the owner's).
 
-**Savings (follow-up):** `CallRecord` carries actual `costUsd` but no baseline. To
-show "saved vs baseline", either (a) have ai-lcr compute a `baselineUsd` from the
-priciest route using the same token counts, or (b) estimate in the dashboard from a
-reference price table. Out of scope for the first cut.
+**Savings:** `CallRecord.baselineUsd` is the priciest configured route's cost on the
+same tokens, so `savings = baselineUsd - costUsd` is self-contained (no external
+price table). Store both `cost_usd` and `baseline_usd`; the dashboard sums each over
+the window and reports `saved = Σbaseline - Σcost` as the hero metric.
 
 ## Versioning
 

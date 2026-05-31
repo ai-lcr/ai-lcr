@@ -109,8 +109,31 @@ describe("onCall — one correlated record per request (generate)", () => {
     expect(r.attempts).toHaveLength(1);
     expect(r.attempts[0]).toMatchObject({ provider: "tokenmart", ok: true });
     expect(r.costUsd).toBeGreaterThan(0);
+    expect(r.baselineUsd).toBe(r.costUsd); // single provider → baseline == cost
     expect(r.model).toBe("m");
     expect(typeof r.id).toBe("string");
+  });
+
+  it("baselineUsd = priciest configured route on the same tokens (savings basis)", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          { model: okModel("cheap", "x"), label: "cheap", cost: { input: 1, output: 1 } },
+          { model: okModel("pricey", "y"), label: "pricey", cost: { input: 10, output: 10 } },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    expect(r.winner).toBe("cheap");
+    // usage(10,5): cheap = 15e-6, pricey = 150e-6 → baseline picks the priciest.
+    expect(r.costUsd).toBeCloseTo(15e-6, 12);
+    expect(r.baselineUsd).toBeCloseTo(150e-6, 12);
+    expect(r.baselineUsd - r.costUsd).toBeGreaterThan(0); // real savings
   });
 
   it("failover: one record carrying the full chain + reason + winner", async () => {
@@ -180,7 +203,7 @@ describe("onCall — streaming failover accumulates into ONE record", () => {
 });
 
 describe("formatCallRecord", () => {
-  const base = { id: "1", model: "text", inputTokens: 10, outputTokens: 5, latencyMs: 412 };
+  const base = { id: "1", model: "text", inputTokens: 10, outputTokens: 5, latencyMs: 412, baselineUsd: 0 };
 
   it("clean success → ✓ with provider and cost", () => {
     const line = formatCallRecord({

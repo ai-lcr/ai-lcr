@@ -165,7 +165,8 @@ interface CallRecord {
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
-  costUsd: number;
+  costUsd: number;            // what the winner charged for these tokens
+  baselineUsd: number;        // what the priciest configured route would cost → savings = baselineUsd - costUsd
 }
 ```
 
