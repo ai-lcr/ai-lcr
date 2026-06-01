@@ -1,6 +1,6 @@
 {
   "name": "ai-lcr",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Least Cost Routing for LLMs — route every model call to the cheapest available provider, fall back automatically, and track real cost. Built for the Vercel AI SDK.",
   "keywords": [
     "ai",
@@ -39,13 +39,15 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm run typecheck && npm test"
   },
   "peerDependencies": {
     "ai": "^6.0.0"
