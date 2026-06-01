@@ -184,4 +184,59 @@ describe("createMediaLCR routing", () => {
     const generate = createMediaLCR({ registry, adapters: {} });
     await expect(generate("nope", {})).rejects.toThrow(/unknown media model/);
   });
+
+  it("fires onCall with one correlated record on success", async () => {
+    const onCall = vi.fn();
+    const generate = createMediaLCR({
+      registry,
+      adapters: { cheap: okAdapter("cheap"), pricey: okAdapter("pricey") },
+      onCall,
+    });
+    await generate("x/img", { prompt: "hi" });
+    expect(onCall).toHaveBeenCalledOnce();
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec).toMatchObject({
+      model: "x/img",
+      winner: "cheap",
+      ok: true,
+      failedOver: false,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(rec.costUsd).toBeCloseTo(0.02, 6); // cheapest 2¢ -> $0.02
+    expect(rec.baselineUsd).toBeCloseTo(0.09, 6); // priciest 9¢ -> $0.09 (savings story)
+    expect(rec.attempts).toEqual([
+      expect.objectContaining({ provider: "cheap", ok: true }),
+    ]);
+    expect(typeof rec.id).toBe("string");
+  });
+
+  it("onCall captures the full failover chain (failedOver=true)", async () => {
+    const onCall = vi.fn();
+    const generate = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: {
+          provider: "cheap",
+          run: async () => {
+            throw Object.assign(new Error("rate limited"), { status: 429 });
+          },
+        },
+        pricey: okAdapter("pricey"),
+      },
+      onCall,
+    });
+    await generate("x/img", { prompt: "hi" });
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.ok).toBe(true);
+    expect(rec.winner).toBe("pricey");
+    expect(rec.failedOver).toBe(true);
+    expect(
+      rec.attempts.map((a: { provider: string; ok: boolean }) => [a.provider, a.ok]),
+    ).toEqual([
+      ["cheap", false],
+      ["pricey", true],
+    ]);
+    expect(rec.attempts[0].errorClass).toBeTruthy();
+  });
 });
