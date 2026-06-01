@@ -13,7 +13,7 @@
  * cost. The only new problem is making prices comparable, which we solve by
  * normalizing every provider's price to ONE reference output (see ReferenceSpec).
  */
-import { isRetryableError } from "./fallback";
+import { classifyError, isRetryableError, type CallRecord } from "./fallback";
 
 export type MediaModality = "image" | "video";
 
@@ -198,6 +198,13 @@ export interface MediaLCRConfig {
   reference?: ReferenceSpec;
   onError?: (error: Error, provider: string) => void;
   onCost?: (event: MediaCostEvent) => void;
+  /**
+   * One correlated {@link CallRecord} per settled request — the full failover
+   * chain, winner, latency, and cost — mirroring the text side's `onCall`, so
+   * the same dashboard sink works for image/video. Fire-and-forget; never
+   * throws. Media records carry no token counts (inputTokens/outputTokens = 0).
+   */
+  onCall?: (record: CallRecord) => void;
 }
 
 export interface MediaRunResult {
@@ -212,8 +219,14 @@ export interface MediaRunResult {
  * tries providers cheapest-first and falls through on a retryable error —
  * exactly the text LCR's contract, for image/video.
  */
+/** Correlation id for one media request (mirrors the text side's call ids). */
+function newMediaCallId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return c?.randomUUID ? c.randomUUID() : `lcr_${Date.now().toString(36)}`;
+}
+
 export function createMediaLCR(config: MediaLCRConfig) {
-  const { registry, adapters, reference = DEFAULT_REFERENCE, onError, onCost } = config;
+  const { registry, adapters, reference = DEFAULT_REFERENCE, onError, onCost, onCall } = config;
 
   return async function generate(
     modelId: string,
@@ -224,25 +237,73 @@ export function createMediaLCR(config: MediaLCRConfig) {
       throw new Error(`ai-lcr: unknown media model "${modelId}" — add it to the registry`);
     }
     const ranked = rankRoutes(def, reference);
+    // Baseline = the priciest configured route for this model, normalized to the
+    // reference output → savings = baselineUsd - costUsd, same shape as text.
+    const baselineUsd =
+      ranked.length > 0 ? Math.max(...ranked.map((r) => r.refCents)) / 100 : 0;
+
+    const startedAt = Date.now();
+    const attempts: CallRecord["attempts"] = [];
     let lastErr: unknown;
+
+    // One CallRecord for a settled request that ended in failure / exhaustion.
+    const emitFail = () =>
+      onCall?.({
+        id: newMediaCallId(),
+        model: modelId,
+        attempts,
+        winner: undefined,
+        ok: false,
+        failedOver: attempts.length > 1,
+        latencyMs: Date.now() - startedAt,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        baselineUsd,
+      });
 
     for (const route of ranked) {
       const adapter = adapters[route.provider];
       if (!adapter) continue; // no adapter wired for this provider → skip to next
+      const attemptStart = Date.now();
       try {
         const result = await adapter.run({ externalId: route.externalId, input });
         const estimated = result.costCents === undefined;
         const costCents = estimated
           ? route.refCents * (result.units ?? 1) // estimate from the normalized ref price
           : result.costCents!;
+        attempts.push({ provider: route.provider, ok: true, latencyMs: Date.now() - attemptStart });
         onCost?.({ modelId, provider: route.provider, costCents, estimated });
+        onCall?.({
+          id: newMediaCallId(),
+          model: modelId,
+          attempts,
+          winner: route.provider,
+          ok: true,
+          failedOver: attempts.length > 1,
+          latencyMs: Date.now() - startedAt,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: costCents / 100,
+          baselineUsd,
+        });
         return { outputs: result.outputs, provider: route.provider, costCents, estimated };
       } catch (err) {
         lastErr = err;
+        attempts.push({
+          provider: route.provider,
+          ok: false,
+          latencyMs: Date.now() - attemptStart,
+          errorClass: classifyError(err),
+        });
         onError?.(err as Error, route.provider);
-        if (!isRetryableError(err)) throw err; // caller's fault (e.g. bad input) → don't waste fallbacks
+        if (!isRetryableError(err)) {
+          emitFail(); // caller's fault (e.g. bad input) → don't waste fallbacks
+          throw err;
+        }
       }
     }
+    emitFail();
     throw lastErr instanceof Error
       ? lastErr
       : new Error(`ai-lcr: no provider could serve media model "${modelId}"`);
