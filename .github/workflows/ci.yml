@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Build + typecheck + unit tests. typecheck is a first-class gate here on
+  # purpose: a missing type (the kind that once shipped a red main while tests
+  # stayed green) fails the build, not just the test run.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x, 22.x]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      # Live provider tests skip automatically when KUNAVO_API_KEY is unset, so
+      # CI runs the mocked routing/failover/media suite only — no secrets needed.
+      - run: npm test
+
+  # Install the actual published artifact (npm pack tarball) into a clean dir
+  # and import it both ways. This is what catches a dropped export or a broken
+  # dist that the in-repo `./src` test suite can't see.
+  pack-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Pack and import the tarball
+        run: |
+          set -euo pipefail
+          TGZ="$(npm pack --silent | tail -1)"
+          TGZ_ABS="$PWD/$TGZ"
+          TMP="$(mktemp -d)"
+          cd "$TMP"
+          npm init -y >/dev/null
+          npm install "$TGZ_ABS"
+          cat > smoke.mjs <<'EOF'
+          import * as api from "ai-lcr";
+          const need = [
+            "createLCR", "createMediaLCR", "classifyError", "classifyErrorKind",
+            "formatCallRecord", "comparePrices", "rankRoutes", "cheapestRoute",
+            "normalizedCents", "referenceMegapixels", "DEFAULT_REFERENCE",
+            "MEDIA_PRICING", "createKunavoMediaAdapter", "createRunwareMediaAdapter",
+          ];
+          const missing = need.filter((n) => typeof api[n] === "undefined");
+          if (missing.length) { console.error("MISSING EXPORTS:", missing); process.exit(1); }
+          console.log(`OK: all ${need.length} exports present (ESM)`);
+          EOF
+          cat > smoke.cjs <<'EOF'
+          const api = require("ai-lcr");
+          if (typeof api.createLCR !== "function") { console.error("CJS require failed"); process.exit(1); }
+          console.log("OK: CJS require works");
+          EOF
+          node smoke.mjs
+          node smoke.cjs

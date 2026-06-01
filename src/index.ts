@@ -17,8 +17,8 @@ import {
   type RoutedProvider,
 } from "./fallback";
 
-export type { CostEvent, CallRecord, RouteAttempt, ProviderCost } from "./fallback";
-export { classifyError } from "./fallback";
+export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind } from "./fallback";
+export { classifyError, classifyErrorKind } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 
 // ── Image & video Least Cost Routing (parallel to the text router above) ──
