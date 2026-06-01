@@ -114,7 +114,7 @@ const lcr = createLCR({
 
 - **模型厂商官方 API（原生）：** 通过各自的 AI SDK provider 包直连 [DeepSeek](https://platform.deepseek.com)、[OpenAI](https://openai.com)、[Anthropic](https://anthropic.com)、[Google](https://ai.google.dev)、[xAI](https://x.ai) 等——无加价，原生特性齐全。见上方「直连模型厂商官方 API（原生 provider）」一节。
 - **文本聚合器：** [OpenRouter](https://openrouter.ai)（覆盖最广，列表定价）· [Kunavo](https://kunavo.com/?ref=victorimf)（**全模型 8 折**）· [TokenMart](https://thetokenmart.ai)（按模型 85 折–35 折不等）
-- **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=victorimf)（**8 折**）· [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 路由功能在路线图中
+- **图像 / 视频：** [Kunavo](https://kunavo.com/?ref=victorimf)（**8 折**）· [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) —— 通过 `createMediaLCR` 路由。图像：Kunavo + Runware + fal。视频：fal（已可用，走其异步队列 API）；Kunavo 的 Veo 轮询路径已实现但未验证
 
 ## 文本模型价格
 
@@ -229,7 +229,8 @@ API_KEY=$TOKENMART_API_KEY BASE=https://api.tokenmart.ai \
 - [ ] 内置价格表，实现零配置定价（省去手填 `cost` 数字）
 - [ ] provider 怪癖中间件（透明地修补已知怪癖，如 Kunavo 被忽略的 `max_tokens`）
 - [ ] 把 probe 结果自动接入路由（探测失败的 provider×model 自动从列表剔除）
-- [ ] 图像与视频模型路由（fal.ai / Runware / Kunavo）
+- [x] 图像与视频模型路由（`createMediaLCR`）—— 图像走 Kunavo + Runware + fal；**视频已可用，走 fal**（异步队列 API）
+- [ ] 归一化的跨 provider 视频价格对比 + 验证 Kunavo/Runware 视频适配器
 
 ## 联盟（Affiliate）披露
 

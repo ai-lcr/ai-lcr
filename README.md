@@ -156,7 +156,7 @@ Any OpenAI-compatible endpoint works — and so does any AI SDK provider package
 
 - **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
 - **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — image routing available via `createMediaLCR` (Kunavo + Runware adapters); video on the roadmap
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo + Runware + fal. Video: fal (live, via its async queue API); Kunavo's Veo poll path is implemented but unverified
 
 ## Text model pricing
 
@@ -273,7 +273,8 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 - [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
 - [ ] Provider-quirk middleware (transparently patch known per-provider request quirks, e.g. Kunavo's ignored `max_tokens`)
 - [ ] Feed probe results into routing automatically (auto-exclude a model from a provider that fails its probe)
-- [ ] Image & video model routing (fal.ai / Runware / Kunavo)
+- [x] Image & video model routing (`createMediaLCR`) — image via Kunavo + Runware + fal; **video live via fal** (async queue API)
+- [ ] Normalized cross-provider video price comparison + verified Kunavo/Runware video adapters
 
 ## Affiliate disclosure
 

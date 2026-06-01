@@ -55,6 +55,7 @@ export type {
 export { MEDIA_PRICING } from "./media-registry";
 export { createKunavoMediaAdapter } from "./adapters/kunavo-media";
 export { createRunwareMediaAdapter } from "./adapters/runware-media";
+export { createFalMediaAdapter, FalMediaError } from "./adapters/fal-media";
 
 /**
  * A provider for a model: either a bare AI SDK model (e.g.

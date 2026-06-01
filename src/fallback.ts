@@ -80,6 +80,13 @@ export interface CallRecord {
   outputTokens: number;
   /** Computed from the winner's `cost`; 0 if no price was given or the call failed. */
   costUsd: number;
+  /**
+   * What the priciest configured route would have cost for this request, so
+   * `baselineUsd - costUsd` is the saving from routing cheapest-first. Set by
+   * the media router (`createMediaLCR`), where every route has a known price;
+   * omitted by the text router, which can't price a baseline per call.
+   */
+  baselineUsd?: number;
 }
 
 export interface FallbackOptions {
