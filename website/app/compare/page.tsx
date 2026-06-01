@@ -12,16 +12,16 @@ export const dynamic = "force-static";
 type Cell = { v: "yes" | "no" | "partial"; note: string };
 type Row = { feature: string; lcr: Cell; fallback: Cell; openrouter: Cell; single: Cell };
 
-const COLUMNS = [
+const COLUMNS: { key: string; label: string; highlight?: boolean }[] = [
   { key: "lcr", label: "ai-lcr", highlight: true },
   { key: "fallback", label: "ai-fallback" },
   { key: "openrouter", label: "OpenRouter\nfallback" },
   { key: "single", label: "Single\nprovider" },
-] as const;
+];
 
-const Y = (note: string): Cell => ({ v: "yes", note });
-const N = (note: string): Cell => ({ v: "no", note });
-const P = (note: string): Cell => ({ v: "partial", note });
+const Y = (note = ""): Cell => ({ v: "yes", note });
+const N = (note = ""): Cell => ({ v: "no", note });
+const P = (note = ""): Cell => ({ v: "partial", note });
 
 const ROWS: Row[] = [
   {
