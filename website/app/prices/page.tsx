@@ -44,6 +44,7 @@ export default function Prices() {
           </a>
           <div className="nav__links">
             <a href="/status">Status</a>
+            <a href="/compare">Compare</a>
             <a href="/">Home</a>
           </div>
         </div>

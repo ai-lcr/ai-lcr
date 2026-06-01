@@ -10,6 +10,9 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/ai-lcr"><img src="https://img.shields.io/npm/v/ai-lcr.svg" alt="npm version"/></a>
+  <a href="https://github.com/victorzhrn/ai-lcr/actions/workflows/ci.yml"><img src="https://github.com/victorzhrn/ai-lcr/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://bundlephobia.com/package/ai-lcr"><img src="https://img.shields.io/bundlephobia/minzip/ai-lcr" alt="minzipped size"/></a>
+  <a href="https://www.npmjs.com/package/ai-lcr"><img src="https://img.shields.io/npm/dm/ai-lcr.svg" alt="npm downloads"/></a>
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"/>
   <a href="https://ai-sdk.dev"><img src="https://img.shields.io/badge/built%20for-Vercel%20AI%20SDK-black?logo=vercel&logoColor=white" alt="built for Vercel AI SDK"/></a>
 </p>

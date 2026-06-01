@@ -155,6 +155,9 @@ export default async function Home() {
             <a href="/prices" title="Cheapest provider per model">
               <span className="label-hide">Prices</span>
             </a>
+            <a href="/compare" title="ai-lcr vs the alternatives">
+              <span className="label-hide">Compare</span>
+            </a>
             <a className="nav__docs" href={DOCS_URL} target="_blank" rel="noreferrer">
               <span className="label-hide">Docs</span>
             </a>
@@ -393,6 +396,7 @@ export default async function Home() {
           <span className="footer__links">
             <a href="/status">Status</a>
             <a href="/prices">Prices</a>
+            <a href="/compare">Compare</a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
             <a href={NPM_URL} target="_blank" rel="noreferrer">npm</a>
             <a href={DOCS_URL} target="_blank" rel="noreferrer">Docs</a>
