@@ -1,0 +1,71 @@
+name: Publish
+
+# Auto-publish to npm when the version in package.json changes on `main`.
+# "Changed" is decided by the source of truth — whether that exact version is
+# already on the registry — not by diffing the previous commit. That makes this
+# idempotent: merge commits, re-runs, and pushes that don't touch the version
+# all no-op safely; the first push that bumps the version publishes it.
+on:
+  push:
+    branches: [main]
+
+# id-token: publish with npm provenance (supply-chain attestation; public repo).
+# contents: create the git tag and GitHub Release.
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # Is this exact version already on npm? If so, nothing to do.
+      - name: Check whether this version is already published
+        id: check
+        run: |
+          set -euo pipefail
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "Already on npm: $NAME@$VERSION — skipping publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not on npm yet: $NAME@$VERSION — will publish."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # `prepublishOnly` (build + typecheck + test) runs automatically inside
+      # `npm publish`, so it is the gate — a red tree cannot ship.
+      - name: Publish to npm
+        if: steps.check.outputs.should_publish == 'true'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Tag + GitHub Release so every published version is anchored in git too.
+      - name: Tag and create GitHub Release
+        if: steps.check.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          git tag "$TAG"
+          git push origin "$TAG"
+          # Pull this version's section out of CHANGELOG.md for the release body;
+          # fall back to a generic note if the heading isn't found.
+          NOTES="$(awk "/^## \[$VERSION\]/{f=1;next} /^## \[/{f=0} f" CHANGELOG.md)"
+          if [ -z "${NOTES// }" ]; then NOTES="Release $TAG"; fi
+          gh release create "$TAG" --title "$TAG" --notes "$NOTES"
