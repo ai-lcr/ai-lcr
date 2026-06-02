@@ -126,12 +126,25 @@ export interface CallRecord {
   /** Computed from the winner's `cost`; 0 if no price was given or the call failed. */
   costUsd: number;
   /**
-   * What the same request would have cost on the most expensive *priced*
-   * provider in the chain, on identical token usage — the savings baseline
-   * (`baselineUsd - costUsd`). Set by both routers whenever at least one
-   * provider carries a `cost`; undefined only when no provider was priced.
+   * What this same usage would have cost on the savings baseline, so
+   * `baselineUsd - costUsd` is what routing actually saved. Text router: the
+   * always-on fallback leg — the LAST priced provider in the chain, i.e. the
+   * list-price provider you'd fall back to without routing (e.g. OpenRouter).
+   * Media router: the model-maker's official direct price. NOT the most
+   * expensive leg of the chain: prompt caching can make a sticker-cheaper
+   * provider cost more on a cache-heavy call, and a max-of-chain baseline would
+   * fabricate a "saving" on calls the fallback itself served. Undefined only
+   * when no provider was priced.
    */
   baselineUsd?: number;
+  /**
+   * The slice of `costUsd` that prompt-cache reads saved versus paying the full
+   * input rate for those same tokens (`cachedTokens × (input − cacheRead)`).
+   * Present only when > 0. This is the serving provider's own caching benefit —
+   * it happens with or without routing — so it is NOT a routing saving and must
+   * be surfaced separately, never folded into `baselineUsd - costUsd`.
+   */
+  cachedSavingUsd?: number;
   /**
    * Caller-supplied correlation id, read from `providerOptions.lcr.requestId`
    * on the call. Multi-step tool loops emit one record per `doStream`/
@@ -397,6 +410,19 @@ function costForUsage(
   );
 }
 
+/**
+ * The slice of a settled call's bill that prompt-cache reads saved, vs paying
+ * the full `input` rate for those same tokens: `cachedTokens × (input − cacheRead)`.
+ * Zero when the provider has no `cacheRead` (caching gives no discount there).
+ * This is the provider's own caching benefit — independent of routing — so the
+ * dashboard reports it on its own line, never inside the routing-savings figure.
+ */
+function cacheSavingForUsage(cost: ProviderCost, inputTokens: number, cacheReadTokens: number): number {
+  if (cost.cacheRead === undefined) return 0;
+  const cached = Math.min(Math.max(cacheReadTokens, 0), inputTokens);
+  return (cached / 1e6) * (cost.input - cost.cacheRead);
+}
+
 /** Read a caller-supplied correlation id from `providerOptions.lcr.requestId`. */
 function requestIdFrom(options: LanguageModelV3CallOptions): string | undefined {
   const raw = options.providerOptions?.lcr?.requestId;
@@ -524,19 +550,22 @@ export class LcrFallbackModel implements LanguageModelV3 {
   }
 
   /**
-   * Baseline = what this same usage would have cost on the most expensive
-   * *priced* provider in the chain (typically the OpenRouter fallback leg). The
-   * winner's savings is `baselineUsd - costUsd`. Undefined when no provider in
-   * the chain carries a price (nothing to compare against).
+   * Baseline = what this same usage would have cost on the always-on fallback:
+   * the LAST priced leg of the chain (by convention the list-price provider you'd
+   * use without routing — e.g. OpenRouter, always last). The winner's saving is
+   * `baselineUsd - costUsd`. We take the last priced leg, NOT the most expensive
+   * one: prompt caching can make a sticker-cheaper provider (no `cacheRead`) cost
+   * MORE on a cache-heavy call, and a max-of-chain baseline would then fabricate a
+   * "saving" even on calls the fallback itself served. Undefined when no provider
+   * in the chain carries a price (nothing to compare against).
    */
   private baselineUsd(inputTokens: number, outputTokens: number, cacheReadTokens: number): number | undefined {
-    let max: number | undefined;
+    let baseline: number | undefined;
     for (const p of this.opts.providers) {
       if (!p.cost) continue;
-      const c = costForUsage(p.cost, inputTokens, outputTokens, cacheReadTokens);
-      if (max === undefined || c > max) max = c;
+      baseline = costForUsage(p.cost, inputTokens, outputTokens, cacheReadTokens);
     }
-    return max;
+    return baseline;
   }
 
   /** Winner settled: record the attempt, fire `onCost` (compat) + `onCall`. */
@@ -553,6 +582,9 @@ export class LcrFallbackModel implements LanguageModelV3 {
     const cacheReadTokens = usage?.inputTokens?.cacheRead ?? 0;
     const costUsd = provider.cost
       ? costForUsage(provider.cost, inputTokens, outputTokens, cacheReadTokens)
+      : 0;
+    const cachedSavingUsd = provider.cost
+      ? cacheSavingForUsage(provider.cost, inputTokens, cacheReadTokens)
       : 0;
     // Winner served but reported no usage at all → cost/credit metering would
     // silently read 0. Surface it as a flag rather than a believable "free" row.
@@ -578,6 +610,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
       costUsd,
       baselineUsd: this.baselineUsd(inputTokens, outputTokens, cacheReadTokens),
+      ...(cachedSavingUsd > 0 ? { cachedSavingUsd } : {}),
       ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
       ...(usageMissing ? { usageMissing: true } : {}),
     });

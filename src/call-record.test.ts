@@ -239,7 +239,7 @@ describe("onCall — TTFT (time to first token)", () => {
 });
 
 describe("onCall — savings baseline (text side)", () => {
-  it("sets baselineUsd from the most expensive priced provider on the same usage", async () => {
+  it("sets baselineUsd from the always-on fallback (last priced leg) on the same usage", async () => {
     const records: CallRecord[] = [];
     const lcr = createLCR({
       models: {
@@ -255,10 +255,85 @@ describe("onCall — savings baseline (text side)", () => {
 
     const r = records[0]!;
     expect(r.winner).toBe("tokenmart");
-    // winner: 10/1e6*1 + 5/1e6*2 = 2e-5 ; baseline (openrouter): 10/1e6*3 + 5/1e6*4 = 5e-5
+    // winner: 10/1e6*1 + 5/1e6*2 = 2e-5 ; baseline = last leg (openrouter): 10/1e6*3 + 5/1e6*4 = 5e-5
     expect(r.costUsd).toBeCloseTo(2e-5, 12);
     expect(r.baselineUsd).toBeCloseTo(5e-5, 12);
     expect(r.baselineUsd! - r.costUsd).toBeGreaterThan(0);
+  });
+
+  it("baselines on the fallback leg, not the priciest leg → no fabricated saving when the fallback serves", async () => {
+    // Cache-heavy call: the sticker-cheaper leg (tokenmart, no cacheRead) would
+    // cost MORE than the fallback (openrouter, cacheRead) on these tokens. The
+    // old max-of-chain baseline picked tokenmart and showed a "saving" even
+    // though openrouter itself served at list price. Last-leg baseline = the
+    // winner's own cost here → saving is 0, which is the honest answer.
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          // tokenmart fails → fail over to openrouter (the last leg) which serves.
+          { model: failModel("tokenmart", 429), label: "tokenmart", cost: { input: 2, output: 2 } },
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3, cacheRead: 0.3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    expect(r.winner).toBe("openrouter");
+    // openrouter cost = 100 full@3 + 900 cached@0.3 + 100 out@3 = 3e-4 + 2.7e-4 + 3e-4 = 8.7e-4
+    expect(r.costUsd).toBeCloseTo(8.7e-4, 12);
+    // baseline = last leg (openrouter) on the same usage = costUsd → no saving.
+    expect(r.baselineUsd).toBeCloseTo(8.7e-4, 12);
+    expect(r.baselineUsd! - r.costUsd).toBe(0);
+  });
+
+  it("reports cachedSavingUsd (caching benefit) separately from the routing baseline", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3, cacheRead: 0.3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    // 900 cached tokens billed at 0.3 instead of 3 → saved 900/1e6 * (3 - 0.3) = 2.43e-3
+    expect(r.cachedSavingUsd).toBeCloseTo(2.43e-3, 12);
+    // it is NOT a routing saving: single priced leg → baseline == cost.
+    expect(r.baselineUsd! - r.costUsd).toBe(0);
+  });
+
+  it("omits cachedSavingUsd when the provider has no cacheRead rate", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("p", "hi", usageWithCache(1000, 100, 900)),
+            label: "p",
+            cost: { input: 3, output: 3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.cachedSavingUsd).toBeUndefined();
   });
 
   it("leaves baselineUsd undefined when no provider is priced", async () => {
