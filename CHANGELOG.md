@@ -4,6 +4,22 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] — 2026-06-01
+
+### Changed
+
+- **fal media adapter now covers image *and* video** via fal's async queue API
+  (submit → poll `status_url` → fetch `response_url`), replacing the synchronous
+  image-only `fal.run` adapter shipped in 0.2.5. This is ai-lcr's first working
+  **video** execution path: the registry already priced/routed the Veo family
+  but no adapter could run it. Same house style — raw `fetch`, injectable
+  `fetchImpl`, no provider SDK; `Authorization: Key` (not Bearer); cost left to
+  the router's normalized estimate (the queue result carries no per-call price).
+  Following the submit response's `status_url`/`response_url` sidesteps fal's
+  sub-path quirk (`fal-ai/flux/schnell` submits to the full path, but status and
+  result live under the `fal-ai/flux` base). `createFalMediaAdapter`'s public
+  name is unchanged; image callers are unaffected.
+
 ## [0.2.5] — 2026-06-01
 
 Pre-launch failover-robustness + media-provider pass — closing cases where a
@@ -104,5 +120,6 @@ Release-quality and engine-correctness pass.
 - Dual ESM/CJS build. Media (image/video) least-cost routing with the Runware
   and Kunavo adapters; cap-aware failover for the text router.
 
+[0.2.6]: https://github.com/victorzhrn/ai-lcr/releases/tag/v0.2.6
 [0.2.5]: https://github.com/victorzhrn/ai-lcr/releases/tag/v0.2.5
 [0.2.3]: https://github.com/victorzhrn/ai-lcr/releases/tag/v0.2.3

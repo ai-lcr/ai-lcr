@@ -2,112 +2,178 @@ import { describe, it, expect, vi } from "vitest";
 import { createFalMediaAdapter, FalMediaError } from "./fal-media";
 import { createMediaLCR, type MediaRegistry } from "../media";
 
-// A fetch stub that records the request and returns a canned fal response.
-function stubFetch(response: unknown, init: { ok?: boolean; status?: number } = {}) {
-  const calls: { url: string; headers: unknown; body: unknown }[] = [];
-  const impl = vi.fn(async (url: string, opts: RequestInit) => {
-    calls.push({ url, headers: opts.headers, body: JSON.parse(String(opts.body)) });
+/**
+ * fal's queue is three calls: POST submit, GET status (polled), GET result.
+ * This stub routes by URL/method so one fetch impl drives the whole flow, and
+ * records calls for assertions. `statuses` is the sequence of status responses
+ * returned on successive status polls.
+ */
+function falStub(opts: {
+  submit?: unknown;
+  submitInit?: { ok?: boolean; status?: number };
+  statuses?: string[];
+  result?: unknown;
+  resultInit?: { ok?: boolean; status?: number };
+}) {
+  const calls: { url: string; method: string; body?: unknown }[] = [];
+  let statusIdx = 0;
+  const statuses = opts.statuses ?? ["COMPLETED"];
+
+  const impl = vi.fn(async (url: string, init: RequestInit = {}) => {
+    const method = init.method ?? "GET";
+    calls.push({
+      url,
+      method,
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+
+    // Submit (POST to the model path).
+    if (method === "POST") {
+      return {
+        ok: opts.submitInit?.ok ?? true,
+        status: opts.submitInit?.status ?? 200,
+        json: async () =>
+          opts.submit ?? {
+            request_id: "req-1",
+            status_url: "https://queue.fal.run/fal-ai/x/requests/req-1/status",
+            response_url: "https://queue.fal.run/fal-ai/x/requests/req-1",
+          },
+        text: async () => JSON.stringify(opts.submit ?? {}),
+      } as Response;
+    }
+    // Status poll.
+    if (url.endsWith("/status")) {
+      const status = statuses[Math.min(statusIdx, statuses.length - 1)]!;
+      statusIdx++;
+      return { ok: true, status: 200, json: async () => ({ status }) } as Response;
+    }
+    // Result fetch.
     return {
-      ok: init.ok ?? true,
-      status: init.status ?? 200,
-      json: async () => response,
+      ok: opts.resultInit?.ok ?? true,
+      status: opts.resultInit?.status ?? 200,
+      json: async () => opts.result ?? { images: [{ url: "https://fal.media/x.jpg" }] },
+      text: async () => JSON.stringify(opts.result ?? {}),
     } as Response;
   });
+
   return { impl: impl as unknown as typeof fetch, calls };
 }
 
 describe("createFalMediaAdapter", () => {
-  it("POSTs inputs to fal.run/<model> with Key auth and returns the image url", async () => {
-    const { impl, calls } = stubFetch({
-      images: [{ url: "https://fal.media/x.png", width: 1024 }],
-    });
-    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+  it("submits to the model path with a Key auth header and returns the image url", async () => {
+    const { impl, calls } = falStub({ result: { images: [{ url: "https://fal.media/a.jpg" }] } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
 
     const result = await adapter.run({
-      externalId: "fal-ai/nano-banana-2",
-      input: { prompt: "a fox", num_images: 1 },
+      externalId: "fal-ai/flux/schnell",
+      input: { prompt: "a fox", image_size: "square" },
     });
 
-    expect(calls[0]!.url).toBe("https://fal.run/fal-ai/nano-banana-2");
-    expect((calls[0]!.headers as Record<string, string>).authorization).toBe("Key k");
-    expect(calls[0]!.body).toMatchObject({ prompt: "a fox", num_images: 1 });
-
-    expect(result.outputs).toEqual([{ url: "https://fal.media/x.png", type: "image" }]);
+    const submit = calls.find((c) => c.method === "POST")!;
+    expect(submit.url).toBe("https://queue.fal.run/fal-ai/flux/schnell");
+    expect(submit.body).toEqual({ prompt: "a fox", image_size: "square" }); // input passed straight through
+    expect(result.outputs).toEqual([{ url: "https://fal.media/a.jpg", type: "image" }]);
     expect(result.units).toBe(1);
-    // fal's sync response carries no price → router estimates from the ref.
-    expect(result.costCents).toBeUndefined();
+    expect(result.costCents).toBeUndefined(); // left to the router's estimate
   });
 
-  it("accepts a single `image` object as well as an `images` array", async () => {
-    const { impl } = stubFetch({ image: { url: "https://fal.media/solo.png" } });
-    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+  it("extracts a video url from the singular `video` key", async () => {
+    const { impl } = falStub({ result: { video: { url: "https://fal.media/clip.mp4" } } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
 
-    const result = await adapter.run({ externalId: "fal-ai/some-model", input: { prompt: "x" } });
+    const result = await adapter.run({ externalId: "fal-ai/veo3.1/lite", input: { prompt: "a wave" } });
 
-    expect(result.outputs).toEqual([{ url: "https://fal.media/solo.png", type: "image" }]);
+    expect(result.outputs).toEqual([{ url: "https://fal.media/clip.mp4", type: "video" }]);
   });
 
-  it("throws a status-bearing error when the account is out of balance (403)", async () => {
-    const { impl } = stubFetch({ detail: "Exhausted balance. Please top up." }, { ok: false, status: 403 });
-    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+  it("polls status until COMPLETED before fetching the result", async () => {
+    const { impl, calls } = falStub({
+      statuses: ["IN_QUEUE", "IN_PROGRESS", "COMPLETED"],
+      result: { video: { url: "https://fal.media/clip.mp4" } },
+    });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
+
+    await adapter.run({ externalId: "fal-ai/veo3.1/lite", input: { prompt: "x" } });
+
+    const statusPolls = calls.filter((c) => c.url.endsWith("/status"));
+    expect(statusPolls).toHaveLength(3); // IN_QUEUE, IN_PROGRESS, COMPLETED
+    // Result fetched only after COMPLETED.
+    expect(calls[calls.length - 1]!.url).not.toContain("/status");
+  });
+
+  it("follows the status_url / response_url returned by submit (sub-path quirk)", async () => {
+    const { impl, calls } = falStub({
+      submit: {
+        request_id: "req-9",
+        status_url: "https://queue.fal.run/fal-ai/flux/requests/req-9/status",
+        response_url: "https://queue.fal.run/fal-ai/flux/requests/req-9",
+      },
+      result: { images: [{ url: "https://fal.media/y.jpg" }] },
+    });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
+
+    await adapter.run({ externalId: "fal-ai/flux/schnell", input: { prompt: "x" } });
+
+    // status/result hit the fal-ai/flux base, NOT fal-ai/flux/schnell.
+    expect(calls.some((c) => c.url === "https://queue.fal.run/fal-ai/flux/requests/req-9/status")).toBe(true);
+    expect(calls.some((c) => c.url === "https://queue.fal.run/fal-ai/flux/requests/req-9")).toBe(true);
+  });
+
+  it("throws a status-bearing error when submit is rejected", async () => {
+    const { impl } = falStub({ submitInit: { ok: false, status: 429 }, submit: { detail: "rate limited" } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
 
     await expect(
-      adapter.run({ externalId: "fal-ai/nano-banana-2", input: { prompt: "x" } }),
-    ).rejects.toMatchObject({ status: 403, name: "FalMediaError" });
+      adapter.run({ externalId: "fal-ai/flux/schnell", input: { prompt: "x" } }),
+    ).rejects.toMatchObject({ status: 429, name: "FalMediaError" });
   });
 
-  it("extracts the message from fal's array-shaped `detail` validation body", async () => {
-    const { impl } = stubFetch({ detail: [{ msg: "prompt is required" }] }, { ok: false, status: 422 });
-    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+  it("throws when the completed result carries no media url", async () => {
+    const { impl } = falStub({ result: { images: [] } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
 
     await expect(
-      adapter.run({ externalId: "fal-ai/nano-banana-2", input: {} }),
-    ).rejects.toThrow(/prompt is required/);
-  });
-
-  it("throws when the response carries no image url", async () => {
-    const { impl } = stubFetch({ images: [] });
-    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
-
-    await expect(
-      adapter.run({ externalId: "fal-ai/nano-banana-2", input: { prompt: "x" } }),
-    ).rejects.toThrow(/no image URL/);
+      adapter.run({ externalId: "fal-ai/flux/schnell", input: { prompt: "x" } }),
+    ).rejects.toThrow(/no media URL/);
   });
 });
 
-// Wired through the media router: an out-of-balance fal route (403) falls over
-// to the next provider — exercising FalMediaError(403) → isRetryableError → next.
-describe("createFalMediaAdapter via createMediaLCR", () => {
+// Wired through the media router on a real registry entry: the cheapest video
+// route (Kunavo) caps out and falls over to the fal route — proving fal is now
+// a live video execution path, not a skipped (adapter-less) route.
+describe("createFalMediaAdapter via createMediaLCR (video failover)", () => {
   const registry: MediaRegistry = {
-    "google/nano-banana-2": {
-      id: "google/nano-banana-2",
-      modality: "image",
+    "google/veo-3-lite": {
+      id: "google/veo-3-lite",
+      modality: "video",
       routes: [
-        // fal is cheaper here in this test so it's tried first, then fails over.
-        { provider: "fal", externalId: "fal-ai/nano-banana-2", pricing: { unit: "image", cents: 4 } },
-        { provider: "runware", externalId: "google:4@3", pricing: { unit: "image", cents: 6.9 } },
+        { provider: "kunavo", externalId: "veo-3-lite", pricing: { unit: "call", cents: 16 } },
+        { provider: "fal", externalId: "fal-ai/veo3.1/lite", pricing: { unit: "second", cents: 8 } },
       ],
     },
   };
 
-  it("falls over from an out-of-balance fal to the next provider", async () => {
-    const { impl } = stubFetch({ detail: "Exhausted balance" }, { ok: false, status: 403 });
+  it("falls over from a capped Kunavo to fal and returns a video output", async () => {
+    const { impl } = falStub({ result: { video: { url: "https://fal.media/clip.mp4" } } });
     const onError = vi.fn();
     const generate = createMediaLCR({
       registry,
       adapters: {
-        fal: createFalMediaAdapter({ apiKey: "k", fetchImpl: impl }),
-        runware: {
-          provider: "runware",
-          run: async () => ({ outputs: [{ url: "https://im.runware.ai/y.png", type: "image" }] }),
+        kunavo: {
+          provider: "kunavo",
+          run: async () => {
+            throw new FalMediaError(402, "Insufficient credits"); // capped → retryable
+          },
         },
+        fal: createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 }),
       },
       onError,
     });
 
-    const result = await generate("google/nano-banana-2", { prompt: "x" });
+    const result = await generate("google/veo-3-lite", { prompt: "a wave" });
 
-    expect(result.provider).toBe("runware"); // fal out of balance (403) → fell over
+    expect(result.provider).toBe("fal");
+    expect(result.outputs).toEqual([{ url: "https://fal.media/clip.mp4", type: "video" }]);
     expect(onError).toHaveBeenCalledOnce();
   });
 });
