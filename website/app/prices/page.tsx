@@ -15,7 +15,7 @@ import PriceTable from "./PriceTable";
 export const metadata: Metadata = {
   title: "ai-lcr — Cheapest provider per model (text, image & video)",
   description:
-    "Official cheapest-provider recommendation across OpenRouter, Kunavo, TokenMart, fal and Runware. Text LLMs priced per 1M tokens (input / output); image & video normalized to one 16:9 1080p image / 5-second clip so providers compare directly. Filter by open-weight vs proprietary, vendor, and modality.",
+    "Official cheapest-provider recommendation across OpenRouter, Kunavo, TokenMart, DeepInfra, fal and Runware. Text LLMs priced per 1M tokens (input / output); image & video normalized to one 16:9 1080p image / 5-second clip so providers compare directly. Filter by open-weight vs proprietary, vendor, and modality.",
 };
 
 // Static table — no DB, no live data. Safe to prerender.
@@ -71,8 +71,8 @@ export default function Prices() {
         <p style={{ color: "var(--faint)", fontSize: 12.5, marginTop: 24, lineHeight: 1.7 }}>
           <b style={{ color: "var(--muted)" }}>Notes.</b> Text rates are per 1M tokens (input /
           output). <b>Official</b> is the model maker&apos;s own first-party list price (OpenAI,
-          Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>, <b>Kunavo</b> and{" "}
-          <b>TokenMart</b> are pulled live from each provider&apos;s <code>/v1/models</code>. The{" "}
+          Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>, <b>Kunavo</b>,{" "}
+          <b>TokenMart</b> and <b>DeepInfra</b> are pulled live from each provider&apos;s <code>/v1/models</code>. The{" "}
           <b style={{ color: "var(--green)" }}>green</b> cell + <em>Best</em> column mark the cheapest
           buyable route and its discount versus Official. A listed price ≠ a working route — some
           discount upstreams aren&apos;t provisioned and 502 in practice, so re-probe before routing;

@@ -53,7 +53,7 @@ async function ping(p: Provider, model: string, mode: "inference" | "reachable")
           ...(probe.body !== undefined ? { body: JSON.stringify(probe.body) } : {}),
           signal: ctrl.signal,
         })
-      : await fetch(`${p.base}/v1/chat/completions`, {
+      : await fetch(`${p.base}${p.chatPath ?? "/v1/chat/completions"}`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${key}`,

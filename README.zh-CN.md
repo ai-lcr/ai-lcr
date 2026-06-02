@@ -98,6 +98,46 @@ const lcr = createLCR({
 
 同样的模式适用于任何厂商的原生 SDK provider——`@ai-sdk/anthropic`、`@ai-sdk/google`、`@ai-sdk/openai`、`@ai-sdk/xai` 等等。它们都返回 `LanguageModelV3`，所以你可以在一个模型的列表里把厂商原生 API 和聚合器混着用。原生 API 覆盖窄（只有该厂商自己的模型）但特性全；聚合器覆盖广。**官方优先 + 聚合器兜底** 正是 LCR 最自然的形态。
 
+## 开源权重模型的最便宜路由（DeepInfra）
+
+对开源权重模型——DeepSeek、Kimi、MiniMax、GLM、Qwen——专门的推理托管商通常是最便宜的路由，明显低于聚合器价格。[DeepInfra](https://deepinfra.com) 兼容 OpenAI，直接当成列表里的又一个 entry 即可。**有一个坑**：它的 OpenAI endpoint 在 `/v1/openai`（`/v1/` 在 `openai` **前面**），不是常规的 `/v1`：
+
+```ts
+import { createLCR } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const deepinfra = createOpenAICompatible({
+  name: "deepinfra",
+  baseURL: "https://api.deepinfra.com/v1/openai", // 注意：/v1/openai，不是 /v1
+  apiKey: process.env.DEEPINFRA_API_KEY,
+});
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    // DeepInfra 最便宜；OpenRouter 作广覆盖 / 可用性兜底。
+    // DeepInfra 用 HuggingFace 风格的 id（org/Name）。
+    "deepseek-v4-flash": [
+      { model: deepinfra("deepseek-ai/DeepSeek-V4-Flash"), label: "deepinfra", cost: { input: 0.10, output: 0.20 } },
+      { model: openrouter("deepseek/deepseek-v4-flash"), label: "openrouter", cost: { input: 0.27, output: 1.10 } },
+    ],
+    "minimax-m2.5": [
+      { model: deepinfra("MiniMaxAI/MiniMax-M2.5"), label: "deepinfra", cost: { input: 0.15, output: 1.15 } },
+    ],
+    "kimi-k2.5": [
+      { model: deepinfra("moonshotai/Kimi-K2.5"), label: "deepinfra", cost: { input: 0.45, output: 2.25 } },
+    ],
+  },
+});
+```
+
+DeepInfra 只承载开源权重——没有第一方 Claude / GPT / Gemini。那些闭源模型请走 OpenRouter 或折扣中转。
+
 ## 它如何路由
 
 1. **最便宜优先。** provider 按顺序依次尝试——把它们排成最便宜优先，或设置 `autoSort: true` 让它按 `cost` 自动排序。

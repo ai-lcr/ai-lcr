@@ -56,6 +56,13 @@ export type Provider = {
   label: string;
   /** Base URL WITHOUT /v1 — pings append /v1/chat/completions, /v1/models, /v1/messages. */
   base: string;
+  /**
+   * Override the chat-completions path appended to `base` for inference pings.
+   * Default `/v1/chat/completions`. Needed for providers whose OpenAI-compatible
+   * endpoint isn't at the standard path — e.g. DeepInfra serves it at
+   * `/v1/openai/chat/completions` (the `/v1/` sits before `openai`).
+   */
+  chatPath?: string;
   /** Name of the env var holding this provider's API key. */
   apiKeyEnv: string;
   /** Liveness strategy — see CheckMode. */
@@ -166,6 +173,27 @@ export const PROVIDERS: Provider[] = [
     link: "https://platform.deepseek.com",
   },
   {
+    // Open-weights inference host (Llama/Qwen/DeepSeek/GLM/Kimi/MiniMax) — the
+    // cheapest serving option for the Chinese open models. Cheaper than Novita
+    // across DeepSeek/Kimi/MiniMax (verified from pricing pages 2026-06-02), so
+    // we monitor a cheap rep of each here. No integrity suite — a transparent
+    // first-party-ish host, not a discount relay. NOTE its OpenAI endpoint sits
+    // at /v1/openai/chat/completions (the /v1/ precedes openai) — hence chatPath.
+    // Model ids verified present in /v1/openai/models on the live key 2026-06-02.
+    id: "deepinfra",
+    label: "DeepInfra",
+    base: "https://api.deepinfra.com",
+    chatPath: "/v1/openai/chat/completions",
+    apiKeyEnv: "DEEPINFRA_API_KEY",
+    check: "inference",
+    models: [
+      { id: "deepseek-ai/DeepSeek-V4-Flash", label: "DeepSeek V4 Flash" },
+      { id: "MiniMaxAI/MiniMax-M2.5", label: "MiniMax M2.5" },
+      { id: "moonshotai/Kimi-K2.5", label: "Kimi K2.5" },
+    ],
+    link: "https://deepinfra.com",
+  },
+  {
     // Also the integrity baseline for the discount providers above (referenced
     // by URL, independent of its own check mode). The mainstream GPT liveness
     // lives here (Kunavo has no GPT text models). We also monitor a cheap
@@ -214,11 +242,13 @@ export const PROVIDERS: Provider[] = [
     },
   },
   {
-    // Image/video provider — reachability via the free account-billing endpoint
-    // (GET, no generation). A 2xx proves the endpoint is up AND the key is valid
-    // (the endpoint is account-authenticated). fal uses `Authorization: Key <k>`,
-    // not Bearer. An out-of-balance account still authenticates here, so this is
-    // reachability only — a failed charge is caught reactively by failover.
+    // Image/video provider — reachability via the free model catalog endpoint
+    // (GET, no generation). `/v1/account/billing` was 403 for our generation key
+    // (billing needs a higher-scoped key); `/v1/models` is reachable with it.
+    // The endpoint is public without a header, but WITH an Authorization header
+    // it validates the key (a bad key → 401), so sending the key still proves it
+    // valid. fal uses `Authorization: Key <k>`, not Bearer. Reachability only —
+    // it can't see balance, so a failed charge is caught reactively by failover.
     id: "fal",
     label: "fal.ai",
     base: "https://api.fal.ai",
@@ -228,9 +258,9 @@ export const PROVIDERS: Provider[] = [
     link: "https://fal.ai",
     probe: {
       method: "GET",
-      path: "/v1/account/billing",
+      path: "/v1/models",
       auth: (key) => `Key ${key}`,
-      ok: (j) => j != null && typeof j === "object",
+      ok: (j) => Array.isArray((j as { models?: unknown[] })?.models) && (j as { models: unknown[] }).models.length > 0,
     },
   },
 ];

@@ -65,7 +65,12 @@ function statusColor(s: string): string {
 }
 
 function modelLabel(p: Provider, model: string): string {
-  if (model === REACHABILITY_MODEL) return "GET /v1/models (reachability)";
+  if (model === REACHABILITY_MODEL) {
+    // Reflect the provider's actual probe (Runware POSTs a ping task; fal GETs
+    // its model catalog) instead of a one-size-fits-all label.
+    const probe = p.probe ?? { method: "GET", path: "/v1/models" };
+    return `${probe.method} ${probe.path} (reachability)`;
+  }
   return p.models.find((m) => m.id === model)?.label ?? model;
 }
 

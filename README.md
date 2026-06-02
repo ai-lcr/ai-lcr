@@ -98,6 +98,46 @@ const lcr = createLCR({
 
 The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. They all return `LanguageModelV3`, so you can mix a native vendor API with aggregators in one model's list. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad. **Official-first + aggregator-fallback** is the natural LCR shape.
 
+## Cheapest route for open-weights models (DeepInfra)
+
+For open-weights models — DeepSeek, Kimi, MiniMax, GLM, Qwen — a dedicated inference host is usually the cheapest route, well under aggregator pricing. [DeepInfra](https://deepinfra.com) is OpenAI-compatible, so it slots in as just another entry. **One gotcha:** its OpenAI endpoint lives at `/v1/openai` (the `/v1/` precedes `openai`), not the usual `/v1`:
+
+```ts
+import { createLCR } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const deepinfra = createOpenAICompatible({
+  name: "deepinfra",
+  baseURL: "https://api.deepinfra.com/v1/openai", // note: /v1/openai, not /v1
+  apiKey: process.env.DEEPINFRA_API_KEY,
+});
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    // DeepInfra is cheapest; OpenRouter is the breadth/uptime fallback.
+    // DeepInfra uses HuggingFace-style ids (org/Name).
+    "deepseek-v4-flash": [
+      { model: deepinfra("deepseek-ai/DeepSeek-V4-Flash"), label: "deepinfra", cost: { input: 0.10, output: 0.20 } },
+      { model: openrouter("deepseek/deepseek-v4-flash"), label: "openrouter", cost: { input: 0.27, output: 1.10 } },
+    ],
+    "minimax-m2.5": [
+      { model: deepinfra("MiniMaxAI/MiniMax-M2.5"), label: "deepinfra", cost: { input: 0.15, output: 1.15 } },
+    ],
+    "kimi-k2.5": [
+      { model: deepinfra("moonshotai/Kimi-K2.5"), label: "deepinfra", cost: { input: 0.45, output: 2.25 } },
+    ],
+  },
+});
+```
+
+DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. For those closed models, route through OpenRouter or a discount gateway instead.
+
 ## How it routes
 
 1. **Cheapest first.** Providers are tried in order — list them cheapest-first, or set `autoSort: true` to order them by `cost` automatically.

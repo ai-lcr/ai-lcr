@@ -2101,6 +2101,10 @@
     "tokenmart": {
       "label": "TokenMart",
       "link": "https://thetokenmart.ai"
+    },
+    "deepinfra": {
+      "label": "DeepInfra",
+      "link": "https://deepinfra.com"
     }
   },
   "textModels": [
@@ -2814,6 +2818,11 @@
           "provider": "tokenmart",
           "inUsd": 0.258,
           "outUsd": 1.044
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.43,
+          "outUsd": 1.74
         }
       ]
     },
@@ -2837,6 +2846,11 @@
           "provider": "tokenmart",
           "inUsd": 0.24,
           "outUsd": 1.05
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.4,
+          "outUsd": 1.75
         }
       ]
     },
@@ -2860,6 +2874,11 @@
           "provider": "tokenmart",
           "inUsd": 0.36,
           "outUsd": 1.248
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.6,
+          "outUsd": 2.08
         }
       ]
     },
@@ -2906,6 +2925,11 @@
           "provider": "tokenmart",
           "inUsd": 0.63,
           "outUsd": 2.1
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 1.05,
+          "outUsd": 3.5
         }
       ]
     },
@@ -2971,6 +2995,11 @@
           "provider": "tokenmart",
           "inUsd": 1.75,
           "outUsd": 5.25
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 2.5,
+          "outUsd": 7.5
         }
       ]
     },
@@ -2994,6 +3023,11 @@
           "provider": "tokenmart",
           "inUsd": 0.0882,
           "outUsd": 0.1764
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.1,
+          "outUsd": 0.2
         }
       ]
     },
@@ -3018,6 +3052,11 @@
           "provider": "tokenmart",
           "inUsd": 0.435,
           "outUsd": 0.87
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 1.3,
+          "outUsd": 2.6
         }
       ]
     },
@@ -3041,6 +3080,11 @@
           "provider": "tokenmart",
           "inUsd": 0.42,
           "outUsd": 2.1
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.45,
+          "outUsd": 2.25
         }
       ]
     },
@@ -3064,6 +3108,11 @@
           "provider": "tokenmart",
           "inUsd": 0.63,
           "outUsd": 2.8
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.75,
+          "outUsd": 3.5
         }
       ]
     },
@@ -3087,6 +3136,11 @@
           "provider": "tokenmart",
           "inUsd": 0.2432,
           "outUsd": 0.9704
+        },
+        {
+          "provider": "deepinfra",
+          "inUsd": 0.15,
+          "outUsd": 1.15
         }
       ]
     },
