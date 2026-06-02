@@ -104,6 +104,13 @@ export type Provider = {
   billing?:
     | { kind: "mgmt-api"; mgmtKeyEnv: string }
     | { kind: "inline-estimated-cost" };
+  /**
+   * The provider's OWN public status page. When set, the detail page pulls its
+   * per-component state and shows it alongside our probes — complementary, not a
+   * replacement: ours says "can our key call it", theirs says "is their platform
+   * up". Together they triage a red. See lib/official-status.ts.
+   */
+  officialStatus?: import("./official-status").OfficialStatusSource;
 };
 
 /** Sentinel model value stored for "reachable" liveness rows (no specific model). */
@@ -249,6 +256,9 @@ export const PROVIDERS: Provider[] = [
     check: "reachable",
     models: [],
     link: "https://runware.ai",
+    // Instatus page; splits Official vs Third-party (Google/OpenAI) models —
+    // tells our image/video relay apart from upstream third-party outages.
+    officialStatus: { platform: "instatus", url: "https://status.runware.ai" },
     probe: {
       method: "POST",
       path: "/v1",
@@ -275,6 +285,7 @@ export const PROVIDERS: Provider[] = [
     check: "reachable",
     models: [],
     link: "https://fal.ai",
+    officialStatus: { platform: "instatus", url: "https://status.fal.ai" },
     probe: {
       method: "GET",
       path: "/v1/models",
