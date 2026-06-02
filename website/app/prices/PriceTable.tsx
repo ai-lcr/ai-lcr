@@ -212,6 +212,80 @@ export default function PriceTable({
     margin: "0 0 10px",
   };
 
+  // "Best Value" sits right after Official so the recommendation stays visible
+  // as more supplier columns get added on the right.
+  const splitCols = (cols: Column[]) =>
+    [cols.filter((c) => c.id === "official"), cols.filter((c) => c.id !== "official")] as const;
+  const [textOfficialCols, textRestCols] = splitCols(textColumns);
+  const [mediaOfficialCols, mediaRestCols] = splitCols(columns);
+
+  const colHeader = (c: Column) => (
+    <th key={c.id} style={{ ...th, textAlign: "right" }}>
+      {c.link ? (
+        <a href={c.link} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
+          {c.label}
+        </a>
+      ) : (
+        c.label
+      )}
+    </th>
+  );
+  const bestHeader = () => (
+    <th key="__best" style={{ ...th, textAlign: "right" }}>
+      Best Value
+    </th>
+  );
+
+  const textPriceCell = (r: TextRow, c: Column) => {
+    const cell = r.byProvider[c.id];
+    const isCheapest = cell != null && c.id === r.cheapestProvider;
+    return (
+      <td
+        key={c.id}
+        style={{
+          ...td,
+          textAlign: "right",
+          fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
+          fontWeight: isCheapest ? 700 : 500,
+          color: isCheapest ? C.green : cell != null ? C.muted : C.faint,
+          background: isCheapest ? `color-mix(in srgb, ${C.green} 12%, transparent)` : "transparent",
+        }}
+      >
+        {cell ? `${fmtUsd(cell.inUsd)} / ${fmtUsd(cell.outUsd)}` : "—"}
+      </td>
+    );
+  };
+  const mediaPriceCell = (r: ComparisonRow, c: Column) => {
+    const v = r.byProvider[c.id];
+    const isCheapest = v != null && c.id === r.cheapestProvider;
+    return (
+      <td
+        key={c.id}
+        style={{
+          ...td,
+          textAlign: "right",
+          fontVariantNumeric: "tabular-nums",
+          fontWeight: isCheapest ? 700 : 500,
+          color: isCheapest ? C.green : v != null ? C.muted : C.faint,
+          background: isCheapest ? `color-mix(in srgb, ${C.green} 12%, transparent)` : "transparent",
+        }}
+      >
+        {fmtCents(v)}
+      </td>
+    );
+  };
+  const bestCell = (provider: string, savingsPct: number | null, label: (id: string) => string) => (
+    <td key="__best" style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+      <span style={{ fontWeight: 700, color: C.green }}>{label(provider)}</span>
+      {savingsPct != null && savingsPct > 0 && (
+        <span style={{ color: C.green, fontSize: 11.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
+          −{savingsPct}%
+        </span>
+      )}
+    </td>
+  );
+
   return (
     <div>
       {/* ── Controls ─────────────────────────────────────────── */}
@@ -275,18 +349,9 @@ export default function PriceTable({
               <thead>
                 <tr style={{ textAlign: "left", color: C.faint }}>
                   <th style={th}>Model</th>
-                  {textColumns.map((c) => (
-                    <th key={c.id} style={{ ...th, textAlign: "right" }}>
-                      {c.link ? (
-                        <a href={c.link} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-                          {c.label}
-                        </a>
-                      ) : (
-                        c.label
-                      )}
-                    </th>
-                  ))}
-                  <th style={{ ...th, textAlign: "right" }}>Best</th>
+                  {textOfficialCols.map(colHeader)}
+                  {bestHeader()}
+                  {textRestCols.map(colHeader)}
                 </tr>
               </thead>
               <tbody>
@@ -312,36 +377,9 @@ export default function PriceTable({
                         </div>
                       )}
                     </td>
-                    {textColumns.map((c) => {
-                      const cell = r.byProvider[c.id];
-                      const isCheapest = cell != null && c.id === r.cheapestProvider;
-                      return (
-                        <td
-                          key={c.id}
-                          style={{
-                            ...td,
-                            textAlign: "right",
-                            fontVariantNumeric: "tabular-nums",
-                            whiteSpace: "nowrap",
-                            fontWeight: isCheapest ? 700 : 500,
-                            color: isCheapest ? C.green : cell != null ? C.muted : C.faint,
-                            background: isCheapest ? `color-mix(in srgb, ${C.green} 12%, transparent)` : "transparent",
-                          }}
-                        >
-                          {cell ? `${fmtUsd(cell.inUsd)} / ${fmtUsd(cell.outUsd)}` : "—"}
-                        </td>
-                      );
-                    })}
-                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                      <span style={{ fontWeight: 700, color: C.green }}>
-                        {textProviderLabel(r.cheapestProvider)}
-                      </span>
-                      {r.savingsPct != null && r.savingsPct > 0 && (
-                        <span style={{ color: C.green, fontSize: 11.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
-                          −{r.savingsPct}%
-                        </span>
-                      )}
-                    </td>
+                    {textOfficialCols.map((c) => textPriceCell(r, c))}
+                    {bestCell(r.cheapestProvider, r.savingsPct, textProviderLabel)}
+                    {textRestCols.map((c) => textPriceCell(r, c))}
                   </tr>
                 ))}
                 {filteredText.length === 0 && (
@@ -370,18 +408,9 @@ export default function PriceTable({
               <thead>
                 <tr style={{ textAlign: "left", color: C.faint }}>
                   <th style={th}>Model</th>
-                  {columns.map((c) => (
-                    <th key={c.id} style={{ ...th, textAlign: "right" }}>
-                      {c.link ? (
-                        <a href={c.link} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-                          {c.label}
-                        </a>
-                      ) : (
-                        c.label
-                      )}
-                    </th>
-                  ))}
-                  <th style={{ ...th, textAlign: "right" }}>Best</th>
+                  {mediaOfficialCols.map(colHeader)}
+                  {bestHeader()}
+                  {mediaRestCols.map(colHeader)}
                 </tr>
               </thead>
               <tbody>
@@ -421,35 +450,9 @@ export default function PriceTable({
                         </div>
                       )}
                     </td>
-                    {columns.map((c) => {
-                      const v = r.byProvider[c.id];
-                      const isCheapest = v != null && c.id === r.cheapestProvider;
-                      return (
-                        <td
-                          key={c.id}
-                          style={{
-                            ...td,
-                            textAlign: "right",
-                            fontVariantNumeric: "tabular-nums",
-                            fontWeight: isCheapest ? 700 : 500,
-                            color: isCheapest ? C.green : v != null ? C.muted : C.faint,
-                            background: isCheapest ? `color-mix(in srgb, ${C.green} 12%, transparent)` : "transparent",
-                          }}
-                        >
-                          {fmtCents(v)}
-                        </td>
-                      );
-                    })}
-                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                      <span style={{ fontWeight: 700, color: C.green }}>
-                        {providerLabel(r.cheapestProvider)}
-                      </span>
-                      {r.savingsPct != null && r.savingsPct > 0 && (
-                        <span style={{ color: C.green, fontSize: 11.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
-                          −{r.savingsPct}%
-                        </span>
-                      )}
-                    </td>
+                    {mediaOfficialCols.map((c) => mediaPriceCell(r, c))}
+                    {bestCell(r.cheapestProvider, r.savingsPct, providerLabel)}
+                    {mediaRestCols.map((c) => mediaPriceCell(r, c))}
                   </tr>
                 ))}
                 {filteredMedia.length === 0 && (
