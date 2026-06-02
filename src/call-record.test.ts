@@ -190,6 +190,54 @@ describe("onCall — streaming failover accumulates into ONE record", () => {
   });
 });
 
+describe("onCall — TTFT (time to first token)", () => {
+  it("streaming success carries ttftMs, within [0, latencyMs]", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [streamOkModel("tokenmart", "hello world")] },
+      onCall: (r) => records.push(r),
+    });
+
+    const res = streamText({ model: lcr("m"), prompt: "x", ...noRetry });
+    let out = "";
+    for await (const delta of res.textStream) out += delta;
+
+    expect(out).toBe("hello world");
+    const r = records[0]!;
+    expect(typeof r.ttftMs).toBe("number");
+    expect(r.ttftMs!).toBeGreaterThanOrEqual(0);
+    // First token can't arrive after the whole stream finished.
+    expect(r.ttftMs!).toBeLessThanOrEqual(r.latencyMs);
+  });
+
+  it("non-streaming (doGenerate) leaves ttftMs undefined — no 'first token' concept", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [okModel("tokenmart", "hi")] },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.ttftMs).toBeUndefined();
+  });
+
+  it("on a streaming failover, ttftMs belongs to the winner that actually streamed", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [streamMidFailModel("tokenmart", 503), streamOkModel("openrouter", "streamed")] },
+      onCall: (r) => records.push(r),
+    });
+    const res = streamText({ model: lcr("m"), prompt: "x", ...noRetry });
+    let out = "";
+    for await (const delta of res.textStream) out += delta;
+
+    expect(out).toBe("streamed");
+    const r = records[0]!;
+    expect(r.winner).toBe("openrouter");
+    expect(typeof r.ttftMs).toBe("number");
+    expect(r.ttftMs!).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe("onCall — savings baseline (text side)", () => {
   it("sets baselineUsd from the most expensive priced provider on the same usage", async () => {
     const records: CallRecord[] = [];
@@ -382,6 +430,19 @@ describe("formatCallRecord", () => {
       usageMissing: true,
     });
     expect(line).toBe("✓ text  p  412ms  $0  ⚠no-usage");
+  });
+
+  it("shows TTFT next to total latency when present (streaming)", () => {
+    const line = formatCallRecord({
+      ...base,
+      attempts: [{ provider: "tokenmart", ok: true, latencyMs: 412 }],
+      winner: "tokenmart",
+      ok: true,
+      failedOver: false,
+      ttftMs: 88,
+      costUsd: 0.0003,
+    });
+    expect(line).toBe("✓ text  tokenmart  412ms (ttft 88ms)  $0.0003");
   });
 
   it("color option wraps the line in ANSI", () => {

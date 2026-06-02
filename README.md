@@ -184,6 +184,7 @@ interface CallRecord {
   ok: boolean;
   failedOver: boolean;       // more than one provider was tried
   latencyMs: number;
+  ttftMs?: number;           // streaming only: time to first token (winner's first content delta) — industry-standard responsiveness metric
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number; // prompt-cache hits the winner read (when reported)
@@ -195,6 +196,8 @@ interface CallRecord {
 ```
 
 **Savings, not just spend.** Whenever at least one provider in a chain carries a `cost`, `baselineUsd` is what the same call would have cost on the most expensive priced leg (typically your safety-net fallback). `baselineUsd − costUsd` is the money routing saved on that call — the number a cost dashboard exists to show.
+
+**Responsiveness, not just total time.** On streaming calls (`streamText`, `streamObject`, streaming agents), `ttftMs` is the **time to first token** — measured from the winning provider's attempt start to its first content delta. It's the metric most LLM dashboards lead with, because it's what a user feels as "how fast did it start replying". Total `latencyMs` covers the whole stream including any failover; `ttftMs` isolates the serving model's responsiveness. It's `undefined` for `generateText`/`generateObject` (no streaming → no "first" token) and for calls that failed before any content. Output throughput (tokens/sec) is then `outputTokens / ((latencyMs − ttftMs) / 1000)`.
 
 **Cache-aware cost.** Add `cacheRead` (USD per 1M cached input tokens) to a provider's `cost` and ai-lcr bills prompt-cache hits at that rate when the call reports `usage.inputTokens.cacheRead`. Omit it and cached tokens fall back to the full `input` rate (unchanged from before). For cache-heavy traffic (e.g. Anthropic, where a cache read is ~0.1×) this keeps `costUsd` honest — and `cachedInputTokens` lets a dashboard audit it:
 

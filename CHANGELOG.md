@@ -4,6 +4,23 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-06-02
+
+All additions are optional and backward compatible.
+
+### Added
+
+- **`CallRecord.ttftMs` — time to first token.** Streaming calls now report TTFT,
+  the industry-standard responsiveness metric: ms from the winning provider's
+  stream attempt start to its first content token (`text-delta` /
+  `reasoning-delta`). Measured against the *winner's* attempt, so failover
+  overhead (already in `latencyMs`) doesn't distort it. `undefined` for
+  `doGenerate` (no streaming → no "first token") and for calls that failed before
+  producing content. `formatCallRecord` shows it inline next to total latency when
+  present (`412ms (ttft 88ms)`). With `latencyMs` and `outputTokens` on the same
+  record, output throughput is derivable: `outputTokens / ((latencyMs − ttftMs) /
+  1000)` tokens/sec.
+
 ## [0.3.0] — 2026-06-02
 
 Integration-feedback pass from wiring ai-lcr into a real agentic product
