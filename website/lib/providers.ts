@@ -91,6 +91,19 @@ export type Provider = {
     /** Models to run the suite against. */
     models: IntegrityModel[];
   };
+  /**
+   * Daily billing-drift audit — verifies the advertised discount is what's
+   * actually billed. Two flavors:
+   *   - "mgmt-api": the provider exposes a read-only billing API (TokenMart's
+   *     Management API). We reconcile a recent full day's real USD cost against
+   *     its real token counts: effective $/1M = cost / tokens. Must equal the
+   *     /v1/models sticker.
+   *   - "inline-estimated-cost": the provider returns `usage.estimated_cost` per
+   *     response (DeepInfra). We confirm it equals advertised_price × tokens.
+   */
+  billing?:
+    | { kind: "mgmt-api"; mgmtKeyEnv: string }
+    | { kind: "inline-estimated-cost" };
 };
 
 /** Sentinel model value stored for "reachable" liveness rows (no specific model). */
@@ -155,6 +168,9 @@ export const PROVIDERS: Provider[] = [
         { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4.6", anthropicNative: true },
       ],
     },
+    // Read-only Management API (sk-mgmt-v1-…) — reconciles real billed cost vs
+    // the /v1/models sticker each day. See scripts/verify-billing.py.
+    billing: { kind: "mgmt-api", mgmtKeyEnv: "INFERENCE_MGMT_KEY" },
   },
   {
     // DeepSeek's own official API — OpenAI-compatible. Inference checks are
@@ -192,6 +208,9 @@ export const PROVIDERS: Provider[] = [
       { id: "moonshotai/Kimi-K2.5", label: "Kimi K2.5" },
     ],
     link: "https://deepinfra.com",
+    // DeepInfra returns usage.estimated_cost per response — verify it matches
+    // advertised price × tokens (no separate billing API).
+    billing: { kind: "inline-estimated-cost" },
   },
   {
     // Also the integrity baseline for the discount providers above (referenced

@@ -277,6 +277,147 @@ async function cachingCheck(provider: string, base: string, key: string, model: 
   }
 }
 
+async function getJson(url: string, headers: Record<string, string>): Promise<ChatResp> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CALL_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { headers, signal: ctrl.signal });
+    const text = await r.text();
+    let json: unknown = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      /* leave json null */
+    }
+    return { ok: r.ok, status: r.status, json, text };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Derive the /models listing URL from a provider's chat path. */
+function modelsUrl(p: Provider): string {
+  const chatPath = p.chatPath ?? "/v1/chat/completions";
+  return `${p.base}${chatPath.replace("/chat/completions", "/models")}`;
+}
+
+const BILLING_TOLERANCE = 0.06; // 6% — billed should equal sticker; allows rounding
+
+/**
+ * TokenMart-style billing audit: reconcile a recent full day's REAL USD cost
+ * (Management API) against its REAL token counts. effective $/1M = cost/tokens
+ * must equal the /v1/models sticker, or the "discount" is illusory. One
+ * CheckResult per model with enough volume to be meaningful.
+ */
+async function mgmtBillingChecks(p: Provider, mgmtKeyEnv: string): Promise<CheckResult[]> {
+  const mk = (model: string, status: CheckStatus, detail: string): CheckResult => ({
+    provider: p.id, model, check_name: "billing_drift", status, detail,
+  });
+  const key = process.env[p.apiKeyEnv];
+  const mgmtKey = process.env[mgmtKeyEnv];
+  if (!mgmtKey) return [mk("(billing)", "skip", `missing env ${mgmtKeyEnv}`)];
+  if (!key) return [mk("(billing)", "skip", `missing env ${p.apiKeyEnv}`)];
+
+  // yesterday (UTC) — a full settled day of daily-snapshot billing data.
+  const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const auth = { Authorization: `Bearer ${mgmtKey}` };
+  try {
+    const [advR, costR, usageR] = await Promise.all([
+      getJson(modelsUrl(p), { Authorization: `Bearer ${key}` }),
+      getJson(`${p.base}/manage/cost/breakdown?date=${day}`, auth),
+      getJson(`${p.base}/manage/usage/timeseries?period=7d&groupBy=model`, auth),
+    ]);
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const adv: Record<string, { i?: number; o?: number }> = {};
+    for (const m of ((advR.json as any)?.data ?? [])) {
+      const t = m?.pricing?.tokens;
+      if (t) adv[m.id] = { i: t.input_per_1m, o: t.output_per_1m };
+    }
+    const cost: Record<string, any> = {};
+    for (const x of ((costR.json as any)?.breakdown ?? [])) cost[x.model] = x.costByMetric;
+    const usage: Record<string, any> = {};
+    for (const r of (Array.isArray(usageR.json) ? (usageR.json as any[]) : [])) {
+      if (r?.date === day) usage[r.group] = r.byMetric;
+    }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+
+    const models = Object.keys(cost).filter((m) => adv[m] && usage[m]);
+    if (models.length === 0) {
+      return [mk("(billing)", "skip", `no billed usage for ${day}`)];
+    }
+    return models.map((model) => {
+      const u = usage[model], c = cost[model], a = adv[model];
+      const parts: string[] = [];
+      let verdict: CheckStatus = "skip";
+      for (const [side, tokKey, advv] of [["in", "input_tokens", a.i], ["out", "output_tokens", a.o]] as const) {
+        const tok = u[tokKey] ?? 0;
+        const spent = c[tokKey] ?? 0;
+        if (tok < 100 || advv == null) continue; // too little volume to trust
+        const eff = (spent / tok) * 1e6;
+        const drift = eff / advv - 1;
+        const ok = Math.abs(drift) <= BILLING_TOLERANCE;
+        parts.push(`${side} $${eff.toFixed(4)} vs $${advv} (${(drift * 100).toFixed(0)}%)`);
+        verdict = ok ? (verdict === "fail" ? "fail" : "pass") : "fail";
+      }
+      if (parts.length === 0) return mk(model, "skip", `${day}: insufficient volume`);
+      return mk(model, verdict, `${day}: ${parts.join(", ")}`);
+    });
+  } catch (e) {
+    return [mk("(billing)", "fail", errMsg(e))];
+  }
+}
+
+/**
+ * DeepInfra-style billing audit: the provider returns `usage.estimated_cost`
+ * per response — confirm it equals advertised price × tokens. One CheckResult
+ * per monitored model.
+ */
+async function inlineCostBillingChecks(p: Provider): Promise<CheckResult[]> {
+  const mk = (model: string, status: CheckStatus, detail: string): CheckResult => ({
+    provider: p.id, model, check_name: "billing_drift", status, detail,
+  });
+  const key = process.env[p.apiKeyEnv];
+  if (!key) return [mk("(billing)", "skip", `missing env ${p.apiKeyEnv}`)];
+  const chatPath = p.chatPath ?? "/v1/chat/completions";
+  try {
+    const advR = await getJson(modelsUrl(p), { Authorization: `Bearer ${key}` });
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const adv: Record<string, { i?: number; o?: number }> = {};
+    for (const m of ((advR.json as any)?.data ?? [])) {
+      const pr = m?.metadata?.pricing;
+      if (pr) adv[m.id] = { i: pr.input_tokens, o: pr.output_tokens };
+    }
+    return await Promise.all(
+      p.models.map(async ({ id }): Promise<CheckResult> => {
+        const a = adv[id];
+        if (!a || a.i == null || a.o == null) return mk(id, "skip", "no advertised price");
+        const r = await postJson(`${p.base}${chatPath}`, { Authorization: `Bearer ${key}` }, {
+          model: id, max_tokens: 16, temperature: 0,
+          messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        });
+        const u = (r.json as any)?.usage;
+        const est = u?.estimated_cost;
+        const pt = u?.prompt_tokens ?? 0, ct = u?.completion_tokens ?? 0;
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+        if (typeof est !== "number") return mk(id, "skip", "no estimated_cost in usage");
+        const expected = (pt * a.i + ct * a.o) / 1e6;
+        const drift = expected > 0 ? est / expected - 1 : 0;
+        const ok = Math.abs(drift) <= BILLING_TOLERANCE;
+        return mk(id, ok ? "pass" : "fail",
+          `est $${est.toExponential(2)} vs sticker $${expected.toExponential(2)} (${(drift * 100).toFixed(0)}%) on ${pt}+${ct} tok`);
+      }),
+    );
+  } catch (e) {
+    return [mk("(billing)", "fail", errMsg(e))];
+  }
+}
+
+async function billingChecks(p: Provider): Promise<CheckResult[]> {
+  if (!p.billing) return [];
+  if (p.billing.kind === "mgmt-api") return mgmtBillingChecks(p, p.billing.mgmtKeyEnv);
+  return inlineCostBillingChecks(p);
+}
+
 async function checkModel(p: Provider, m: IntegrityModel): Promise<CheckResult[]> {
   const key = process.env[p.apiKeyEnv];
   const refKey = p.integrity ? process.env[p.integrity.refApiKeyEnv] : undefined;
@@ -298,14 +439,22 @@ async function checkModel(p: Provider, m: IntegrityModel): Promise<CheckResult[]
   return settled.flat();
 }
 
-/** Run the integrity suite for every provider that has an `integrity` block. */
+/**
+ * Run the daily integrity suite: per-model wire-protocol checks for providers
+ * with an `integrity` block, plus a billing-drift audit for providers with a
+ * `billing` block (which may be billing-only, e.g. DeepInfra).
+ */
 export async function runIntegrity(): Promise<CheckResult[]> {
-  const targets = PROVIDERS.filter((p) => p.integrity && p.integrity.models.length > 0);
-  const perProvider = await Promise.all(
-    targets.map(async (p) => {
-      const perModel = await Promise.all(p.integrity!.models.map((m) => checkModel(p, m)));
-      return perModel.flat();
-    }),
-  );
-  return perProvider.flat();
+  const integrityTargets = PROVIDERS.filter((p) => p.integrity && p.integrity.models.length > 0);
+  const billingTargets = PROVIDERS.filter((p) => p.billing);
+  const [integrityResults, billingResults] = await Promise.all([
+    Promise.all(
+      integrityTargets.map(async (p) => {
+        const perModel = await Promise.all(p.integrity!.models.map((m) => checkModel(p, m)));
+        return perModel.flat();
+      }),
+    ),
+    Promise.all(billingTargets.map((p) => billingChecks(p))),
+  ]);
+  return [...integrityResults.flat(), ...billingResults.flat()];
 }
