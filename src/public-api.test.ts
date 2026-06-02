@@ -15,6 +15,7 @@ const EXPECTED_EXPORTS = [
   "classifyError",
   "classifyErrorKind",
   "formatCallRecord",
+  "createHttpSink",
   // media router
   "createMediaLCR",
   "comparePrices",

@@ -79,10 +79,28 @@ TOOL='[{"type":"function","function":{"name":"get_weather","description":"Get cu
 NEUTRAL="The quick brown fox jumps over the lazy dog. This is a simple sentence used to measure tokenization accuracy across providers."
 
 # prompt_tokens for an OpenAI-compatible /v1/chat/completions response on $1=base $2=key $3=model $4=text
+# stdout = the integer (or empty if genuinely absent); a *parse failure* prints a
+# diagnostic to stderr instead of silently returning empty — otherwise a crashed
+# parse is indistinguishable from "provider reported nothing" and the inflation
+# check shows a misleading "this= ref=" inconclusive.
 oai_prompt_tokens(){
   curl -s --max-time 40 "$1/v1/chat/completions" -H "Authorization: Bearer $2" -H "Content-Type: application/json" \
     -d "$(mk_chat_payload "$3" 5 "$4")" \
-  | python3 -c "import sys,json;t=sys.stdin.read();t=t[t.index('{'):] if '{' in t else t;print(json.loads(t).get('usage',{}).get('prompt_tokens',''))" 2>/dev/null
+  | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+try:
+    i = raw.index("{")
+    obj, _ = json.JSONDecoder().raw_decode(raw[i:])
+except Exception as e:
+    sys.stderr.write("  [token-parse] could not parse usage (%s); body head: %s\n"
+                     % (e, raw[:160].replace(chr(10), " ")))
+    sys.exit(0)
+pt = obj.get("usage", {}).get("prompt_tokens", "")
+if pt == "":
+    sys.stderr.write("  [token-parse] response carried no usage.prompt_tokens\n")
+print(pt)
+'
 }
 
 echo "===== ai-lcr provider check ====="
@@ -96,10 +114,16 @@ probe_model(){           # $1=model id, $2=ref model id on the baseline (optiona
   [ -z "$M" ] && return 0
   echo "── $M ──"
 
-  # 1) single tool call
+  # 1) tool-calling capability — does the provider wire `tools` through at all?
+  # Use tool_choice:"required" (force a call), NOT "auto". We're testing whether
+  # the provider CAN call a tool, not whether a (reasoning / sometimes-chatty)
+  # model DECIDES to on a single roll — under "auto" a healthy model often just
+  # answers in text, which looks identical to dropped tools and yields a false
+  # FAIL. With "required", no tool_calls in the raw JSON means tools really are
+  # broken.
   local R
-  R=$(curl -s --max-time 40 "$OAI" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "{\"model\":\"$M\",\"messages\":[{\"role\":\"user\",\"content\":\"Weather in Tokyo? Use the tool.\"}],\"tools\":$TOOL,\"tool_choice\":\"auto\",\"max_tokens\":300}")
-  echo "$R" | grep -q '"tool_calls"' && pass "single tool call" || fail "single tool call (tools dropped?)"
+  R=$(curl -s --max-time 40 "$OAI" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "{\"model\":\"$M\",\"messages\":[{\"role\":\"user\",\"content\":\"Weather in Tokyo? Use the tool.\"}],\"tools\":$TOOL,\"tool_choice\":\"required\",\"max_tokens\":300}")
+  echo "$R" | grep -q '"tool_calls"' && pass "tool call (tool_choice:required)" || fail "tool call (tools dropped? required tool_choice returned none)"
 
   # 2) multi-step round-trip with assistant content:null (OpenAI spec allows null here)
   local TCID

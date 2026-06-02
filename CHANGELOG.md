@@ -4,6 +4,48 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-06-02
+
+Integration-feedback pass from wiring ai-lcr into a real agentic product
+(multi-step tool loops, Anthropic prompt caching). All additions are optional
+and backward compatible.
+
+### Fixed
+
+- **`createHttpSink` is exported again.** It shipped in 0.2.0, then silently
+  dropped out of the package somewhere after — so `import { createHttpSink }`
+  (as the integration playbook documents) failed with TS2305 on 0.2.1+. The
+  source and tests are restored and the symbol is now pinned in the public-API
+  smoke test so it can't regress unnoticed.
+- **Capability probe no longer false-FAILs tool support.** `check-provider.sh`
+  tested tools with `tool_choice:"auto"` and a single roll — reasoning / chatty
+  models often answer in text instead of calling, which looked identical to
+  dropped tools. It now forces `tool_choice:"required"` (testing *can* the
+  provider call a tool, not *will* the model decide to). The token-inflation
+  parser also surfaces a stderr diagnostic on a parse failure instead of
+  silently returning empty (which masqueraded as an inconclusive result).
+
+### Added
+
+- **`CallRecord.baselineUsd` on the text side.** The text router now fills the
+  savings baseline — the same token usage priced on the most expensive priced
+  provider in the chain — so `baselineUsd − costUsd` (the headline a cost
+  dashboard shows) is computable for text, not just media.
+- **Prompt-cache-aware cost.** `ProviderCost` gains an optional `cacheRead`
+  (USD per 1M cached input tokens). When a call reports
+  `usage.inputTokens.cacheRead`, those tokens bill at that rate; omit it and
+  they fall back to the full `input` rate (unchanged). `CallRecord` exposes
+  `cachedInputTokens` for auditing. Accounting only — routing weights are
+  unchanged in this release.
+- **`CallRecord.requestId` passthrough.** Read from `providerOptions.lcr.requestId`;
+  stamp the same id on every step of a tool loop to roll a multi-step request
+  up into one cost figure on the dashboard.
+- **`CallRecord.usageMissing` flag.** Set when the winner served OK but reported
+  zero input *and* output tokens — i.e. the provider emitted no usage, so
+  `costUsd` (and any token-based credit metering) silently reads 0. Surfaces the
+  difference between "free" and "cost unknown"; `formatCallRecord` shows it as
+  `⚠no-usage`, and a savings suffix `(saved $X)` when `baselineUsd` beats cost.
+
 ## [0.2.6] — 2026-06-01
 
 ### Changed

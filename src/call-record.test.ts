@@ -17,14 +17,25 @@ function usage(input: number, output: number): LanguageModelV3GenerateResult["us
   };
 }
 
-function okModel(id: string, text: string) {
+function usageWithCache(
+  input: number,
+  output: number,
+  cacheRead: number,
+): LanguageModelV3GenerateResult["usage"] {
+  return {
+    inputTokens: { total: input, noCache: input - cacheRead, cacheRead, cacheWrite: undefined },
+    outputTokens: { total: output, text: undefined, reasoning: undefined },
+  };
+}
+
+function okModel(id: string, text: string, u = usage(10, 5)) {
   return new MockLanguageModelV3({
     modelId: id,
     provider: id,
     doGenerate: async (): Promise<LanguageModelV3GenerateResult> => ({
       content: [{ type: "text", text }],
       finishReason: { unified: "stop" as const, raw: undefined },
-      usage: usage(10, 5),
+      usage: u,
       warnings: [],
     }),
   });
@@ -179,6 +190,124 @@ describe("onCall — streaming failover accumulates into ONE record", () => {
   });
 });
 
+describe("onCall — savings baseline (text side)", () => {
+  it("sets baselineUsd from the most expensive priced provider on the same usage", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          { model: okModel("tokenmart", "hi"), label: "tokenmart", cost: { input: 1, output: 2 } },
+          { model: okModel("openrouter", "hi"), label: "openrouter", cost: { input: 3, output: 4 } },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    expect(r.winner).toBe("tokenmart");
+    // winner: 10/1e6*1 + 5/1e6*2 = 2e-5 ; baseline (openrouter): 10/1e6*3 + 5/1e6*4 = 5e-5
+    expect(r.costUsd).toBeCloseTo(2e-5, 12);
+    expect(r.baselineUsd).toBeCloseTo(5e-5, 12);
+    expect(r.baselineUsd! - r.costUsd).toBeGreaterThan(0);
+  });
+
+  it("leaves baselineUsd undefined when no provider is priced", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [okModel("tokenmart", "hi")] },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.baselineUsd).toBeUndefined();
+  });
+});
+
+describe("onCall — prompt-cache aware cost", () => {
+  it("bills cacheRead tokens at the cache rate and surfaces cachedInputTokens", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("anthropic", "hi", usageWithCache(1000, 100, 800)),
+            label: "anthropic",
+            cost: { input: 3, output: 4, cacheRead: 0.3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    // 200 full input @3 + 800 cached @0.3 + 100 output @4 = 6e-4 + 2.4e-4 + 4e-4
+    expect(r.costUsd).toBeCloseTo(1.24e-3, 12);
+    // without the discount it would be 1000@3 + 100@4 = 3.4e-3 — strictly higher
+    expect(r.costUsd).toBeLessThan(3.4e-3);
+    expect(r.cachedInputTokens).toBe(800);
+  });
+
+  it("falls back to the full input rate when cacheRead is not configured (back-compat)", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("p", "hi", usageWithCache(1000, 100, 800)),
+            label: "p",
+            cost: { input: 3, output: 4 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.costUsd).toBeCloseTo(3.4e-3, 12);
+  });
+});
+
+describe("onCall — requestId passthrough + usageMissing flag", () => {
+  it("stamps requestId from providerOptions.lcr.requestId onto the record", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [okModel("tokenmart", "hi")] },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({
+      model: lcr("m"),
+      prompt: "x",
+      providerOptions: { lcr: { requestId: "req-123" } },
+      ...noRetry,
+    });
+    expect(records[0]!.requestId).toBe("req-123");
+  });
+
+  it("flags usageMissing when the winner reports zero input AND output tokens", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [{ model: okModel("p", "hi", usage(0, 0)), label: "p", cost: { input: 5, output: 5 } }] },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    const r = records[0]!;
+    expect(r.usageMissing).toBe(true);
+    expect(r.costUsd).toBe(0);
+  });
+
+  it("does NOT flag usageMissing on a normal call", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [okModel("p", "hi")] },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.usageMissing).toBeUndefined();
+  });
+});
+
 describe("formatCallRecord", () => {
   const base = { id: "1", model: "text", inputTokens: 10, outputTokens: 5, latencyMs: 412 };
 
@@ -227,6 +356,32 @@ describe("formatCallRecord", () => {
     expect(line).toBe(
       "✗ text  deepseek→tokenmart→openrouter  1240ms  FAILED  ⤷ deepseek 401, tokenmart 502, openrouter 429",
     );
+  });
+
+  it("appends a (saved $X) suffix when baselineUsd beats costUsd", () => {
+    const line = formatCallRecord({
+      ...base,
+      attempts: [{ provider: "tokenmart", ok: true, latencyMs: 412 }],
+      winner: "tokenmart",
+      ok: true,
+      failedOver: false,
+      costUsd: 0.0002,
+      baselineUsd: 0.0005,
+    });
+    expect(line).toBe("✓ text  tokenmart  412ms  $0.0002  (saved $0.0003)");
+  });
+
+  it("appends ⚠no-usage when the winner reported no usage", () => {
+    const line = formatCallRecord({
+      ...base,
+      attempts: [{ provider: "p", ok: true, latencyMs: 1 }],
+      winner: "p",
+      ok: true,
+      failedOver: false,
+      costUsd: 0,
+      usageMissing: true,
+    });
+    expect(line).toBe("✓ text  p  412ms  $0  ⚠no-usage");
   });
 
   it("color option wraps the line in ANSI", () => {

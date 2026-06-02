@@ -38,6 +38,13 @@ export function formatCallRecord(record: CallRecord, opts: FormatOptions = {}): 
 
   let line = `${glyph} ${record.model}  ${chain}  ${record.latencyMs}ms  ${status}`;
 
+  // Savings vs the priciest priced leg — the headline the dashboard cares about.
+  if (record.ok && record.baselineUsd !== undefined && record.baselineUsd > record.costUsd) {
+    line += `  (saved $${(record.baselineUsd - record.costUsd).toFixed(4)})`;
+  }
+  // A winner that reported no usage: cost/credit metering read 0 — flag it.
+  if (record.usageMissing) line += `  ⚠no-usage`;
+
   const failed = record.attempts.filter((a) => !a.ok);
   if (failed.length > 0) {
     const reasons = failed.map((a) => `${a.provider} ${a.errorClass ?? "error"}`).join(", ");

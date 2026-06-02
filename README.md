@@ -186,8 +186,45 @@ interface CallRecord {
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
-  costUsd: number;
+  cachedInputTokens?: number; // prompt-cache hits the winner read (when reported)
+  costUsd: number;            // winner cost, cache-discount applied (see `cacheRead`)
+  baselineUsd?: number;       // same usage on the priciest priced leg → savings = baselineUsd − costUsd
+  requestId?: string;         // your correlation id (see below) — roll multi-step tool loops into one request
+  usageMissing?: boolean;     // winner served but reported 0/0 tokens → costUsd is 0 but unknown, not free
 }
+```
+
+**Savings, not just spend.** Whenever at least one provider in a chain carries a `cost`, `baselineUsd` is what the same call would have cost on the most expensive priced leg (typically your safety-net fallback). `baselineUsd − costUsd` is the money routing saved on that call — the number a cost dashboard exists to show.
+
+**Cache-aware cost.** Add `cacheRead` (USD per 1M cached input tokens) to a provider's `cost` and ai-lcr bills prompt-cache hits at that rate when the call reports `usage.inputTokens.cacheRead`. Omit it and cached tokens fall back to the full `input` rate (unchanged from before). For cache-heavy traffic (e.g. Anthropic, where a cache read is ~0.1×) this keeps `costUsd` honest — and `cachedInputTokens` lets a dashboard audit it:
+
+```ts
+{ model: claude, label: "anthropic", cost: { input: 3, output: 15, cacheRead: 0.3 } }
+```
+
+**Group a multi-step request.** An agentic turn does one `onCall` per `doStream`/`doGenerate` step, so a 10-step tool loop emits 10 records. Pass a stable id through `providerOptions.lcr.requestId` and every step's record carries it — group by `requestId` for per-request cost:
+
+```ts
+await streamText({ model: lcr("chat"), messages, providerOptions: { lcr: { requestId } } });
+```
+
+### Ship records to a collector (`createHttpSink`)
+
+`createHttpSink` builds an `onCall` handler that POSTs each `CallRecord` as JSON to an endpoint (e.g. a self-hosted dashboard's `/api/ingest`, or any drain that takes the shape). Fire-and-forget — a failed POST never breaks your app. On serverless, pass a `waitUntil`-style `dispatch` (Next.js: `after`) so the request isn't cut off:
+
+```ts
+import { createLCR, createHttpSink } from "ai-lcr";
+import { after } from "next/server";
+
+const lcr = createLCR({
+  models: { /* … */ },
+  onCall: createHttpSink({
+    url: process.env.LCR_INGEST_URL + "/api/ingest",
+    headers: { authorization: `Bearer ${process.env.LCR_INGEST_KEY}` },
+    project: process.env.LCR_PROJECT, // optional tenant tag merged into each payload
+    dispatch: after,
+  }),
+});
 ```
 
 ## Supported providers
