@@ -84,6 +84,8 @@ export const VENDOR_LABEL: Record<string, string> = {
   pixverse: "PixVerse",
   tencent: "Tencent",
   fal: "fal",
+  zai: "Z.ai",
+  moonshot: "Moonshot",
 };
 
 export function vendorLabel(id: string): string {
@@ -145,12 +147,17 @@ export function comparison(): ComparisonRow[] {
     const ranked = m.routes
       .map((r) => ({ ...r, refCents: normalizedCents(r), cheapest: false }))
       .sort((a, b) => a.refCents - b.refCents);
-    ranked[0]!.cheapest = true;
-    const cheapestCents = ranked[0]!.refCents;
-    const dearest = ranked[ranked.length - 1]!.refCents;
+    // "official" is a baseline column, not a route we buy through — exclude it
+    // from the cheapest pick, then measure savings of the best route vs official.
+    const routable = ranked.filter((r) => r.provider !== "official");
+    const best = routable[0] ?? ranked[0]!;
+    best.cheapest = true;
+    const cheapestCents = best.refCents;
+    const official = ranked.find((r) => r.provider === "official");
+    const baseline = official?.refCents ?? routable[routable.length - 1]?.refCents ?? cheapestCents;
     const savingsPct =
-      ranked.length > 1 && dearest > 0
-        ? Math.round(((dearest - cheapestCents) / dearest) * 100)
+      baseline > 0 && baseline > cheapestCents
+        ? Math.round(((baseline - cheapestCents) / baseline) * 100)
         : null;
     const byProvider: Record<string, number | undefined> = {};
     for (const r of ranked) byProvider[r.provider] = r.refCents;
@@ -163,7 +170,7 @@ export function comparison(): ComparisonRow[] {
       kind: m.kind,
       note: m.note,
       routes: ranked,
-      cheapestProvider: ranked[0]!.provider,
+      cheapestProvider: best.provider,
       cheapestCents,
       savingsPct,
       byProvider,
@@ -216,11 +223,16 @@ export function textComparison(): TextRow[] {
     const ranked = m.routes
       .map((r) => ({ provider: r.provider, blended: r.inUsd + r.outUsd }))
       .sort((a, b) => a.blended - b.blended);
-    const cheapest = ranked[0]!.blended;
-    const dearest = ranked[ranked.length - 1]!.blended;
+    // "official" is a baseline column, not a route we buy through — exclude it
+    // from the cheapest pick, then measure savings of the best route vs official.
+    const routable = ranked.filter((r) => r.provider !== "official");
+    const best = routable[0] ?? ranked[0]!;
+    const cheapest = best.blended;
+    const official = ranked.find((r) => r.provider === "official");
+    const baseline = official?.blended ?? routable[routable.length - 1]?.blended ?? cheapest;
     const savingsPct =
-      ranked.length > 1 && dearest > 0
-        ? Math.round(((dearest - cheapest) / dearest) * 100)
+      baseline > 0 && baseline > cheapest
+        ? Math.round(((baseline - cheapest) / baseline) * 100)
         : null;
     return {
       modelId: m.id,
@@ -229,7 +241,7 @@ export function textComparison(): TextRow[] {
       license: m.license,
       note: m.note,
       byProvider,
-      cheapestProvider: ranked[0]!.provider,
+      cheapestProvider: best.provider,
       savingsPct,
     };
   });
