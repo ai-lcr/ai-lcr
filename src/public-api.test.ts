@@ -26,6 +26,7 @@ const EXPECTED_EXPORTS = [
   "MEDIA_PRICING",
   "createKunavoMediaAdapter",
   "createRunwareMediaAdapter",
+  "createFalMediaAdapter",
 ] as const;
 
 describe("public API surface", () => {

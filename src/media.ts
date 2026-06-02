@@ -228,6 +228,31 @@ function newMediaCallId(): string {
 export function createMediaLCR(config: MediaLCRConfig) {
   const { registry, adapters, reference = DEFAULT_REFERENCE, onError, onCost, onCall } = config;
 
+  // Observer callbacks are caller-supplied logging hooks: a throw from one must
+  // never turn a settled request into a different outcome (a throwing db9 sink
+  // shouldn't fail a generation that already succeeded). Swallow what they throw.
+  const safeError = (error: Error, provider: string): void => {
+    try {
+      onError?.(error, provider);
+    } catch {
+      /* observer must not affect routing */
+    }
+  };
+  const safeCost = (event: MediaCostEvent): void => {
+    try {
+      onCost?.(event);
+    } catch {
+      /* observer must not affect routing */
+    }
+  };
+  const safeCall = (record: CallRecord): void => {
+    try {
+      onCall?.(record);
+    } catch {
+      /* observer must not affect routing */
+    }
+  };
+
   return async function generate(
     modelId: string,
     input: Record<string, unknown>,
@@ -248,7 +273,7 @@ export function createMediaLCR(config: MediaLCRConfig) {
 
     // One CallRecord for a settled request that ended in failure / exhaustion.
     const emitFail = () =>
-      onCall?.({
+      safeCall({
         id: newMediaCallId(),
         model: modelId,
         attempts,
@@ -273,8 +298,8 @@ export function createMediaLCR(config: MediaLCRConfig) {
           ? route.refCents * (result.units ?? 1) // estimate from the normalized ref price
           : result.costCents!;
         attempts.push({ provider: route.provider, ok: true, latencyMs: Date.now() - attemptStart });
-        onCost?.({ modelId, provider: route.provider, costCents, estimated });
-        onCall?.({
+        safeCost({ modelId, provider: route.provider, costCents, estimated });
+        safeCall({
           id: newMediaCallId(),
           model: modelId,
           attempts,
@@ -296,7 +321,7 @@ export function createMediaLCR(config: MediaLCRConfig) {
           latencyMs: Date.now() - attemptStart,
           errorClass: classifyError(err),
         });
-        onError?.(err as Error, route.provider);
+        safeError(err as Error, route.provider);
         if (!isRetryableError(err)) {
           emitFail(); // caller's fault (e.g. bad input) → don't waste fallbacks
           throw err;

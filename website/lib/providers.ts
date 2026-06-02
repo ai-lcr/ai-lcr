@@ -15,6 +15,27 @@
  */
 export type CheckMode = "inference" | "reachable";
 
+/**
+ * A free, generation-free reachability probe for providers that aren't
+ * OpenAI-compatible text endpoints (image/video providers). Lets a "reachable"
+ * check hit a provider-specific free endpoint instead of `GET /v1/models`:
+ *   - Runware: POST a `ping` task → `pong` (0 cost, no image).
+ *   - fal:     GET /v1/account/billing → 2xx proves endpoint up + key valid.
+ * When set on a provider, the ping route uses this instead of the default
+ * `GET /v1/models`.
+ */
+export type ReachProbe = {
+  method: "GET" | "POST";
+  /** Appended to `base` (which has no trailing path). e.g. "/v1", "/v1/account/billing". */
+  path: string;
+  /** Authorization header value for a key. Default: `Bearer <key>`. */
+  auth?: (key: string) => string;
+  /** JSON request body (POST only). */
+  body?: unknown;
+  /** Success predicate over the parsed 2xx JSON. Default: any object. */
+  ok?: (json: unknown) => boolean;
+};
+
 /** A model to liveness-ping. */
 export type LiveModel = { id: string; label?: string };
 
@@ -49,6 +70,11 @@ export type Provider = {
   reachable?: boolean;
   /** Optional homepage link. */
   link?: string;
+  /**
+   * Provider-specific free reachability probe (image/video providers that aren't
+   * OpenAI-compatible). Used by the "reachable" check in place of GET /v1/models.
+   */
+  probe?: ReachProbe;
   /** Daily integrity suite config. Omit for providers we only liveness-check. */
   integrity?: {
     /** Trusted baseline provider base (no /v1) for the token-inflation comparison. */
@@ -152,5 +178,49 @@ export const PROVIDERS: Provider[] = [
     // Plus a free, token-free endpoint reachability ping.
     reachable: true,
     link: "https://openrouter.ai",
+  },
+  {
+    // Image/video provider — not OpenAI-compatible, so it's reachability-only via
+    // a custom probe. Runware's `ping` task returns `pong` for free (no image,
+    // no compute). Proves the endpoint is up; with the auth header it also
+    // exercises the key. Runware has no balance endpoint, so this can't tell you
+    // you're out of credit — that's caught reactively by the router's failover.
+    id: "runware",
+    label: "Runware",
+    base: "https://api.runware.ai",
+    apiKeyEnv: "RUNWARE_API_KEY",
+    check: "reachable",
+    models: [],
+    link: "https://runware.ai",
+    probe: {
+      method: "POST",
+      path: "/v1",
+      // Runware uses Bearer (the default), so no `auth` override needed.
+      body: [{ taskType: "ping", ping: true }],
+      ok: (j) => {
+        const data = (j as { data?: unknown })?.data;
+        return Array.isArray(data) && data.some((d) => (d as { pong?: boolean })?.pong === true);
+      },
+    },
+  },
+  {
+    // Image/video provider — reachability via the free account-billing endpoint
+    // (GET, no generation). A 2xx proves the endpoint is up AND the key is valid
+    // (the endpoint is account-authenticated). fal uses `Authorization: Key <k>`,
+    // not Bearer. An out-of-balance account still authenticates here, so this is
+    // reachability only — a failed charge is caught reactively by failover.
+    id: "fal",
+    label: "fal.ai",
+    base: "https://api.fal.ai",
+    apiKeyEnv: "FAL_KEY",
+    check: "reachable",
+    models: [],
+    link: "https://fal.ai",
+    probe: {
+      method: "GET",
+      path: "/v1/account/billing",
+      auth: (key) => `Key ${key}`,
+      ok: (j) => j != null && typeof j === "object",
+    },
   },
 ];

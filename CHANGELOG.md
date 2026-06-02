@@ -4,6 +4,53 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] — 2026-06-01
+
+Pre-launch failover-robustness + media-provider pass — closing cases where a
+real provider failure slipped past the switch criterion and killed the request,
+and making fal a live failover target.
+
+### Fixed
+
+- **A network-unreachable provider didn't fail over.** `isRetryableError` only
+  matched HTTP statuses and English keywords, but a provider that's down throws
+  a `fetch` `TypeError` with *no* status — and wraps the real cause
+  (`ECONNREFUSED`/`ECONNRESET`/`ENOTFOUND`/connect-timeout, with the Node `code`)
+  in `error.cause`. Those read as a non-retryable client error, so the cheapest
+  provider going down killed the request instead of falling over — the most
+  common outage mode. The engine now walks the `cause` chain and treats Node
+  network codes / transport-failure messages as retryable. Applies to both the
+  text and media routers. New exported helper `isNetworkError`.
+- **Non-English billing failures didn't fail over.** Out-of-credit detection was
+  English-only, but Chinese providers (e.g. Kunavo) report a failed charge as
+  `余额不足`/`账户欠费`/`扣费失败` in a 200/400 body with no billing status.
+  Those are now matched (plus `balance`/`exhausted`), so a failed charge fails
+  over and is tagged `billing` by `classifyErrorKind` for alerting.
+- **An out-of-balance 403 was mis-tagged as `auth`.** Providers report an
+  exhausted account as 403 (e.g. fal "exhausted balance") — a top-up problem,
+  not a revoked key. `classifyErrorKind` now lets billing wording win over a
+  bare 401/403 status, so it's tagged `billing` (a plain 403 stays `auth`).
+- **A throwing observer could fail a successful request.** `onCost`/`onCall`/
+  `onError` were invoked unguarded; a logging sink that threw (e.g. a flaky db9
+  write) turned an otherwise-successful generation into a thrown error. All
+  observer callbacks are now fire-and-forget — wrapped so a throw can never
+  affect routing or the request outcome. Applies to both routers.
+
+### Added
+
+- **fal media adapter** (`createFalMediaAdapter`). fal was in the price table
+  but had no adapter, so its routes were silently skipped at runtime — now it's
+  a real cheapest-first / failover target for image models. Synchronous
+  `https://fal.run/<model>` with `Authorization: Key`, generic input pass-
+  through, HTTP-status-bearing errors (403 out-of-balance → fails over; 422 bad
+  input → doesn't). Image only; fal video (queue) is on the roadmap.
+- **Status-page liveness probes for Runware + fal** (`website`). Both are now
+  monitored with a free, generation-free reachability probe: Runware's `ping`
+  task (→ `pong`, 0 cost) and fal's `GET /v1/account/billing` (2xx ⇒ endpoint up
+  + key valid). Generalized via a new `ReachProbe` so a "reachable" check can
+  hit a provider-specific free endpoint instead of `GET /v1/models`. Requires
+  `RUNWARE_API_KEY` and `FAL_KEY` env vars to be set.
+
 ## [0.2.3] — 2026-06-01
 
 Release-quality and engine-correctness pass.
@@ -57,4 +104,5 @@ Release-quality and engine-correctness pass.
 - Dual ESM/CJS build. Media (image/video) least-cost routing with the Runware
   and Kunavo adapters; cap-aware failover for the text router.
 
+[0.2.5]: https://github.com/victorzhrn/ai-lcr/releases/tag/v0.2.5
 [0.2.3]: https://github.com/victorzhrn/ai-lcr/releases/tag/v0.2.3
