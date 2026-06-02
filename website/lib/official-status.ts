@@ -27,6 +27,8 @@ export type OfficialComponent = {
   group: string | null;
   /** Raw Instatus status (OPERATIONAL, MAJOROUTAGE, …). */
   status: string;
+  /** Whether this status counts as healthy (drives the recorded heartbeat). */
+  ok: boolean;
 };
 
 export type OfficialStatus = {
@@ -47,8 +49,10 @@ type InstatusComponentsResponse = {
   }>;
 };
 
-/** Instatus statuses that count as "healthy". */
-const HEALTHY = new Set(["OPERATIONAL"]);
+/** Whether an Instatus component status counts as healthy (operational). */
+export function isOfficialOk(status: string): boolean {
+  return status === "OPERATIONAL";
+}
 
 export async function fetchOfficialStatus(src: OfficialStatusSource): Promise<OfficialStatus> {
   const url = src.url.replace(/\/$/, "");
@@ -63,15 +67,19 @@ export async function fetchOfficialStatus(src: OfficialStatusSource): Promise<Of
       return { ok: null, components: [], url, error: `status page returned HTTP ${res.status}` };
     }
     const json = (await res.json()) as InstatusComponentsResponse;
-    const components: OfficialComponent[] = (json.components ?? []).map((c) => ({
-      name: c.name ?? "(unnamed)",
-      group: c.group?.name ?? null,
-      status: c.status ?? "UNKNOWN",
-    }));
+    const components: OfficialComponent[] = (json.components ?? []).map((c) => {
+      const status = c.status ?? "UNKNOWN";
+      return {
+        name: c.name ?? "(unnamed)",
+        group: c.group?.name ?? null,
+        status,
+        ok: isOfficialOk(status),
+      };
+    });
     if (components.length === 0) {
       return { ok: null, components, url, error: "status page exposed no components" };
     }
-    const ok = components.every((c) => HEALTHY.has(c.status));
+    const ok = components.every((c) => c.ok);
     return { ok, components, url };
   } catch (e) {
     return { ok: null, components: [], url, error: (e as Error).message };

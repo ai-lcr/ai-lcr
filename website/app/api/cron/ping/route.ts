@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { PROVIDERS, REACHABILITY_MODEL, type Provider, type ReachProbe } from "@/lib/providers";
+import { fetchOfficialStatus } from "@/lib/official-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,6 +94,36 @@ async function ping(p: Provider, model: string, mode: "inference" | "reachable")
   }
 }
 
+type OfficialRow = {
+  provider: string;
+  component: string;
+  grp: string | null;
+  status: string;
+  ok: boolean;
+};
+
+// Pull each provider's OWN status page (Instatus) and flatten to one heartbeat
+// row per component. Recorded on the same 15-min cadence as our probes so the
+// detail page can show their self-reported uptime in the same style as ours.
+// A page we can't reach (ok: null / no components) records nothing this tick —
+// better an honest gap than a synthetic value poisoning the uptime%.
+async function officialTasks(): Promise<OfficialRow[]> {
+  const providers = PROVIDERS.filter((p) => p.officialStatus);
+  const perProvider = await Promise.all(
+    providers.map(async (p) => {
+      const s = await fetchOfficialStatus(p.officialStatus!);
+      return s.components.map((c) => ({
+        provider: p.id,
+        component: c.name,
+        grp: c.group,
+        status: c.status,
+        ok: c.ok,
+      }));
+    }),
+  );
+  return perProvider.flat();
+}
+
 // Flatten providers into individual liveness checks: one inference ping per
 // listed model, plus a free reachability ping when check==="reachable" or the
 // provider opts in via `reachable` (so OpenRouter gets both GPT + endpoint up).
@@ -108,7 +139,9 @@ function pingTasks(): Array<Promise<PingResult>> {
 }
 
 async function runChecks() {
-  const results = await Promise.all(pingTasks());
+  // Liveness probes and official-status pulls are independent — run concurrently
+  // so the cron's wall-clock is max(), not sum().
+  const [results, official] = await Promise.all([Promise.all(pingTasks()), officialTasks()]);
 
   const pool = getPool();
   const placeholders = results
@@ -125,7 +158,41 @@ async function runChecks() {
   // Keep the table tiny — drop anything older than 30 days.
   await pool.query(`DELETE FROM provider_pings WHERE checked_at < now() - interval '30 days'`);
 
-  return results;
+  await recordOfficial(pool, official);
+
+  return { results, official: official.length };
+}
+
+// Persist official-status heartbeats. Self-bootstraps the table (no migration
+// framework in this repo — the cron is the only writer), then bulk-inserts one
+// row per component and trims to a 30-day window, mirroring provider_pings.
+async function recordOfficial(pool: ReturnType<typeof getPool>, rows: OfficialRow[]) {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS provider_official (
+       provider   text NOT NULL,
+       component  text NOT NULL,
+       grp        text,
+       status     text NOT NULL,
+       ok         boolean NOT NULL,
+       checked_at timestamptz NOT NULL DEFAULT now()
+     )`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS provider_official_lookup
+       ON provider_official (provider, component, checked_at DESC)`,
+  );
+
+  if (rows.length > 0) {
+    const placeholders = rows
+      .map((_, i) => `($${i * 5 + 1},$${i * 5 + 2},$${i * 5 + 3},$${i * 5 + 4},$${i * 5 + 5})`)
+      .join(",");
+    const params = rows.flatMap((r) => [r.provider, r.component, r.grp, r.status, r.ok]);
+    await pool.query(
+      `INSERT INTO provider_official (provider, component, grp, status, ok) VALUES ${placeholders}`,
+      params,
+    );
+  }
+  await pool.query(`DELETE FROM provider_official WHERE checked_at < now() - interval '30 days'`);
 }
 
 function authorized(req: Request): boolean {
@@ -141,8 +208,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    const results = await runChecks();
-    return NextResponse.json({ checked_at: new Date().toISOString(), results });
+    const { results, official } = await runChecks();
+    return NextResponse.json({ checked_at: new Date().toISOString(), official, results });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

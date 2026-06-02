@@ -2,12 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { PROVIDERS, REACHABILITY_MODEL, type Provider } from "@/lib/providers";
-import {
-  fetchOfficialStatus,
-  officialStatusColor,
-  officialStatusLabel,
-  type OfficialStatus,
-} from "@/lib/official-status";
+import { officialStatusColor, officialStatusLabel } from "@/lib/official-status";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +29,9 @@ type LatestRow = { model: string; ok: boolean; latency_ms: number | null; error:
 type StripRow = { model: string; ok: boolean; latency_ms: number | null; checked_at: string };
 type FailureRow = { model: string; error: string | null; checked_at: string };
 type CheckRow = { model: string; check_name: string; status: string; detail: string | null; checked_at: string };
+type OfficialAggRow = { component: string; grp: string | null; up: number; total: number };
+type OfficialLatestRow = { component: string; grp: string | null; status: string; ok: boolean; checked_at: string };
+type OfficialStripRow = { component: string; ok: boolean; checked_at: string };
 
 function pct(up: number, total: number): string {
   if (total === 0) return "—";
@@ -94,10 +92,6 @@ export default async function ProviderStatus({
     if (p.check === "reachable" || p.reachable) ids.push(REACHABILITY_MODEL);
     return ids.length > 0 ? ids : [REACHABILITY_MODEL];
   })();
-
-  // Kick off the provider's own status-page fetch concurrently with our DB
-  // queries (the helper never throws — failures come back as ok: null).
-  const officialPromise = p.officialStatus ? fetchOfficialStatus(p.officialStatus) : null;
 
   let latest = new Map<string, LatestRow>();
   const day = new Map<string, AggRow>();
@@ -167,7 +161,65 @@ export default async function ProviderStatus({
     latest = new Map();
   }
 
-  const official = officialPromise ? await officialPromise : null;
+  // Official-status history (recorded by the ping cron, same cadence as our
+  // probes). Separate try so a missing table before the first cron tick — or any
+  // official-store hiccup — doesn't blank the rest of the page.
+  const officialLatest = new Map<string, OfficialLatestRow>();
+  const officialDay = new Map<string, OfficialAggRow>();
+  const officialWeek = new Map<string, OfficialAggRow>();
+  const officialMonth = new Map<string, OfficialAggRow>();
+  const officialStrips = new Map<string, OfficialStripRow[]>();
+  let officialComponents: string[] = [];
+  if (p.officialStatus) {
+    try {
+      const pool = getPool();
+      const oAgg = (interval: "24 hours" | "7 days" | "30 days") =>
+        pool.query<OfficialAggRow>(
+          `SELECT component, grp,
+                  count(*) FILTER (WHERE ok)::int AS up,
+                  count(*)::int AS total
+           FROM provider_official
+           WHERE provider = $1 AND checked_at > now() - interval '${interval}'
+           GROUP BY component, grp`,
+          [p.id],
+        );
+      const [latestQ, d, w, m, stripQ] = await Promise.all([
+        pool.query<OfficialLatestRow>(
+          `SELECT DISTINCT ON (component) component, grp, status, ok, checked_at
+           FROM provider_official WHERE provider = $1 ORDER BY component, checked_at DESC`,
+          [p.id],
+        ),
+        oAgg("24 hours"),
+        oAgg("7 days"),
+        oAgg("30 days"),
+        pool.query<OfficialStripRow>(
+          `SELECT component, ok, checked_at FROM provider_official
+           WHERE provider = $1 AND checked_at > now() - interval '48 hours'
+           ORDER BY checked_at ASC`,
+          [p.id],
+        ),
+      ]);
+      for (const r of latestQ.rows) officialLatest.set(r.component, r);
+      for (const r of d.rows) officialDay.set(r.component, r);
+      for (const r of w.rows) officialWeek.set(r.component, r);
+      for (const r of m.rows) officialMonth.set(r.component, r);
+      for (const r of stripQ.rows) {
+        const arr = officialStrips.get(r.component) ?? [];
+        arr.push(r);
+        officialStrips.set(r.component, arr);
+      }
+      // Group members together, then alphabetical — stable, readable order.
+      officialComponents = latestQ.rows
+        .slice()
+        .sort(
+          (a, b) =>
+            (a.grp ?? "").localeCompare(b.grp ?? "") || a.component.localeCompare(b.component),
+        )
+        .map((r) => r.component);
+    } catch {
+      // Table not created yet (pre-first-cron) — render as awaiting.
+    }
+  }
 
   const anyKnown = liveModels.some((m) => latest.get(m));
   const allUp = liveModels.every((m) => latest.get(m)?.ok);
@@ -238,7 +290,98 @@ export default async function ProviderStatus({
           </p>
         )}
 
-        {official && <OfficialStatusSection s={official} />}
+        {/* Provider's own status page — recorded on our cadence, same style as
+            our probes, so it reads as one more heartbeat lane for triage. */}
+        {p.officialStatus && (
+          <section style={{ marginBottom: 38 }}>
+            <h2 style={{ fontSize: 14, color: "var(--muted)", margin: "0 0 4px" }}>
+              Provider&apos;s official status
+            </h2>
+            <p style={{ fontSize: 12, color: "var(--faint)", margin: "0 0 18px" }}>
+              Self-reported from{" "}
+              <a
+                href={p.officialStatus.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "var(--muted)" }}
+              >
+                {p.officialStatus.url.replace(/^https?:\/\//, "")}
+              </a>
+              , recorded every tick. Distinct from our probes below: this is the provider&apos;s
+              view of their own platform; ours is whether our key can call it.
+            </p>
+
+            {officialComponents.length === 0 ? (
+              <p style={{ color: "var(--faint)", fontSize: 13 }}>
+                Awaiting first reading from their status page.
+              </p>
+            ) : (
+              officialComponents.map((comp) => {
+                const l = officialLatest.get(comp);
+                const d = officialDay.get(comp) ?? { component: comp, grp: null, up: 0, total: 0 };
+                const w = officialWeek.get(comp) ?? { component: comp, grp: null, up: 0, total: 0 };
+                const mo = officialMonth.get(comp) ?? { component: comp, grp: null, up: 0, total: 0 };
+                const strip = officialStrips.get(comp) ?? [];
+                return (
+                  <section key={comp} style={{ marginBottom: 26 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          width: 9,
+                          height: 9,
+                          borderRadius: "50%",
+                          background: l ? officialStatusColor(l.status) : C.faint,
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      <span style={{ fontSize: 14, color: "var(--text)", fontWeight: 600 }}>
+                        {l?.grp ? <span style={{ color: "var(--faint)", fontWeight: 400 }}>{l.grp} · </span> : null}
+                        {comp}
+                      </span>
+                      <span style={{ fontSize: 12, color: "var(--faint)" }}>
+                        {l ? `${officialStatusLabel(l.status)} · ${ago(l.checked_at)}` : "awaiting first reading"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))",
+                        gap: 10,
+                        marginBottom: 14,
+                      }}
+                    >
+                      <Stat label="Operational · 24h" value={pct(d.up, d.total)} sub={`${d.up}/${d.total} reads`} />
+                      <Stat label="Operational · 7d" value={pct(w.up, w.total)} sub={`${w.up}/${w.total} reads`} />
+                      <Stat label="Operational · 30d" value={pct(mo.up, mo.total)} sub={`${mo.up}/${mo.total} reads`} />
+                    </div>
+
+                    {strip.length > 0 ? (
+                      <div style={{ display: "flex", gap: 2 }}>
+                        {strip.map((s, i) => (
+                          <span
+                            key={i}
+                            title={`${s.ok ? "operational" : "issue"} · ${when(s.checked_at)}`}
+                            style={{
+                              flex: "1 1 0",
+                              height: 26,
+                              borderRadius: 3,
+                              background: s.ok ? C.green : C.red,
+                              opacity: s.ok ? 0.55 : 0.85,
+                              minWidth: 2,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--faint)", fontSize: 13 }}>No readings yet.</p>
+                    )}
+                  </section>
+                );
+              })
+            )}
+          </section>
+        )}
 
         {/* Per-model liveness */}
         {liveModels.map((m) => {
@@ -407,85 +550,6 @@ export default async function ProviderStatus({
         )}
       </main>
     </>
-  );
-}
-
-function OfficialStatusSection({ s }: { s: OfficialStatus }) {
-  const headColor = s.ok == null ? C.faint : s.ok ? C.green : C.red;
-  const host = s.url.replace(/^https?:\/\//, "");
-  return (
-    <section style={{ marginBottom: 30 }}>
-      <h2 style={{ fontSize: 14, color: "var(--muted)", margin: "0 0 4px" }}>
-        Provider&apos;s official status
-      </h2>
-      <p style={{ fontSize: 12, color: "var(--faint)", margin: "0 0 14px" }}>
-        Self-reported from{" "}
-        <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "var(--muted)" }}>
-          {host}
-        </a>
-        . Distinct from our probes above: this is the provider&apos;s view of their own
-        platform, ours is whether our key can call it.
-      </p>
-
-      {s.error ? (
-        <p style={{ color: "var(--faint)", fontSize: 13 }}>
-          Couldn&apos;t read their status page · {s.error}
-        </p>
-      ) : (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-            <span
-              style={{ width: 9, height: 9, borderRadius: "50%", background: headColor, flex: "0 0 auto" }}
-            />
-            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
-              {s.ok == null ? "Status unknown" : s.ok ? "All systems operational" : "Issue reported"}
-            </span>
-          </div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {s.components.map((c) => (
-              <div
-                key={(c.group ?? "") + c.name}
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "baseline",
-                  fontSize: 13,
-                  borderBottom: "1px solid var(--line)",
-                  paddingBottom: 6,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: officialStatusColor(c.status),
-                    flex: "0 0 auto",
-                    alignSelf: "center",
-                  }}
-                />
-                <span style={{ color: "var(--text)", flex: "0 0 auto", minWidth: 160 }}>
-                  {c.group ? <span style={{ color: "var(--faint)" }}>{c.group} · </span> : null}
-                  {c.name}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 11.5,
-                    textTransform: "uppercase",
-                    color: officialStatusColor(c.status),
-                    flex: "1 1 auto",
-                  }}
-                >
-                  {officialStatusLabel(c.status)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
   );
 }
 
