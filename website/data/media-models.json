@@ -2094,10 +2094,6 @@
       "label": "OpenRouter",
       "link": "https://openrouter.ai"
     },
-    "kunavo": {
-      "label": "Kunavo",
-      "link": "https://kunavo.com/?ref=victorimf"
-    },
     "tokenmart": {
       "label": "TokenMart",
       "link": "https://thetokenmart.ai"
@@ -2309,11 +2305,6 @@
           "outUsd": 14.0
         },
         {
-          "provider": "kunavo",
-          "inUsd": 0.7,
-          "outUsd": 5.6
-        },
-        {
           "provider": "tokenmart",
           "inUsd": 1.05,
           "outUsd": 8.4
@@ -2337,11 +2328,6 @@
           "outUsd": 15.0
         },
         {
-          "provider": "kunavo",
-          "inUsd": 1.0,
-          "outUsd": 6.0
-        },
-        {
           "provider": "tokenmart",
           "inUsd": 1.5,
           "outUsd": 9
@@ -2363,11 +2349,6 @@
           "provider": "openrouter",
           "inUsd": 0.75,
           "outUsd": 4.5
-        },
-        {
-          "provider": "kunavo",
-          "inUsd": 0.225,
-          "outUsd": 1.35
         },
         {
           "provider": "tokenmart",
@@ -2416,11 +2397,6 @@
           "outUsd": 30.0
         },
         {
-          "provider": "kunavo",
-          "inUsd": 2.0,
-          "outUsd": 12.0
-        },
-        {
           "provider": "tokenmart",
           "inUsd": 3,
           "outUsd": 18
@@ -2442,11 +2418,6 @@
           "provider": "openrouter",
           "inUsd": 1.0,
           "outUsd": 5.0
-        },
-        {
-          "provider": "kunavo",
-          "inUsd": 0.4,
-          "outUsd": 2.0
         },
         {
           "provider": "tokenmart",
@@ -2472,11 +2443,6 @@
           "outUsd": 15.0
         },
         {
-          "provider": "kunavo",
-          "inUsd": 1.2,
-          "outUsd": 6.0
-        },
-        {
           "provider": "tokenmart",
           "inUsd": 1.95,
           "outUsd": 9.75
@@ -2500,11 +2466,6 @@
           "outUsd": 25.0
         },
         {
-          "provider": "kunavo",
-          "inUsd": 2.0,
-          "outUsd": 10.0
-        },
-        {
           "provider": "tokenmart",
           "inUsd": 3.25,
           "outUsd": 16.25
@@ -2526,11 +2487,6 @@
           "provider": "openrouter",
           "inUsd": 5.0,
           "outUsd": 25.0
-        },
-        {
-          "provider": "kunavo",
-          "inUsd": 2.0,
-          "outUsd": 10.0
         },
         {
           "provider": "tokenmart",
@@ -2579,11 +2535,6 @@
           "outUsd": 2.5
         },
         {
-          "provider": "kunavo",
-          "inUsd": 0.09,
-          "outUsd": 0.75
-        },
-        {
           "provider": "tokenmart",
           "inUsd": 0.18,
           "outUsd": 1.5
@@ -2628,11 +2579,6 @@
           "provider": "openrouter",
           "inUsd": 1.25,
           "outUsd": 10.0
-        },
-        {
-          "provider": "kunavo",
-          "inUsd": 0.375,
-          "outUsd": 3.0
         },
         {
           "provider": "tokenmart",
