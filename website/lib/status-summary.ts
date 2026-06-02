@@ -1,4 +1,4 @@
-import { getPool } from "./db9";
+import { getPool } from "./db";
 import { PROVIDERS, REACHABILITY_MODEL } from "./providers";
 
 export interface ProviderStatus {
@@ -28,7 +28,7 @@ function livenessModels(id: string): string[] {
 
 // Lightweight per-provider rollup for the homepage strip. Mirrors the /status
 // page logic but returns only summary numbers. Swallows DB errors (the build
-// step has no db9 credentials) so the homepage still renders, just empty.
+// step has no DB credentials) so the homepage still renders, just empty.
 export async function statusSummary(): Promise<StatusSummary> {
   const empty: StatusSummary = { providers: [], allUp: false, anyData: false };
   try {

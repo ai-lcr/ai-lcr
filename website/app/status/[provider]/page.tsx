@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getPool } from "@/lib/db9";
+import { getPool } from "@/lib/db";
 import { PROVIDERS, REACHABILITY_MODEL, type Provider } from "@/lib/providers";
 
 export const dynamic = "force-dynamic";

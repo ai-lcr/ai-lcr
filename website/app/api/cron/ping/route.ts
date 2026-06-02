@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db9";
+import { getPool } from "@/lib/db";
 import { PROVIDERS, REACHABILITY_MODEL, type Provider, type ReachProbe } from "@/lib/providers";
 
 export const runtime = "nodejs";

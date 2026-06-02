@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db9";
+import { getPool } from "@/lib/db";
 import { runIntegrity } from "@/lib/integrity";
 
 export const runtime = "nodejs";
