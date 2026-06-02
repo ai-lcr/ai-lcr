@@ -15,6 +15,14 @@
     "runware": {
       "label": "Runware",
       "link": "https://runware.ai"
+    },
+    "wavespeed": {
+      "label": "WaveSpeed",
+      "link": "https://wavespeed.ai"
+    },
+    "replicate": {
+      "label": "Replicate",
+      "link": "https://replicate.com"
     }
   },
   "models": [
@@ -35,6 +43,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 0.3
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 0.3
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 0.3
         }
       ]
     },
@@ -53,6 +71,16 @@
         },
         {
           "provider": "fal",
+          "unit": "image",
+          "cents": 2.5
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 1.2
+        },
+        {
+          "provider": "replicate",
           "unit": "image",
           "cents": 2.5
         }
@@ -80,6 +108,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 4
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 4
         }
       ]
     },
@@ -95,6 +133,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.92
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 2
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 2.5
         }
       ]
     },
@@ -110,6 +158,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.9
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 1.2
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 1.4
         }
       ]
     },
@@ -130,6 +188,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.06
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 0.8
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 0.1
         }
       ]
     },
@@ -150,6 +218,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 2
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 1
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 1.5
         }
       ]
     },
@@ -168,6 +246,16 @@
         },
         {
           "provider": "runware",
+          "unit": "image",
+          "cents": 3
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 3
+        },
+        {
+          "provider": "replicate",
           "unit": "image",
           "cents": 3
         }
@@ -190,6 +278,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 6
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 6
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 6
         }
       ]
     },
@@ -210,6 +308,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 4
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 4
         }
       ]
     },
@@ -228,6 +336,16 @@
         },
         {
           "provider": "fal",
+          "unit": "image",
+          "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 8
+        },
+        {
+          "provider": "replicate",
           "unit": "image",
           "cents": 8
         }
@@ -270,6 +388,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.19
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 3
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 3.5
         }
       ]
     },
@@ -290,6 +418,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.38
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 2
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 2.5
         }
       ]
     },
@@ -310,6 +448,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.4
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 2
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 3
         }
       ]
     },
@@ -345,6 +493,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.13
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 0.5
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 0.5
         }
       ]
     },
@@ -365,6 +523,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 7.5
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 7.5
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 3
         }
       ]
     },
@@ -380,6 +548,11 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.26
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 0.5
         }
       ]
     },
@@ -395,6 +568,11 @@
           "provider": "runware",
           "unit": "image",
           "cents": 0.45
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 1.2
         }
       ]
     },
@@ -446,6 +624,16 @@
           "provider": "kunavo",
           "unit": "image",
           "cents": 2.73
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 3.8
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 3.9
         }
       ]
     },
@@ -477,6 +665,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 7
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 6.7
         }
       ]
     },
@@ -502,6 +700,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 14
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 15
         }
       ]
     },
@@ -525,6 +733,16 @@
         },
         {
           "provider": "fal",
+          "unit": "image",
+          "cents": 6
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 5.8
+        },
+        {
+          "provider": "replicate",
           "unit": "image",
           "cents": 6
         }
@@ -553,6 +771,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 9.375
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 6
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 12.8
         }
       ]
     },
@@ -573,6 +801,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 21
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 22
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 12.8
         }
       ]
     },
@@ -593,6 +831,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 3.39
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 13.6
         }
       ]
     },
@@ -613,6 +861,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 3
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 4
         }
       ]
     },
@@ -631,6 +889,16 @@
         },
         {
           "provider": "runware",
+          "unit": "image",
+          "cents": 3.5
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 3.5
+        },
+        {
+          "provider": "replicate",
           "unit": "image",
           "cents": 3.5
         }
@@ -653,6 +921,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 4
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 4
         }
       ]
     },
@@ -671,6 +949,11 @@
         },
         {
           "provider": "runware",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "wavespeed",
           "unit": "image",
           "cents": 4
         }
@@ -698,6 +981,16 @@
           "provider": "fal",
           "unit": "image",
           "cents": 6
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 6
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 6
         }
       ]
     },
@@ -716,6 +1009,11 @@
         },
         {
           "provider": "runware",
+          "unit": "image",
+          "cents": 2.8
+        },
+        {
+          "provider": "wavespeed",
           "unit": "image",
           "cents": 2.8
         }
@@ -738,6 +1036,11 @@
           "provider": "runware",
           "unit": "image",
           "cents": 2.8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 2.8
         }
       ]
     },
@@ -758,6 +1061,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 5
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 2.2
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 2
         }
       ]
     },
@@ -778,6 +1091,16 @@
           "provider": "runware",
           "unit": "image",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "image",
+          "cents": 8
+        },
+        {
+          "provider": "replicate",
+          "unit": "image",
+          "cents": 5
         }
       ]
     },
@@ -811,6 +1134,11 @@
         },
         {
           "provider": "fal",
+          "unit": "image",
+          "cents": 1.8
+        },
+        {
+          "provider": "wavespeed",
           "unit": "image",
           "cents": 1.8
         }
@@ -848,6 +1176,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 6
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 30
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 30
         }
       ]
     },
@@ -868,6 +1206,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 6
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 30
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 30
         }
       ]
     },
@@ -883,6 +1231,11 @@
           "provider": "runware",
           "unit": "second",
           "cents": 2.33
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 20
         }
       ]
     },
@@ -903,6 +1256,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 30
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 100
         }
       ]
     },
@@ -923,6 +1286,16 @@
           "provider": "runware",
           "unit": "second",
           "cents": 5.77
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 30
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 10
         }
       ]
     },
@@ -943,6 +1316,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 15
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 75
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 75
         }
       ]
     },
@@ -963,6 +1346,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 15
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 75
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 75
         }
       ]
     },
@@ -983,6 +1376,16 @@
           "provider": "runware",
           "unit": "second",
           "cents": 15
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 75
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 50
         }
       ]
     },
@@ -1009,6 +1412,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 40
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 200
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 200
         }
       ]
     },
@@ -1035,6 +1448,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 40
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 40
         }
       ]
     },
@@ -1056,6 +1479,16 @@
           "provider": "kunavo",
           "unit": "call",
           "cents": 192
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 320
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 200
         }
       ]
     },
@@ -1076,6 +1509,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 10
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 50
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 50
         }
       ],
       "note": "Official is Sora 2 at 720p (base has no 1080p tier)."
@@ -1097,6 +1540,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 10
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 50
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 50
         }
       ],
       "note": "Official is Sora 2 at 720p (base has no 1080p tier)."
@@ -1113,6 +1566,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 3.6
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 45
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 36
         }
       ]
     },
@@ -1133,6 +1596,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 12.4
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 60
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 75
         }
       ]
     },
@@ -1153,6 +1626,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 12.4
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 60
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 75
         }
       ]
     },
@@ -1173,6 +1656,16 @@
           "provider": "runware",
           "unit": "second",
           "cents": 24.19
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 300
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 225
         }
       ]
     },
@@ -1193,6 +1686,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 24.19
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 250
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 75
         }
       ],
       "note": "Official at native 720p (1080p not supported on Fast)."
@@ -1214,6 +1717,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 24.19
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 250
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 75
         }
       ],
       "note": "Official at native 720p (1080p not supported on Fast)."
@@ -1235,6 +1748,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 11.2
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 112
         }
       ]
     },
@@ -1255,6 +1778,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 11.2
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 112
         }
       ]
     },
@@ -1275,6 +1808,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 7
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 35
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 35
         }
       ]
     },
@@ -1295,6 +1838,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 28
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 130
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 140
         }
       ]
     },
@@ -1315,6 +1868,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 28
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 130
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 140
         }
       ]
     },
@@ -1335,6 +1898,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 9.8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 35
         }
       ]
     },
@@ -1355,6 +1928,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 4.5
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 23
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 27
         }
       ],
       "note": "Official = nearest tier: 768p, 6s (no 5s/1080p SKU)."
@@ -1376,6 +1959,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 48
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 48
         }
       ],
       "note": "Official = nearest tier: 1080p, 6s (no 5s SKU)."
@@ -1397,6 +1990,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 9.8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 49
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 49
         }
       ],
       "note": "Official = nearest tier: 1080p, 6s (no 5s SKU)."
@@ -1418,6 +2021,11 @@
           "provider": "fal",
           "unit": "second",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 160
         }
       ]
     },
@@ -1438,6 +2046,16 @@
           "provider": "runware",
           "unit": "second",
           "cents": 8
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 45
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 90
         }
       ]
     },
@@ -1453,6 +2071,16 @@
           "provider": "fal",
           "unit": "second",
           "cents": 40
+        },
+        {
+          "provider": "wavespeed",
+          "unit": "call",
+          "cents": 20
+        },
+        {
+          "provider": "replicate",
+          "unit": "call",
+          "cents": 90
         }
       ]
     }
