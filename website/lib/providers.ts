@@ -121,17 +121,22 @@ export const PROVIDERS: Provider[] = [
     base: "https://model.service-inference.ai",
     apiKeyEnv: "INFERENCE_API_KEY",
     check: "inference",
-    // Mainstream models this key can actually serve. GPT upstreams are now
-    // provisioned on this account (gpt-5.5 etc. serve fine), so we monitor
-    // gpt-5.5 here. DeepSeek / Qwen are still listed in /v1/models but their
-    // inference 502s ("Upstream authentication error" ERR_PROVIDER_005) —
-    // those upstreams aren't provisioned, so we don't monitor them as "down".
+    // Mainstream models this key can actually serve (verified by live
+    // max_tokens probe, 2026-06-01). GPT and Qwen upstreams are now
+    // provisioned (gpt-5.5/gpt-5-nano/qwen3.5-flash serve fine). Caveat:
+    // Google's cheap "lite" tiers — gemini-2.5-flash-lite, gemini-3.1-flash-lite,
+    // gemini-3.5-flash — currently 502 ("Upstream authentication error"
+    // ERR_PROVIDER_005), so we monitor gemini-2.5-flash (serves) as the cheap
+    // Gemini rep and watch the lite tier on OpenRouter instead.
     models: [
       { id: "claude-sonnet-4-6" },
       { id: "claude-haiku-4-5-20251001" },
       { id: "gemini-3-flash-preview" },
+      { id: "gemini-2.5-flash" },
       { id: "gemini-2.5-pro" },
       { id: "glm-4.6" },
+      { id: "qwen3.5-flash" },
+      { id: "gpt-5-nano" },
       { id: "gpt-5.5" },
     ],
     link: "https://thetokenmart.ai",
@@ -162,9 +167,12 @@ export const PROVIDERS: Provider[] = [
   },
   {
     // Also the integrity baseline for the discount providers above (referenced
-    // by URL, independent of its own check mode). GPT only actually serves here
-    // — Kunavo has no GPT text models, TokenMart's GPT 502s (upstream not
-    // provisioned) — so the mainstream GPT liveness lives on OpenRouter.
+    // by URL, independent of its own check mode). The mainstream GPT liveness
+    // lives here (Kunavo has no GPT text models). We also monitor a cheap
+    // Anthropic + Gemini rep here against real first-party upstreams: it gives
+    // a same-model cross-provider comparison vs the discount gateways, and
+    // covers gemini-2.5-flash-lite — the cheapest Gemini, which TokenMart's key
+    // can't serve (502).
     id: "openrouter",
     label: "OpenRouter",
     base: "https://openrouter.ai/api",
@@ -174,6 +182,8 @@ export const PROVIDERS: Provider[] = [
       { id: "openai/gpt-5.1" },
       { id: "openai/gpt-4o" },
       { id: "openai/gpt-4o-mini" },
+      { id: "anthropic/claude-haiku-4.5" },
+      { id: "google/gemini-2.5-flash-lite" },
     ],
     // Plus a free, token-free endpoint reachability ping.
     reachable: true,
