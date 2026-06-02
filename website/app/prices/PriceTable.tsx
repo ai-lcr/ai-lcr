@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type ComparisonRow,
   type TextRow,
@@ -106,6 +106,43 @@ export default function PriceTable({
   const [license, setLicense] = useState<LicenseFilter>("all");
   const [vendor, setVendor] = useState<string>("all");
   const [q, setQ] = useState("");
+
+  // ── URL sync (shareable filtered views) ───────────────────────────────
+  // Read the query string once on mount (kept out of the initial render so the
+  // hydrated markup matches the static HTML), then mirror filter changes back
+  // into the URL via replaceState — no history spam, no full navigation.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const m = sp.get("modality");
+    if (m && (["all", "text", "image", "video"] as const).includes(m as ModalityFilter)) {
+      setModality(m as ModalityFilter);
+    }
+    const v = sp.get("vendor");
+    if (v && (v === "all" || POPULAR_VENDORS.includes(v))) setVendor(v);
+    const l = sp.get("license");
+    if (l && (["all", "open", "proprietary"] as const).includes(l as LicenseFilter)) {
+      setLicense(l as LicenseFilter);
+    }
+    const query = sp.get("q");
+    if (query) setQ(query);
+  }, []);
+
+  const didInit = useRef(false);
+  useEffect(() => {
+    // Skip the first run (defaults, before the mount read above lands) so a
+    // shared link's params aren't wiped on load.
+    if (!didInit.current) {
+      didInit.current = true;
+      return;
+    }
+    const sp = new URLSearchParams();
+    if (modality !== "all") sp.set("modality", modality);
+    if (vendor !== "all") sp.set("vendor", vendor);
+    if (license !== "all") sp.set("license", license);
+    if (q.trim()) sp.set("q", q.trim());
+    const qs = sp.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [modality, vendor, license, q]);
 
   const vendors = useMemo(() => {
     const present = new Set<string>();
