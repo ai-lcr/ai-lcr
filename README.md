@@ -312,11 +312,11 @@ API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
   REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
   bash scripts/check-provider.sh
 
-# TokenMart uses vendor-prefixed model IDs
-API_KEY=$TOKENMART_API_KEY BASE=https://api.tokenmart.ai \
-  MODEL_1=google/gemini-3-flash    REF_1=google/gemini-3-flash-preview \
-  MODEL_2=anthropic/claude-sonnet-4-6 REF_2=anthropic/claude-sonnet-4.6 \
-  CACHE_MODEL=anthropic/claude-sonnet-4-6 \
+# TokenMart (Inference AI) uses bare, un-prefixed model IDs
+API_KEY=$INFERENCE_API_KEY BASE=https://model.service-inference.ai \
+  MODEL_1=gemini-3-flash-preview      REF_1=google/gemini-3-flash-preview \
+  MODEL_2=claude-sonnet-4-6           REF_2=anthropic/claude-sonnet-4.6 \
+  CACHE_MODEL=claude-sonnet-4-6 \
   REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
   bash scripts/check-provider.sh
 ```
