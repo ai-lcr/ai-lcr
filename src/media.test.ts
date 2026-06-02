@@ -155,6 +155,43 @@ describe("createMediaLCR routing", () => {
     expect(onError).toHaveBeenCalledOnce();
   });
 
+  it("falls through when the cheapest provider is unreachable (network error)", async () => {
+    const generate = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: {
+          provider: "cheap",
+          run: async () => {
+            // No HTTP status — the provider's fetch died at the transport layer.
+            throw Object.assign(new TypeError("fetch failed"), {
+              cause: Object.assign(new Error("connect ECONNREFUSED 10.0.0.1:443"), {
+                code: "ECONNREFUSED",
+              }),
+            });
+          },
+        },
+        pricey: okAdapter("pricey"),
+      },
+    });
+    const result = await generate("x/img", { prompt: "hi" });
+    expect(result.provider).toBe("pricey");
+  });
+
+  it("does not let a throwing observer turn a success into a failure", async () => {
+    const generate = createMediaLCR({
+      registry,
+      adapters: { cheap: okAdapter("cheap"), pricey: okAdapter("pricey") },
+      onCall: () => {
+        throw new Error("logging sink is down");
+      },
+      onCost: () => {
+        throw new Error("metrics sink is down");
+      },
+    });
+    const result = await generate("x/img", { prompt: "hi" });
+    expect(result.provider).toBe("cheap");
+  });
+
   it("does NOT fall through on a non-retryable (caller) error", async () => {
     const generate = createMediaLCR({
       registry,

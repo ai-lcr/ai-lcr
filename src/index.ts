@@ -17,8 +17,8 @@ import {
   type RoutedProvider,
 } from "./fallback";
 
-export type { CostEvent, CallRecord, RouteAttempt, ProviderCost } from "./fallback";
-export { classifyError } from "./fallback";
+export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind } from "./fallback";
+export { classifyError, classifyErrorKind } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 
 // ── Image & video Least Cost Routing (parallel to the text router above) ──
@@ -55,7 +55,7 @@ export type {
 export { MEDIA_PRICING } from "./media-registry";
 export { createKunavoMediaAdapter } from "./adapters/kunavo-media";
 export { createRunwareMediaAdapter } from "./adapters/runware-media";
-export { createFalMediaAdapter, FalMediaError } from "./adapters/fal-media";
+export { createFalMediaAdapter } from "./adapters/fal-media";
 
 /**
  * A provider for a model: either a bare AI SDK model (e.g.
