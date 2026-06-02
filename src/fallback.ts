@@ -102,6 +102,18 @@ export interface CallRecord {
   failedOver: boolean;
   /** Total wall time across all attempts, ms. */
   latencyMs: number;
+  /**
+   * Time to first token (TTFT), ms — the industry-standard responsiveness
+   * metric. Measured from the *winning* provider's stream attempt start to its
+   * first content token (`text-delta` / `reasoning-delta`), so it captures how
+   * fast the model that actually served started replying, not failover overhead
+   * (that's already in `latencyMs`). Streaming only: **undefined** for
+   * `doGenerate` (the whole response lands at once, so there's no "first token")
+   * and for calls that failed before producing any content. With `latencyMs` and
+   * `outputTokens`, output throughput is derivable: `outputTokens / ((latencyMs −
+   * ttftMs) / 1000)` tokens/sec.
+   */
+  ttftMs?: number;
   inputTokens: number;
   outputTokens: number;
   /**
@@ -533,6 +545,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
     provider: RoutedProvider,
     attemptStart: number,
     usage: LanguageModelV3GenerateResult["usage"] | undefined,
+    ttftMs?: number,
   ): void {
     ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
     const inputTokens = usage?.inputTokens?.total ?? 0;
@@ -559,6 +572,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       ok: true,
       failedOver: ctx.attempts.length > 1,
       latencyMs: Date.now() - ctx.startedAt,
+      ...(ttftMs !== undefined ? { ttftMs } : {}),
       inputTokens,
       outputTokens,
       ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
@@ -678,6 +692,12 @@ export class LcrFallbackModel implements LanguageModelV3 {
     const triedBeforeServing = tried;
     let usage: LanguageModelV3GenerateResult["usage"] | undefined;
     let streamedAny = false;
+    // TTFT: stamped on the first content token (text/reasoning delta), measured
+    // from this serving provider's attempt start. Deliberately the first *delta*,
+    // not the first chunk — `stream-start` / `text-start` / `response-metadata`
+    // arrive before the model has generated anything, so timing to them would
+    // understate TTFT.
+    let ttftMs: number | undefined;
 
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       async start(controller) {
@@ -694,11 +714,14 @@ export class LcrFallbackModel implements LanguageModelV3 {
             }
             if (done) break;
             if (value.type === "finish") usage = value.usage;
+            if (ttftMs === undefined && (value.type === "text-delta" || value.type === "reasoning-delta")) {
+              ttftMs = Date.now() - servingAttemptStart;
+            }
             controller.enqueue(value);
             if (value.type !== "stream-start") streamedAny = true;
           }
           self.settleSticky(servingIdx);
-          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage);
+          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage, ttftMs);
           controller.close();
         } catch (error) {
           self.emitError(error, servingProvider.label);
