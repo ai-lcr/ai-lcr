@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { PROVIDERS, REACHABILITY_MODEL, type Provider } from "@/lib/providers";
+import {
+  fetchOfficialStatus,
+  officialStatusColor,
+  officialStatusLabel,
+  type OfficialStatus,
+} from "@/lib/official-status";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +95,10 @@ export default async function ProviderStatus({
     return ids.length > 0 ? ids : [REACHABILITY_MODEL];
   })();
 
+  // Kick off the provider's own status-page fetch concurrently with our DB
+  // queries (the helper never throws — failures come back as ok: null).
+  const officialPromise = p.officialStatus ? fetchOfficialStatus(p.officialStatus) : null;
+
   let latest = new Map<string, LatestRow>();
   const day = new Map<string, AggRow>();
   const week = new Map<string, AggRow>();
@@ -156,6 +166,8 @@ export default async function ProviderStatus({
     dbError = (e as Error).message;
     latest = new Map();
   }
+
+  const official = officialPromise ? await officialPromise : null;
 
   const anyKnown = liveModels.some((m) => latest.get(m));
   const allUp = liveModels.every((m) => latest.get(m)?.ok);
@@ -225,6 +237,8 @@ export default async function ProviderStatus({
             status store unavailable: {dbError}
           </p>
         )}
+
+        {official && <OfficialStatusSection s={official} />}
 
         {/* Per-model liveness */}
         {liveModels.map((m) => {
@@ -393,6 +407,85 @@ export default async function ProviderStatus({
         )}
       </main>
     </>
+  );
+}
+
+function OfficialStatusSection({ s }: { s: OfficialStatus }) {
+  const headColor = s.ok == null ? C.faint : s.ok ? C.green : C.red;
+  const host = s.url.replace(/^https?:\/\//, "");
+  return (
+    <section style={{ marginBottom: 30 }}>
+      <h2 style={{ fontSize: 14, color: "var(--muted)", margin: "0 0 4px" }}>
+        Provider&apos;s official status
+      </h2>
+      <p style={{ fontSize: 12, color: "var(--faint)", margin: "0 0 14px" }}>
+        Self-reported from{" "}
+        <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "var(--muted)" }}>
+          {host}
+        </a>
+        . Distinct from our probes above: this is the provider&apos;s view of their own
+        platform, ours is whether our key can call it.
+      </p>
+
+      {s.error ? (
+        <p style={{ color: "var(--faint)", fontSize: 13 }}>
+          Couldn&apos;t read their status page · {s.error}
+        </p>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <span
+              style={{ width: 9, height: 9, borderRadius: "50%", background: headColor, flex: "0 0 auto" }}
+            />
+            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+              {s.ok == null ? "Status unknown" : s.ok ? "All systems operational" : "Issue reported"}
+            </span>
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {s.components.map((c) => (
+              <div
+                key={(c.group ?? "") + c.name}
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "baseline",
+                  fontSize: 13,
+                  borderBottom: "1px solid var(--line)",
+                  paddingBottom: 6,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: officialStatusColor(c.status),
+                    flex: "0 0 auto",
+                    alignSelf: "center",
+                  }}
+                />
+                <span style={{ color: "var(--text)", flex: "0 0 auto", minWidth: 160 }}>
+                  {c.group ? <span style={{ color: "var(--faint)" }}>{c.group} · </span> : null}
+                  {c.name}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11.5,
+                    textTransform: "uppercase",
+                    color: officialStatusColor(c.status),
+                    flex: "1 1 auto",
+                  }}
+                >
+                  {officialStatusLabel(c.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
