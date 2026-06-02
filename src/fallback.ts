@@ -139,23 +139,65 @@ const RETRYABLE_PATTERNS = [
   "504",
   "429",
   // Billing caps — a capped provider should fall over, not kill the request.
+  // Include non-English wording: Chinese providers (e.g. Kunavo) report a failed
+  // charge as "余额不足"/"账户欠费"/"扣费失败" with a 200/400 body, which no
+  // English keyword and no HTTP status would catch — so without these a billing
+  // failure would die instead of failing over, the exact opposite of what we want.
   "insufficient",
   "credit",
   "quota",
   "billing",
   "payment required",
+  "balance",
+  "余额",
+  "欠费",
+  "扣费",
+  "扣款",
 ];
 
-/** Default switch criterion: provider down / rate-limited / overloaded. */
-export function isRetryableError(error: unknown): boolean {
-  const e = error as { statusCode?: number; status?: number; message?: string } | undefined;
-  const status = e?.statusCode ?? e?.status;
-  if (typeof status === "number" && (RETRYABLE_STATUS.has(status) || status > 500)) {
-    return true;
-  }
-  const text = (e?.message ? String(e.message) : safeStringify(error)).toLowerCase();
-  return RETRYABLE_PATTERNS.some((p) => text.includes(p));
-}
+// Connection-level failures: the provider is unreachable, the socket dropped,
+// DNS failed, or the request timed out at the transport layer. `fetch` surfaces
+// these as a TypeError with NO HTTP status — and often wraps the real cause
+// (which carries a Node `code`) in `error.cause`. None of them match a status
+// or an HTTP pattern, so without explicit detection they'd be misread as a
+// non-retryable client error and the request would die on a dead provider
+// instead of failing over to the next one — the single most common outage mode.
+const NETWORK_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ECONNABORTED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "EPIPE",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPROTO",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+const NETWORK_PATTERNS = [
+  "fetch failed",
+  "failed to fetch",
+  "socket hang up",
+  "socket disconnected",
+  "econnrefused",
+  "econnreset",
+  "enotfound",
+  "etimedout",
+  "ehostunreach",
+  "enetunreach",
+  "eai_again",
+  "getaddrinfo",
+  "connect timeout",
+  "connection refused",
+  "connection reset",
+  "connection error",
+  "network error",
+  "dns",
+];
 
 function safeStringify(value: unknown): string {
   try {
@@ -166,16 +208,70 @@ function safeStringify(value: unknown): string {
 }
 
 /**
+ * Gather an error's `message`, `name`, and Node `code` across its whole `cause`
+ * chain, lowercased — because `fetch` wraps the real network failure (the one
+ * with the useful `code`/text) inside `error.cause`, invisible to a top-level
+ * `.message` read. Bounded depth and cycle-safe. Returns the joined searchable
+ * text plus every `code` string seen, so callers can match patterns or codes.
+ */
+function errorSignals(error: unknown): { text: string; codes: string[] } {
+  const parts: string[] = [];
+  const codes: string[] = [];
+  const seen = new Set<unknown>();
+  let cur: unknown = error;
+  for (let depth = 0; depth < 6 && cur && typeof cur === "object" && !seen.has(cur); depth++) {
+    seen.add(cur);
+    const e = cur as { message?: unknown; name?: unknown; code?: unknown; cause?: unknown };
+    if (typeof e.message === "string") parts.push(e.message);
+    if (typeof e.name === "string") parts.push(e.name);
+    if (typeof e.code === "string") {
+      parts.push(e.code);
+      codes.push(e.code);
+    }
+    cur = e.cause;
+  }
+  if (parts.length === 0) parts.push(safeStringify(error));
+  return { text: parts.join(" ").toLowerCase(), codes };
+}
+
+/**
+ * A transport-level failure (provider unreachable / socket dropped / DNS /
+ * connect timeout). These carry no HTTP status, so they must be detected
+ * structurally — by Node `code` or message — or they read as non-retryable.
+ * Note: a deliberate caller cancellation (AbortError without a network code) is
+ * intentionally NOT treated as network here, so we don't "fail over" a request
+ * the caller chose to abort.
+ */
+export function isNetworkError(error: unknown): boolean {
+  const { text, codes } = errorSignals(error);
+  if (codes.some((c) => NETWORK_CODES.has(c))) return true;
+  return NETWORK_PATTERNS.some((p) => text.includes(p));
+}
+
+/** Default switch criterion: provider down / rate-limited / overloaded / unreachable. */
+export function isRetryableError(error: unknown): boolean {
+  const e = error as { statusCode?: number; status?: number } | undefined;
+  const status = e?.statusCode ?? e?.status;
+  if (typeof status === "number" && (RETRYABLE_STATUS.has(status) || status > 500)) {
+    return true;
+  }
+  if (isNetworkError(error)) return true;
+  const { text } = errorSignals(error);
+  return RETRYABLE_PATTERNS.some((p) => text.includes(p));
+}
+
+/**
  * Normalize an error into a short, log-friendly class for {@link CallRecord}.
  * An HTTP status wins (e.g. "502", "429"); otherwise the first matching
  * retryable pattern (e.g. "rate_limit", "timeout"); otherwise "error".
  * Reuses the same signals as {@link isRetryableError} — no new vocabulary.
  */
 export function classifyError(error: unknown): string {
-  const e = error as { statusCode?: number; status?: number; message?: string } | undefined;
+  const e = error as { statusCode?: number; status?: number } | undefined;
   const status = e?.statusCode ?? e?.status;
   if (typeof status === "number") return String(status);
-  const text = (e?.message ? String(e.message) : safeStringify(error)).toLowerCase();
+  if (isNetworkError(error)) return "network";
+  const { text } = errorSignals(error);
   return RETRYABLE_PATTERNS.find((p) => text.includes(p)) ?? "error";
 }
 
@@ -183,7 +279,19 @@ export function classifyError(error: unknown): string {
 // account should still fail over so the request survives) — but they are NOT
 // transient, so we surface them separately for alerting. See {@link ErrorKind}.
 const AUTH_STATUS = new Set([401, 403]);
-const BILLING_PATTERNS = ["insufficient", "credit", "quota", "billing", "payment required"];
+const BILLING_PATTERNS = [
+  "insufficient",
+  "credit",
+  "quota",
+  "billing",
+  "payment required",
+  "balance",
+  "exhausted",
+  "余额",
+  "欠费",
+  "扣费",
+  "扣款",
+];
 
 /**
  * Categorize an error for alerting. Orthogonal to {@link isRetryableError}
@@ -192,11 +300,15 @@ const BILLING_PATTERNS = ["insufficient", "credit", "quota", "billing", "payment
  * burning the pricey fallback because a key/account is broken: page on it.
  */
 export function classifyErrorKind(error: unknown): ErrorKind {
-  const e = error as { statusCode?: number; status?: number; message?: string } | undefined;
+  const e = error as { statusCode?: number; status?: number } | undefined;
   const status = e?.statusCode ?? e?.status;
-  const text = (e?.message ? String(e.message) : safeStringify(error)).toLowerCase();
-  if (typeof status === "number" && AUTH_STATUS.has(status)) return "auth";
+  const { text } = errorSignals(error);
+  // Billing wording wins over a bare auth status: providers report an
+  // out-of-credit account as 403 (e.g. fal "exhausted balance") — that's a
+  // top-up problem, not a revoked key, and tagging it `billing` is what lets
+  // you alert on the right thing. A 401/403 with no billing wording stays auth.
   if (status === 402 || BILLING_PATTERNS.some((p) => text.includes(p))) return "billing";
+  if (typeof status === "number" && AUTH_STATUS.has(status)) return "auth";
   return isRetryableError(error) ? "transient" : "client";
 }
 
@@ -286,6 +398,33 @@ export class LcrFallbackModel implements LanguageModelV3 {
     return (this.opts.shouldRetry ?? isRetryableError)(error);
   }
 
+  // Observer callbacks are caller-supplied logging hooks: a throw from one of
+  // them must NEVER turn a successful (or already-failed) request into a
+  // different outcome. Swallow anything they throw — they are fire-and-forget.
+  private emitError(error: unknown, provider: string): void {
+    try {
+      this.opts.onError?.(error as Error, provider);
+    } catch {
+      /* observer must not affect routing */
+    }
+  }
+
+  private emitCost(event: CostEvent): void {
+    try {
+      this.opts.onCost?.(event);
+    } catch {
+      /* observer must not affect routing */
+    }
+  }
+
+  private emitCall(record: CallRecord): void {
+    try {
+      this.opts.onCall?.(record);
+    } catch {
+      /* observer must not affect routing */
+    }
+  }
+
   private startCall(): CallCtx {
     return { id: newCallId(), attempts: [], startedAt: Date.now() };
   }
@@ -319,14 +458,14 @@ export class LcrFallbackModel implements LanguageModelV3 {
     const costUsd = provider.cost
       ? (inputTokens / 1e6) * provider.cost.input + (outputTokens / 1e6) * provider.cost.output
       : 0;
-    this.opts.onCost?.({
+    this.emitCost({
       model: this.opts.modelName,
       provider: provider.label,
       inputTokens,
       outputTokens,
       costUsd,
     });
-    this.opts.onCall?.({
+    this.emitCall({
       id: ctx.id,
       model: this.opts.modelName,
       attempts: ctx.attempts,
@@ -342,7 +481,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
 
   /** Every provider failed: fire `onCall` with no winner. */
   private finalizeFail(ctx: CallCtx): void {
-    this.opts.onCall?.({
+    this.emitCall({
       id: ctx.id,
       model: this.opts.modelName,
       attempts: ctx.attempts,
@@ -382,7 +521,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
           this.finalizeFail(ctx);
           throw error;
         }
-        this.opts.onError?.(error as Error, provider.label);
+        this.emitError(error, provider.label);
         this.recordFail(ctx, provider, attemptStart, error);
       }
     }
@@ -431,7 +570,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
           this.finalizeFail(ctx);
           throw error;
         }
-        this.opts.onError?.(error as Error, serving.label);
+        this.emitError(error, serving.label);
         this.recordFail(ctx, serving, servingStart, error);
         tried++;
         if (tried >= n) {
@@ -471,7 +610,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
           self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage);
           controller.close();
         } catch (error) {
-          self.opts.onError?.(error as Error, servingProvider.label);
+          self.emitError(error, servingProvider.label);
           self.recordFail(ctx, servingProvider, servingAttemptStart, error);
           if (!streamedAny) {
             // This serving provider is now also a failure → bump the count and

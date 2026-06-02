@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db9";
-import { PROVIDERS, REACHABILITY_MODEL, type Provider } from "@/lib/providers";
+import { PROVIDERS, REACHABILITY_MODEL, type Provider, type ReachProbe } from "@/lib/providers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,20 @@ type PingResult = {
   error: string | null;
 };
 
+// Default reachability probe for OpenAI-compatible providers: a free
+// GET /v1/models (endpoint + auth reachable, 0 tokens). Media providers
+// (Runware/fal) override this with `p.probe`.
+const DEFAULT_REACHABLE: ReachProbe = {
+  method: "GET",
+  path: "/v1/models",
+  ok: (j) => Array.isArray((j as { data?: unknown[] })?.data) && (j as { data: unknown[] }).data.length > 0,
+};
+
 // One liveness heartbeat.
 //  - "inference": a real max_tokens:16 completion against `model` — proves the
 //    inference path works (not just the gateway). For discount / quirky providers.
-//  - "reachable": a free GET /v1/models — endpoint + auth reachable, 0 tokens.
+//  - "reachable": a free probe — GET /v1/models by default, or the provider's
+//    custom `probe` (Runware ping task / fal billing). 0 tokens, no generation.
 //    `model` is the sentinel REACHABILITY_MODEL.
 async function ping(p: Provider, model: string, mode: "inference" | "reachable"): Promise<PingResult> {
   const key = process.env[p.apiKeyEnv];
@@ -28,32 +38,36 @@ async function ping(p: Provider, model: string, mode: "inference" | "reachable")
     return { ...base, ok: false, latency_ms: null, error: `missing env ${p.apiKeyEnv}` };
   }
 
+  const probe = mode === "reachable" ? p.probe ?? DEFAULT_REACHABLE : null;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   const t0 = Date.now();
   try {
-    const r =
-      mode === "reachable"
-        ? await fetch(`${p.base}/v1/models`, {
-            method: "GET",
-            headers: { Authorization: `Bearer ${key}` },
-            signal: ctrl.signal,
-          })
-        : await fetch(`${p.base}/v1/chat/completions`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${key}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model,
-              messages: [{ role: "user", content: "hi" }],
-              // 16, not 1: reasoning models (e.g. gpt-5.1) reject a cap below 16.
-              // Still a near-zero-cost heartbeat.
-              max_tokens: 16,
-            }),
-            signal: ctrl.signal,
-          });
+    const r = probe
+      ? await fetch(`${p.base}${probe.path}`, {
+          method: probe.method,
+          headers: {
+            Authorization: probe.auth ? probe.auth(key) : `Bearer ${key}`,
+            ...(probe.method === "POST" ? { "Content-Type": "application/json" } : {}),
+          },
+          ...(probe.body !== undefined ? { body: JSON.stringify(probe.body) } : {}),
+          signal: ctrl.signal,
+        })
+      : await fetch(`${p.base}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: "hi" }],
+            // 16, not 1: reasoning models (e.g. gpt-5.1) reject a cap below 16.
+            // Still a near-zero-cost heartbeat.
+            max_tokens: 16,
+          }),
+          signal: ctrl.signal,
+        });
     const latency_ms = Date.now() - t0;
 
     if (!r.ok) {
@@ -61,11 +75,10 @@ async function ping(p: Provider, model: string, mode: "inference" | "reachable")
       return { ...base, ok: false, latency_ms, error: `HTTP ${r.status}: ${body}` };
     }
     const j = await r.json();
-    const ok =
-      mode === "reachable"
-        ? Array.isArray(j?.data) && j.data.length > 0
-        : Array.isArray(j?.choices) && j.choices.length > 0;
-    const failMsg = mode === "reachable" ? "no models in response" : "no choices in response";
+    const ok = probe
+      ? (probe.ok ?? (() => true))(j)
+      : Array.isArray(j?.choices) && j.choices.length > 0;
+    const failMsg = probe ? "reachability check failed" : "no choices in response";
     return { ...base, ok, latency_ms, error: ok ? null : failMsg };
   } catch (e) {
     const err = e as Error;

@@ -156,7 +156,7 @@ Any OpenAI-compatible endpoint works — and so does any AI SDK provider package
 
 - **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
 - **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — image routing available via `createMediaLCR` (Kunavo + Runware adapters); video on the roadmap
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — image routing available via `createMediaLCR` (Kunavo + Runware + fal adapters); video on the roadmap
 
 ## Text model pricing
 
