@@ -1,99 +1,2512 @@
 {
   "_note": "Cross-provider image/video price table powering /prices. cents = US cents per native unit, copied from ai-art @art/models registry (verified against provider pages) + Kunavo billing API. Normalize to one reference output: image=flat, second=×5 (5s clip), call=flat. license is best-effort — 'open' = downloadable/self-hostable weights, 'proprietary' = API-only — edit freely. kind: generate|edit|upscale|bg-removal. Keep the Kunavo rows in sync with ../src/media-registry.ts.",
   "providers": {
-    "kunavo": { "label": "Kunavo", "link": "https://kunavo.com/?ref=victorimf" },
-    "fal": { "label": "fal", "link": "https://fal.ai" },
-    "runware": { "label": "Runware", "link": "https://runware.ai" }
+    "official": {
+      "label": "Official"
+    },
+    "kunavo": {
+      "label": "Kunavo",
+      "link": "https://kunavo.com/?ref=victorimf"
+    },
+    "fal": {
+      "label": "fal",
+      "link": "https://fal.ai"
+    },
+    "runware": {
+      "label": "Runware",
+      "link": "https://runware.ai"
+    }
   },
   "models": [
-    { "id": "bfl/flux-schnell", "name": "Flux Schnell", "modality": "image", "vendor": "bfl", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.13 }, { "provider": "fal", "unit": "image", "cents": 0.3 } ] },
-    { "id": "bfl/flux-dev", "name": "Flux Dev", "modality": "image", "vendor": "bfl", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 2.5 }, { "provider": "fal", "unit": "image", "cents": 2.5 } ] },
-    { "id": "bfl/flux-1.1-pro", "name": "Flux 1.1 Pro", "modality": "image", "vendor": "bfl", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 4 }, { "provider": "fal", "unit": "image", "cents": 4 } ] },
-    { "id": "bfl/flux-1-krea-dev", "name": "FLUX.1 Krea [dev]", "modality": "image", "vendor": "bfl", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.92 } ] },
-    { "id": "bfl/flux-2-dev", "name": "FLUX.2 [dev]", "modality": "image", "vendor": "bfl", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.9 } ] },
-    { "id": "bfl/flux-2-klein-4b", "name": "FLUX.2 Klein 4B", "modality": "image", "vendor": "bfl", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.06 } ] },
-    { "id": "bfl/flux-2-klein-9b", "name": "FLUX.2 Klein 9B", "modality": "image", "vendor": "bfl", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 2 } ] },
-    { "id": "bfl/flux-2-pro", "name": "FLUX.2 [pro]", "modality": "image", "vendor": "bfl", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 3 } ] },
-    { "id": "bfl/flux-2-flex", "name": "FLUX.2 [flex]", "modality": "image", "vendor": "bfl", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 6 } ] },
-    { "id": "bfl/flux-kontext-pro", "name": "Flux Kontext Pro", "modality": "image", "vendor": "bfl", "license": "proprietary", "kind": "edit", "routes": [ { "provider": "fal", "unit": "image", "cents": 4 } ] },
-    { "id": "bfl/flux-kontext-max", "name": "Flux Kontext Max", "modality": "image", "vendor": "bfl", "license": "proprietary", "kind": "edit", "routes": [ { "provider": "fal", "unit": "image", "cents": 8 } ] },
-    { "id": "stability/fast-sdxl", "name": "Fast SDXL", "modality": "image", "vendor": "stability", "license": "open", "kind": "generate", "routes": [ { "provider": "fal", "unit": "image", "cents": 0.3 } ] },
-    { "id": "stability/stable-diffusion-3", "name": "Stable Diffusion 3", "modality": "image", "vendor": "stability", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.19 } ] },
-    { "id": "alibaba/qwen-image", "name": "Qwen-Image", "modality": "image", "vendor": "alibaba", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.38 } ] },
-    { "id": "alibaba/qwen-image-edit", "name": "Qwen-Image-Edit Plus", "modality": "image", "vendor": "alibaba", "license": "open", "kind": "edit", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.4 } ] },
-    { "id": "alibaba/z-image", "name": "Z-Image", "modality": "image", "vendor": "alibaba", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.45 } ] },
-    { "id": "alibaba/z-image-turbo", "name": "Z-Image Turbo", "modality": "image", "vendor": "alibaba", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.13 } ] },
-    { "id": "alibaba/wan-2-7-image-pro", "name": "Wan2.7 Image Pro", "modality": "image", "vendor": "alibaba", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 7.5 } ] },
-    { "id": "hidream/hidream-i1-fast", "name": "HiDream-I1 Fast", "modality": "image", "vendor": "hidream", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.26 } ] },
-    { "id": "hidream/hidream-i1-dev", "name": "HiDream-I1 Dev", "modality": "image", "vendor": "hidream", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.45 } ] },
-    { "id": "civitai/realvisxl-v5", "name": "RealVisXL V5.0", "modality": "image", "vendor": "civitai", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.19 } ] },
-    { "id": "civitai/dreamshaper-xl", "name": "DreamShaper XL", "modality": "image", "vendor": "civitai", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 0.19 } ] },
-    { "id": "google/nano-banana", "name": "Nano Banana", "modality": "image", "vendor": "google", "license": "proprietary", "kind": "generate", "note": "Gemini Flash Image v1 — Kunavo only (fal/runware carry v2/pro)", "routes": [ { "provider": "kunavo", "unit": "image", "cents": 2.73 } ] },
-    { "id": "google/nano-banana-2", "name": "Nano Banana 2", "modality": "image", "vendor": "google", "license": "proprietary", "kind": "generate", "note": "Runware 1K tier (2K 10.3¢, 4K 15.3¢)", "routes": [ { "provider": "kunavo", "unit": "image", "cents": 4.69 }, { "provider": "runware", "unit": "image", "cents": 6.9 }, { "provider": "fal", "unit": "image", "cents": 8 } ] },
-    { "id": "google/nano-banana-pro", "name": "Nano Banana Pro", "modality": "image", "vendor": "google", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "kunavo", "unit": "image", "cents": 6.7 }, { "provider": "fal", "unit": "image", "cents": 8 } ] },
-    { "id": "google/imagen-4-ultra", "name": "Imagen 4 Ultra", "modality": "image", "vendor": "google", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 6 }, { "provider": "fal", "unit": "image", "cents": 6 } ] },
-    { "id": "openai/gpt-image-2", "name": "GPT Image 2", "modality": "image", "vendor": "openai", "license": "proprietary", "kind": "generate", "note": "Standard quality (fal carries the High tier separately)", "routes": [ { "provider": "kunavo", "unit": "image", "cents": 6.33 }, { "provider": "runware", "unit": "image", "cents": 9.375 } ] },
-    { "id": "openai/gpt-image-2-high", "name": "GPT Image 2 (High)", "modality": "image", "vendor": "openai", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "image", "cents": 21 } ] },
-    { "id": "openai/gpt-image-1-5", "name": "GPT Image 1.5", "modality": "image", "vendor": "openai", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 3.39 } ] },
-    { "id": "bytedance/seedream-4-5", "name": "Seedream 4", "modality": "image", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "image", "cents": 3 } ] },
-    { "id": "bytedance/seedream-5-lite", "name": "Seedream 5.0 Lite", "modality": "image", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 3.5 } ] },
-    { "id": "recraft/v3", "name": "Recraft V3", "modality": "image", "vendor": "recraft", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "image", "cents": 4 } ] },
-    { "id": "recraft/v4-1", "name": "Recraft V4.1", "modality": "image", "vendor": "recraft", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 4 } ] },
-    { "id": "ideogram/v3-balanced", "name": "Ideogram V3 Balanced", "modality": "image", "vendor": "ideogram", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 6 }, { "provider": "fal", "unit": "image", "cents": 6 } ] },
-    { "id": "kuaishou/kling-image-3", "name": "Kling IMAGE 3.0", "modality": "image", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 2.8 } ] },
-    { "id": "kuaishou/kling-image-o3", "name": "Kling IMAGE O3", "modality": "image", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 2.8 } ] },
-    { "id": "xai/grok-image-quality", "name": "Grok Imagine (Quality)", "modality": "image", "vendor": "xai", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 5 } ] },
-    { "id": "runway/gen-4-image", "name": "Runway Gen-4 Image", "modality": "image", "vendor": "runway", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "image", "cents": 8 } ] },
-    { "id": "fal/birefnet", "name": "BiRefNet Background Removal", "modality": "image", "vendor": "fal", "license": "open", "kind": "bg-removal", "routes": [ { "provider": "fal", "unit": "image", "cents": 0.5 } ] },
-    { "id": "bria/rmbg-2", "name": "Bria RMBG 2.0", "modality": "image", "vendor": "bria", "license": "proprietary", "kind": "bg-removal", "routes": [ { "provider": "fal", "unit": "image", "cents": 1.8 } ] },
-    { "id": "fal/clarity-upscaler", "name": "Clarity Upscaler", "modality": "image", "vendor": "fal", "license": "open", "kind": "upscale", "routes": [ { "provider": "fal", "unit": "image", "cents": 5 } ] },
-
-    { "id": "lightricks/ltx-2", "name": "LTX-2", "modality": "video", "vendor": "lightricks", "license": "open", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 6 } ] },
-    { "id": "lightricks/ltx-2-i2v", "name": "LTX-2 (I2V)", "modality": "video", "vendor": "lightricks", "license": "open", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 6 } ] },
-    { "id": "tencent/hunyuan-video-1-5", "name": "HunyuanVideo 1.5", "modality": "video", "vendor": "tencent", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "second", "cents": 2.33 } ] },
-    { "id": "alibaba/wan-2-2-i2v", "name": "WAN 2.2 (I2V)", "modality": "video", "vendor": "alibaba", "license": "open", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 8 } ] },
-    { "id": "alibaba/wan-2-2-t2v", "name": "WAN 2.2 (T2V)", "modality": "video", "vendor": "alibaba", "license": "open", "kind": "generate", "routes": [ { "provider": "runware", "unit": "second", "cents": 5.77 } ] },
-    { "id": "alibaba/wan-2-5-i2v", "name": "WAN 2.5 (I2V)", "modality": "video", "vendor": "alibaba", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 15 } ] },
-    { "id": "alibaba/wan-2-5-t2v", "name": "WAN 2.5 (T2V)", "modality": "video", "vendor": "alibaba", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 15 } ] },
-    { "id": "alibaba/wan-2-7-t2v", "name": "WAN 2.7", "modality": "video", "vendor": "alibaba", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "second", "cents": 15 } ] },
-    { "id": "google/veo-3-1", "name": "Veo 3.1", "modality": "video", "vendor": "google", "license": "proprietary", "kind": "generate", "note": "Kunavo bills flat per clip (~8s, SKU unverified); fal is veo3.1 per second, 1080p audio-on (20¢/s audio-off)", "routes": [ { "provider": "kunavo", "unit": "call", "cents": 32 }, { "provider": "fal", "unit": "second", "cents": 40 } ] },
-    { "id": "google/veo-3-1-lite", "name": "Veo 3.1 Lite", "modality": "video", "vendor": "google", "license": "proprietary", "kind": "generate", "note": "Kunavo flat per clip (SKU unverified); fal per second", "routes": [ { "provider": "kunavo", "unit": "call", "cents": 16 }, { "provider": "fal", "unit": "second", "cents": 8 } ] },
-    { "id": "google/veo-3-quality", "name": "Veo 3 Quality", "modality": "video", "vendor": "google", "license": "proprietary", "kind": "generate", "note": "Kunavo only — flat per clip (SKU unverified)", "routes": [ { "provider": "kunavo", "unit": "call", "cents": 192 } ] },
-    { "id": "openai/sora-2", "name": "Sora 2", "modality": "video", "vendor": "openai", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 10 } ] },
-    { "id": "openai/sora-2-i2v", "name": "Sora 2 (I2V)", "modality": "video", "vendor": "openai", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 10 } ] },
-    { "id": "bytedance/seedance-v1-lite", "name": "Seedance Lite", "modality": "video", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 3.6 } ] },
-    { "id": "bytedance/seedance-v1-pro", "name": "Seedance 1.0 Pro", "modality": "video", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 12.4 } ] },
-    { "id": "bytedance/seedance-v1-pro-i2v", "name": "Seedance 1.0 Pro (I2V)", "modality": "video", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 12.4 } ] },
-    { "id": "bytedance/seedance-2-0", "name": "Seedance 2.0", "modality": "video", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "second", "cents": 24.19 } ] },
-    { "id": "bytedance/seedance-2-0-fast", "name": "Seedance 2.0 Fast", "modality": "video", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 24.19 } ] },
-    { "id": "bytedance/seedance-2-0-fast-i2v", "name": "Seedance 2.0 Fast (I2V)", "modality": "video", "vendor": "bytedance", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 24.19 } ] },
-    { "id": "kuaishou/kling-v3-pro", "name": "Kling V3 Pro", "modality": "video", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 11.2 } ] },
-    { "id": "kuaishou/kling-v3-pro-i2v", "name": "Kling V3 Pro (I2V)", "modality": "video", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 11.2 } ] },
-    { "id": "kuaishou/kling-v26-pro-i2v", "name": "Kling 2.6 Pro (I2V)", "modality": "video", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 7 } ] },
-    { "id": "kuaishou/kling-v21-master", "name": "Kling 2.1 Master", "modality": "video", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 28 } ] },
-    { "id": "kuaishou/kling-v21-master-i2v", "name": "Kling 2.1 Master (I2V)", "modality": "video", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 28 } ] },
-    { "id": "kuaishou/kling-motion-control", "name": "Kling Motion Control", "modality": "video", "vendor": "kuaishou", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 9.8 } ] },
-    { "id": "minimax/hailuo-02-standard", "name": "Hailuo 02 Standard", "modality": "video", "vendor": "minimax", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 4.5 } ] },
-    { "id": "minimax/hailuo-02-pro", "name": "Hailuo 02 Pro", "modality": "video", "vendor": "minimax", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 8 } ] },
-    { "id": "minimax/hailuo-2-3-pro", "name": "Hailuo 2.3 Pro", "modality": "video", "vendor": "minimax", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 9.8 } ] },
-    { "id": "pixverse/v5-5-i2v", "name": "PixVerse v5.5 (I2V)", "modality": "video", "vendor": "pixverse", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 8 } ] },
-    { "id": "pixverse/v6", "name": "PixVerse V6", "modality": "video", "vendor": "pixverse", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "runware", "unit": "second", "cents": 8 } ] },
-    { "id": "luma/ray-2-i2v", "name": "Luma Ray 2 (I2V)", "modality": "video", "vendor": "luma", "license": "proprietary", "kind": "generate", "routes": [ { "provider": "fal", "unit": "second", "cents": 40 } ] }
+    {
+      "id": "bfl/flux-schnell",
+      "name": "Flux Schnell",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.13
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 0.3
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-dev",
+      "name": "Flux Dev",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 2.5
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 2.5
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-1.1-pro",
+      "name": "Flux 1.1 Pro",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 4.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 4
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 4
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-1-krea-dev",
+      "name": "FLUX.1 Krea [dev]",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.92
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-2-dev",
+      "name": "FLUX.2 [dev]",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.9
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-2-klein-4b",
+      "name": "FLUX.2 Klein 4B",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 1.4
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.06
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-2-klein-9b",
+      "name": "FLUX.2 Klein 9B",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 1.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 2
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-2-pro",
+      "name": "FLUX.2 [pro]",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 3.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 3
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-2-flex",
+      "name": "FLUX.2 [flex]",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 6.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 6
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-kontext-pro",
+      "name": "Flux Kontext Pro",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "proprietary",
+      "kind": "edit",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 4.0
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 4
+        }
+      ]
+    },
+    {
+      "id": "bfl/flux-kontext-max",
+      "name": "Flux Kontext Max",
+      "modality": "image",
+      "vendor": "bfl",
+      "license": "proprietary",
+      "kind": "edit",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 8.0
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "stability/fast-sdxl",
+      "name": "Fast SDXL",
+      "modality": "image",
+      "vendor": "stability",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 0.9
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 0.3
+        }
+      ]
+    },
+    {
+      "id": "stability/stable-diffusion-3",
+      "name": "Stable Diffusion 3",
+      "modality": "image",
+      "vendor": "stability",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 6.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.19
+        }
+      ]
+    },
+    {
+      "id": "alibaba/qwen-image",
+      "name": "Qwen-Image",
+      "modality": "image",
+      "vendor": "alibaba",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 3.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.38
+        }
+      ]
+    },
+    {
+      "id": "alibaba/qwen-image-edit",
+      "name": "Qwen-Image-Edit Plus",
+      "modality": "image",
+      "vendor": "alibaba",
+      "license": "open",
+      "kind": "edit",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 4.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.4
+        }
+      ]
+    },
+    {
+      "id": "alibaba/z-image",
+      "name": "Z-Image",
+      "modality": "image",
+      "vendor": "alibaba",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.45
+        }
+      ]
+    },
+    {
+      "id": "alibaba/z-image-turbo",
+      "name": "Z-Image Turbo",
+      "modality": "image",
+      "vendor": "alibaba",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 1.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.13
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2-7-image-pro",
+      "name": "Wan2.7 Image Pro",
+      "modality": "image",
+      "vendor": "alibaba",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 7.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 7.5
+        }
+      ]
+    },
+    {
+      "id": "hidream/hidream-i1-fast",
+      "name": "HiDream-I1 Fast",
+      "modality": "image",
+      "vendor": "hidream",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.26
+        }
+      ]
+    },
+    {
+      "id": "hidream/hidream-i1-dev",
+      "name": "HiDream-I1 Dev",
+      "modality": "image",
+      "vendor": "hidream",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.45
+        }
+      ]
+    },
+    {
+      "id": "civitai/realvisxl-v5",
+      "name": "RealVisXL V5.0",
+      "modality": "image",
+      "vendor": "civitai",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.19
+        }
+      ]
+    },
+    {
+      "id": "civitai/dreamshaper-xl",
+      "name": "DreamShaper XL",
+      "modality": "image",
+      "vendor": "civitai",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 0.19
+        }
+      ]
+    },
+    {
+      "id": "google/nano-banana",
+      "name": "Nano Banana",
+      "modality": "image",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "Gemini Flash Image v1 — Kunavo only (fal/runware carry v2/pro)",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 3.9
+        },
+        {
+          "provider": "kunavo",
+          "unit": "image",
+          "cents": 2.73
+        }
+      ]
+    },
+    {
+      "id": "google/nano-banana-2",
+      "name": "Nano Banana 2",
+      "modality": "image",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "Runware 1K tier (2K 10.3¢, 4K 15.3¢)",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 6.7
+        },
+        {
+          "provider": "kunavo",
+          "unit": "image",
+          "cents": 4.69
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 6.9
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "google/nano-banana-pro",
+      "name": "Nano Banana Pro",
+      "modality": "image",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 13.4
+        },
+        {
+          "provider": "kunavo",
+          "unit": "image",
+          "cents": 6.7
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "google/imagen-4-ultra",
+      "name": "Imagen 4 Ultra",
+      "modality": "image",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 6.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 6
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 6
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-image-2",
+      "name": "GPT Image 2",
+      "modality": "image",
+      "vendor": "openai",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "Standard quality (fal carries the High tier separately)",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 5.3
+        },
+        {
+          "provider": "kunavo",
+          "unit": "image",
+          "cents": 6.33
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 9.375
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-image-2-high",
+      "name": "GPT Image 2 (High)",
+      "modality": "image",
+      "vendor": "openai",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 21.1
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 21
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-image-1-5",
+      "name": "GPT Image 1.5",
+      "modality": "image",
+      "vendor": "openai",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 3.4
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 3.39
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedream-4-5",
+      "name": "Seedream 4",
+      "modality": "image",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 3.0
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 3
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedream-5-lite",
+      "name": "Seedream 5.0 Lite",
+      "modality": "image",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 3.5
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 3.5
+        }
+      ]
+    },
+    {
+      "id": "recraft/v3",
+      "name": "Recraft V3",
+      "modality": "image",
+      "vendor": "recraft",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 4.0
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 4
+        }
+      ]
+    },
+    {
+      "id": "recraft/v4-1",
+      "name": "Recraft V4.1",
+      "modality": "image",
+      "vendor": "recraft",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 25.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 4
+        }
+      ]
+    },
+    {
+      "id": "ideogram/v3-balanced",
+      "name": "Ideogram V3 Balanced",
+      "modality": "image",
+      "vendor": "ideogram",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 6.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 6
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 6
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-image-3",
+      "name": "Kling IMAGE 3.0",
+      "modality": "image",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 2.8
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 2.8
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-image-o3",
+      "name": "Kling IMAGE O3",
+      "modality": "image",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 2.8
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 2.8
+        }
+      ]
+    },
+    {
+      "id": "xai/grok-image-quality",
+      "name": "Grok Imagine (Quality)",
+      "modality": "image",
+      "vendor": "xai",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 7.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 5
+        }
+      ]
+    },
+    {
+      "id": "runway/gen-4-image",
+      "name": "Runway Gen-4 Image",
+      "modality": "image",
+      "vendor": "runway",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 8.0
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "fal/birefnet",
+      "name": "BiRefNet Background Removal",
+      "modality": "image",
+      "vendor": "fal",
+      "license": "open",
+      "kind": "bg-removal",
+      "routes": [
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 0.5
+        }
+      ]
+    },
+    {
+      "id": "bria/rmbg-2",
+      "name": "Bria RMBG 2.0",
+      "modality": "image",
+      "vendor": "bria",
+      "license": "proprietary",
+      "kind": "bg-removal",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 1.8
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 1.8
+        }
+      ]
+    },
+    {
+      "id": "fal/clarity-upscaler",
+      "name": "Clarity Upscaler",
+      "modality": "image",
+      "vendor": "fal",
+      "license": "open",
+      "kind": "upscale",
+      "routes": [
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 5
+        }
+      ]
+    },
+    {
+      "id": "lightricks/ltx-2",
+      "name": "LTX-2",
+      "modality": "video",
+      "vendor": "lightricks",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 30
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 6
+        }
+      ]
+    },
+    {
+      "id": "lightricks/ltx-2-i2v",
+      "name": "LTX-2 (I2V)",
+      "modality": "video",
+      "vendor": "lightricks",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 30
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 6
+        }
+      ]
+    },
+    {
+      "id": "tencent/hunyuan-video-1-5",
+      "name": "HunyuanVideo 1.5",
+      "modality": "video",
+      "vendor": "tencent",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "runware",
+          "unit": "second",
+          "cents": 2.33
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2-2-i2v",
+      "name": "WAN 2.2 (I2V)",
+      "modality": "video",
+      "vendor": "alibaba",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 50
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2-2-t2v",
+      "name": "WAN 2.2 (T2V)",
+      "modality": "video",
+      "vendor": "alibaba",
+      "license": "open",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 50
+        },
+        {
+          "provider": "runware",
+          "unit": "second",
+          "cents": 5.77
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2-5-i2v",
+      "name": "WAN 2.5 (I2V)",
+      "modality": "video",
+      "vendor": "alibaba",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 75
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 15
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2-5-t2v",
+      "name": "WAN 2.5 (T2V)",
+      "modality": "video",
+      "vendor": "alibaba",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 75
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 15
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2-7-t2v",
+      "name": "WAN 2.7",
+      "modality": "video",
+      "vendor": "alibaba",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 75
+        },
+        {
+          "provider": "runware",
+          "unit": "second",
+          "cents": 15
+        }
+      ]
+    },
+    {
+      "id": "google/veo-3-1",
+      "name": "Veo 3.1",
+      "modality": "video",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "Kunavo bills flat per clip (~8s, SKU unverified); fal is veo3.1 per second, 1080p audio-on (20¢/s audio-off)",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 200
+        },
+        {
+          "provider": "kunavo",
+          "unit": "call",
+          "cents": 32
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 40
+        }
+      ]
+    },
+    {
+      "id": "google/veo-3-1-lite",
+      "name": "Veo 3.1 Lite",
+      "modality": "video",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "Kunavo flat per clip (SKU unverified); fal per second",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 40
+        },
+        {
+          "provider": "kunavo",
+          "unit": "call",
+          "cents": 16
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "google/veo-3-quality",
+      "name": "Veo 3 Quality",
+      "modality": "video",
+      "vendor": "google",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "Kunavo only — flat per clip (SKU unverified)",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 200
+        },
+        {
+          "provider": "kunavo",
+          "unit": "call",
+          "cents": 192
+        }
+      ]
+    },
+    {
+      "id": "openai/sora-2",
+      "name": "Sora 2",
+      "modality": "video",
+      "vendor": "openai",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 50
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 10
+        }
+      ],
+      "note": "Official is Sora 2 at 720p (base has no 1080p tier)."
+    },
+    {
+      "id": "openai/sora-2-i2v",
+      "name": "Sora 2 (I2V)",
+      "modality": "video",
+      "vendor": "openai",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 50
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 10
+        }
+      ],
+      "note": "Official is Sora 2 at 720p (base has no 1080p tier)."
+    },
+    {
+      "id": "bytedance/seedance-v1-lite",
+      "name": "Seedance Lite",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 3.6
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-v1-pro",
+      "name": "Seedance 1.0 Pro",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 61
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 12.4
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-v1-pro-i2v",
+      "name": "Seedance 1.0 Pro (I2V)",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 61
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 12.4
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-2-0",
+      "name": "Seedance 2.0",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 187
+        },
+        {
+          "provider": "runware",
+          "unit": "second",
+          "cents": 24.19
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-2-0-fast",
+      "name": "Seedance 2.0 Fast",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 60
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 24.19
+        }
+      ],
+      "note": "Official at native 720p (1080p not supported on Fast)."
+    },
+    {
+      "id": "bytedance/seedance-2-0-fast-i2v",
+      "name": "Seedance 2.0 Fast (I2V)",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 60
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 24.19
+        }
+      ],
+      "note": "Official at native 720p (1080p not supported on Fast)."
+    },
+    {
+      "id": "kuaishou/kling-v3-pro",
+      "name": "Kling V3 Pro",
+      "modality": "video",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 11.2
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-v3-pro-i2v",
+      "name": "Kling V3 Pro (I2V)",
+      "modality": "video",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 11.2
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-v26-pro-i2v",
+      "name": "Kling 2.6 Pro (I2V)",
+      "modality": "video",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 7
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-v21-master",
+      "name": "Kling 2.1 Master",
+      "modality": "video",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 28
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-v21-master-i2v",
+      "name": "Kling 2.1 Master (I2V)",
+      "modality": "video",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 28
+        }
+      ]
+    },
+    {
+      "id": "kuaishou/kling-motion-control",
+      "name": "Kling Motion Control",
+      "modality": "video",
+      "vendor": "kuaishou",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 56
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 9.8
+        }
+      ]
+    },
+    {
+      "id": "minimax/hailuo-02-standard",
+      "name": "Hailuo 02 Standard",
+      "modality": "video",
+      "vendor": "minimax",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 27
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 4.5
+        }
+      ],
+      "note": "Official = nearest tier: 768p, 6s (no 5s/1080p SKU)."
+    },
+    {
+      "id": "minimax/hailuo-02-pro",
+      "name": "Hailuo 02 Pro",
+      "modality": "video",
+      "vendor": "minimax",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 53
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 8
+        }
+      ],
+      "note": "Official = nearest tier: 1080p, 6s (no 5s SKU)."
+    },
+    {
+      "id": "minimax/hailuo-2-3-pro",
+      "name": "Hailuo 2.3 Pro",
+      "modality": "video",
+      "vendor": "minimax",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 53
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 9.8
+        }
+      ],
+      "note": "Official = nearest tier: 1080p, 6s (no 5s SKU)."
+    },
+    {
+      "id": "pixverse/v5-5-i2v",
+      "name": "PixVerse v5.5 (I2V)",
+      "modality": "video",
+      "vendor": "pixverse",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 60
+        },
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "pixverse/v6",
+      "name": "PixVerse V6",
+      "modality": "video",
+      "vendor": "pixverse",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "call",
+          "cents": 45
+        },
+        {
+          "provider": "runware",
+          "unit": "second",
+          "cents": 8
+        }
+      ]
+    },
+    {
+      "id": "luma/ray-2-i2v",
+      "name": "Luma Ray 2 (I2V)",
+      "modality": "video",
+      "vendor": "luma",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "fal",
+          "unit": "second",
+          "cents": 40
+        }
+      ]
+    }
   ],
   "_textNote": "Text LLM cross-provider pricing, mirror of README.md 'Text model pricing' (verified 2026-05). inUsd/outUsd = USD per 1M tokens. OpenRouter passes list price (= official); Kunavo is a flat 20% off official (Anthropic + Google only); TokenMart varies 15–65% off and is shown only where the README gives an explicit effective rate. Ranked cheapest by blended in+out. Re-probe before routing — list price ≠ effective price.",
   "textProviders": {
-    "openrouter": { "label": "OpenRouter", "link": "https://openrouter.ai" },
-    "kunavo": { "label": "Kunavo", "link": "https://kunavo.com/?ref=victorimf" },
-    "tokenmart": { "label": "TokenMart", "link": "https://thetokenmart.ai" }
+    "official": {
+      "label": "Official"
+    },
+    "openrouter": {
+      "label": "OpenRouter",
+      "link": "https://openrouter.ai"
+    },
+    "kunavo": {
+      "label": "Kunavo",
+      "link": "https://kunavo.com/?ref=victorimf"
+    },
+    "tokenmart": {
+      "label": "TokenMart",
+      "link": "https://thetokenmart.ai"
+    }
   },
   "textModels": [
-    { "id": "google/gemini-3-flash", "name": "Gemini 3 Flash", "vendor": "google", "license": "proprietary", "routes": [ { "provider": "openrouter", "inUsd": 0.5, "outUsd": 3.0 }, { "provider": "kunavo", "inUsd": 0.4, "outUsd": 2.4 } ] },
-    { "id": "google/gemini-3-pro", "name": "Gemini 3 Pro", "vendor": "google", "license": "proprietary", "note": "incl. Gemini 3.1 Pro", "routes": [ { "provider": "openrouter", "inUsd": 2.0, "outUsd": 12.0 }, { "provider": "kunavo", "inUsd": 1.6, "outUsd": 9.6 }, { "provider": "tokenmart", "inUsd": 2.4, "outUsd": 9.6 } ] },
-    { "id": "google/gemini-2-5-pro", "name": "Gemini 2.5 Pro", "vendor": "google", "license": "proprietary", "routes": [ { "provider": "openrouter", "inUsd": 1.25, "outUsd": 10.0 }, { "provider": "kunavo", "inUsd": 1.0, "outUsd": 8.0 } ] },
-    { "id": "google/gemini-2-5-flash", "name": "Gemini 2.5 Flash", "vendor": "google", "license": "proprietary", "routes": [ { "provider": "openrouter", "inUsd": 0.3, "outUsd": 2.5 }, { "provider": "kunavo", "inUsd": 0.24, "outUsd": 2.0 } ] },
-    { "id": "anthropic/claude-opus-4-7", "name": "Claude Opus 4.7", "vendor": "anthropic", "license": "proprietary", "note": "TokenMart is dramatically cheaper here (~−70% list)", "routes": [ { "provider": "openrouter", "inUsd": 15.0, "outUsd": 75.0 }, { "provider": "kunavo", "inUsd": 12.0, "outUsd": 60.0 }, { "provider": "tokenmart", "inUsd": 4.25, "outUsd": 21.25 } ] },
-    { "id": "anthropic/claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "vendor": "anthropic", "license": "proprietary", "routes": [ { "provider": "openrouter", "inUsd": 3.0, "outUsd": 15.0 }, { "provider": "kunavo", "inUsd": 2.4, "outUsd": 12.0 }, { "provider": "tokenmart", "inUsd": 2.55, "outUsd": 12.75 } ] },
-    { "id": "anthropic/claude-haiku-4-5", "name": "Claude Haiku 4.5", "vendor": "anthropic", "license": "proprietary", "routes": [ { "provider": "openrouter", "inUsd": 1.0, "outUsd": 5.0 }, { "provider": "kunavo", "inUsd": 0.8, "outUsd": 4.0 } ] },
-    { "id": "deepseek/deepseek-v4", "name": "DeepSeek V4", "vendor": "deepseek", "license": "open", "note": "Kunavo doesn't carry DeepSeek — routes to OpenRouter list", "routes": [ { "provider": "openrouter", "inUsd": 0.43, "outUsd": 0.87 } ] }
+    {
+      "id": "openai/gpt-4.1",
+      "name": "GPT-4.1",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 2.0,
+          "outUsd": 8.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 2.0,
+          "outUsd": 8.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.2,
+          "outUsd": 4.8
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-4.1-mini",
+      "name": "GPT-4.1 mini",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.4,
+          "outUsd": 1.6
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.4,
+          "outUsd": 1.6
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.24,
+          "outUsd": 0.96
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5",
+      "name": "GPT-5",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.25,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.25,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.75,
+          "outUsd": 6
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5-mini",
+      "name": "GPT-5 mini",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.25,
+          "outUsd": 2.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.25,
+          "outUsd": 2.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.15,
+          "outUsd": 1.2
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5-nano",
+      "name": "GPT-5 nano",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.05,
+          "outUsd": 0.4
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.05,
+          "outUsd": 0.4
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.03,
+          "outUsd": 0.24
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.1",
+      "name": "GPT-5.1",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.25,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.25,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.75,
+          "outUsd": 6
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.2",
+      "name": "GPT-5.2",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.75,
+          "outUsd": 14.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.75,
+          "outUsd": 14.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.05,
+          "outUsd": 8.4
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.2-codex",
+      "name": "GPT-5.2 Codex",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.75,
+          "outUsd": 14.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.75,
+          "outUsd": 14.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.05,
+          "outUsd": 8.4
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.3-codex",
+      "name": "GPT-5.3 Codex",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.75,
+          "outUsd": 14.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.75,
+          "outUsd": 14.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 0.7,
+          "outUsd": 5.6
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.05,
+          "outUsd": 8.4
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.4",
+      "name": "GPT-5.4",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 2.5,
+          "outUsd": 15.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 2.5,
+          "outUsd": 15.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 1.0,
+          "outUsd": 6.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.5,
+          "outUsd": 9
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.4-mini",
+      "name": "GPT-5.4 mini",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.75,
+          "outUsd": 4.5
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.75,
+          "outUsd": 4.5
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 0.225,
+          "outUsd": 1.35
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.45,
+          "outUsd": 2.7
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.4-nano",
+      "name": "GPT-5.4 nano",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.2,
+          "outUsd": 1.25
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.2,
+          "outUsd": 1.25
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.12,
+          "outUsd": 0.75
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.5",
+      "name": "GPT-5.5",
+      "vendor": "openai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 5.0,
+          "outUsd": 30.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 5.0,
+          "outUsd": 30.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 2.0,
+          "outUsd": 12.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 3,
+          "outUsd": 18
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5",
+      "vendor": "anthropic",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.0,
+          "outUsd": 5.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.0,
+          "outUsd": 5.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 0.4,
+          "outUsd": 2.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.65,
+          "outUsd": 3.25
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6",
+      "vendor": "anthropic",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 3.0,
+          "outUsd": 15.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 3.0,
+          "outUsd": 15.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 1.2,
+          "outUsd": 6.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.95,
+          "outUsd": 9.75
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-opus-4-6",
+      "name": "Claude Opus 4.6",
+      "vendor": "anthropic",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 5.0,
+          "outUsd": 25.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 5.0,
+          "outUsd": 25.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 2.0,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 3.25,
+          "outUsd": 16.25
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-opus-4-7",
+      "name": "Claude Opus 4.7",
+      "vendor": "anthropic",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 5.0,
+          "outUsd": 25.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 5.0,
+          "outUsd": 25.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 2.0,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 3.25,
+          "outUsd": 16.25
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-opus-4-8",
+      "name": "Claude Opus 4.8",
+      "vendor": "anthropic",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 5.0,
+          "outUsd": 25.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 5.0,
+          "outUsd": 25.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 3.25,
+          "outUsd": 16.25
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.3,
+          "outUsd": 2.5
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.3,
+          "outUsd": 2.5
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 0.09,
+          "outUsd": 0.75
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.18,
+          "outUsd": 1.5
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-2.5-flash-lite",
+      "name": "Gemini 2.5 Flash-Lite",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.1,
+          "outUsd": 0.4
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.1,
+          "outUsd": 0.4
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.06,
+          "outUsd": 0.24
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.25,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.25,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "kunavo",
+          "inUsd": 0.375,
+          "outUsd": 3.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.75,
+          "outUsd": 6
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3-flash-preview",
+      "name": "Gemini 3 Flash",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.5,
+          "outUsd": 3.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.5,
+          "outUsd": 3.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.3,
+          "outUsd": 1.8
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3-pro-preview",
+      "name": "Gemini 3 Pro",
+      "vendor": "google",
+      "license": "proprietary",
+      "note": "Official = Gemini 3 Pro ≤200k tier.",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 2.0,
+          "outUsd": 12.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.2,
+          "outUsd": 7.2
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3.1-flash-lite",
+      "name": "Gemini 3.1 Flash-Lite",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.25,
+          "outUsd": 1.5
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.25,
+          "outUsd": 1.5
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.15,
+          "outUsd": 0.9
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 2.0,
+          "outUsd": 12.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 2.0,
+          "outUsd": 12.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.2,
+          "outUsd": 7.2
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash",
+      "vendor": "google",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.5,
+          "outUsd": 9.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.5,
+          "outUsd": 9.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.9,
+          "outUsd": 5.4
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-4.5",
+      "name": "GLM-4.5",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.6,
+          "outUsd": 2.2
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.6,
+          "outUsd": 2.2
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.36,
+          "outUsd": 1.32
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-4.5-air",
+      "name": "GLM-4.5-Air",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.2,
+          "outUsd": 1.1
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.125,
+          "outUsd": 0.85
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.078,
+          "outUsd": 0.51
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-4.6",
+      "name": "GLM-4.6",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.6,
+          "outUsd": 2.2
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.43,
+          "outUsd": 1.74
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.258,
+          "outUsd": 1.044
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-4.7",
+      "name": "GLM-4.7",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.6,
+          "outUsd": 2.2
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.4,
+          "outUsd": 1.75
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.24,
+          "outUsd": 1.05
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-5",
+      "name": "GLM-5",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.0,
+          "outUsd": 3.2
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.6,
+          "outUsd": 2.08
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.36,
+          "outUsd": 1.248
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-5-turbo",
+      "name": "GLM-5-Turbo",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.2,
+          "outUsd": 4.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.2,
+          "outUsd": 4.0
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.72,
+          "outUsd": 2.4
+        }
+      ]
+    },
+    {
+      "id": "zai/glm-5.1",
+      "name": "GLM-5.1",
+      "vendor": "zai",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.4,
+          "outUsd": 4.4
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.98,
+          "outUsd": 3.08
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.63,
+          "outUsd": 2.1
+        }
+      ]
+    },
+    {
+      "id": "alibaba/qwen3.5-flash",
+      "name": "Qwen3.5 Flash",
+      "vendor": "alibaba",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.1,
+          "outUsd": 0.4
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.065,
+          "outUsd": 0.26
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.07,
+          "outUsd": 0.28
+        }
+      ]
+    },
+    {
+      "id": "alibaba/qwen3.5-plus",
+      "name": "Qwen3.5 Plus",
+      "vendor": "alibaba",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.4,
+          "outUsd": 2.4
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.26,
+          "outUsd": 1.56
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.21,
+          "outUsd": 1.26
+        }
+      ]
+    },
+    {
+      "id": "alibaba/qwen3.7-max",
+      "name": "Qwen3.7 Max",
+      "vendor": "alibaba",
+      "license": "open",
+      "note": "No first-party Alibaba list price found; OpenRouter shown as reference.",
+      "routes": [
+        {
+          "provider": "openrouter",
+          "inUsd": 1.25,
+          "outUsd": 3.75
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.75,
+          "outUsd": 5.25
+        }
+      ]
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash",
+      "vendor": "deepseek",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.14,
+          "outUsd": 0.28
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.0983,
+          "outUsd": 0.1966
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.0882,
+          "outUsd": 0.1764
+        }
+      ]
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro",
+      "vendor": "deepseek",
+      "license": "open",
+      "note": "Official reflects DeepSeek's permanent price (the launch promo became standard on 2026-05-31, 1/4 of original list).",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.435,
+          "outUsd": 0.87
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.435,
+          "outUsd": 0.87
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.435,
+          "outUsd": 0.87
+        }
+      ]
+    },
+    {
+      "id": "moonshot/kimi-k2.5",
+      "name": "Kimi K2.5",
+      "vendor": "moonshot",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.6,
+          "outUsd": 3.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.4,
+          "outUsd": 1.9
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.42,
+          "outUsd": 2.1
+        }
+      ]
+    },
+    {
+      "id": "moonshot/kimi-k2.6",
+      "name": "Kimi K2.6",
+      "vendor": "moonshot",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.95,
+          "outUsd": 4.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.684,
+          "outUsd": 3.42
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.63,
+          "outUsd": 2.8
+        }
+      ]
+    },
+    {
+      "id": "minimax/minimax-m2.5",
+      "name": "MiniMax M2.5",
+      "vendor": "minimax",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.3,
+          "outUsd": 1.2
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.15,
+          "outUsd": 1.15
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.2432,
+          "outUsd": 0.9704
+        }
+      ]
+    },
+    {
+      "id": "minimax/minimax-m2.7",
+      "name": "MiniMax M2.7",
+      "vendor": "minimax",
+      "license": "open",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 0.3,
+          "outUsd": 1.2
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 0.279,
+          "outUsd": 1.2
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 0.2432,
+          "outUsd": 0.9704
+        }
+      ]
+    },
+    {
+      "id": "xai/grok-4.3",
+      "name": "Grok 4.3",
+      "vendor": "xai",
+      "license": "proprietary",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 1.25,
+          "outUsd": 2.5
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 1.25,
+          "outUsd": 2.5
+        },
+        {
+          "provider": "tokenmart",
+          "inUsd": 1.2,
+          "outUsd": 2.5
+        }
+      ]
+    }
   ]
 }

@@ -69,15 +69,19 @@ export default function Prices() {
         <PriceTable rows={rows} columns={columns} textRows={textRows} textColumns={textColumns} />
 
         <p style={{ color: "var(--faint)", fontSize: 12.5, marginTop: 24, lineHeight: 1.7 }}>
-          <b style={{ color: "var(--muted)" }}>Notes.</b> Prices are list rates at the time of
-          writing, normalized to {REFERENCE_LABEL}; verify against each provider before relying on
-          them. Text rates are per 1M tokens (input / output): OpenRouter passes list price through,
-          Kunavo is a flat −20% on Anthropic + Google, and TokenMart varies 15–65% off (shown only
-          where an explicit effective rate is published). Video is the trickiest media comparison —
-          Kunavo bills a flat <em>per-call</em> fee while fal/Runware bill <em>per-second</em>; at the
-          5-second reference the per-call price often wins, but duration, resolution and audio tiers
-          differ by SKU. License tags are best-effort (<em>open</em> = downloadable weights,{" "}
-          <em>proprietary</em> = API-only). List price ≠ effective price — re-probe before routing.
+          <b style={{ color: "var(--muted)" }}>Notes.</b> Text rates are per 1M tokens (input /
+          output). <b>Official</b> is the model maker&apos;s own first-party list price (OpenAI,
+          Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>, <b>Kunavo</b> and{" "}
+          <b>TokenMart</b> are pulled live from each provider&apos;s <code>/v1/models</code>. The{" "}
+          <b style={{ color: "var(--green)" }}>green</b> cell + <em>Best</em> column mark the cheapest
+          buyable route and its discount versus Official. A listed price ≠ a working route — some
+          discount upstreams aren&apos;t provisioned and 502 in practice, so re-probe before routing;
+          the live status page tracks which are actually up. Image &amp; video models are normalized
+          to {REFERENCE_LABEL} instead (Kunavo bills a flat <em>per-call</em> fee while fal/Runware
+          bill <em>per-second</em>); their <b>Official</b> column is the maker&apos;s first-party API
+          rate at the closest standard tier (open-weight models with no first-party API show
+          &ldquo;—&rdquo;), so it&apos;s a directional reference, not a SKU-exact match. License tags
+          are best-effort (<em>open</em> = downloadable weights, <em>proprietary</em> = API-only).
         </p>
       </main>
     </>
