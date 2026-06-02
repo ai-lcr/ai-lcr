@@ -276,4 +276,34 @@ describe("createMediaLCR routing", () => {
     ]);
     expect(rec.attempts[0].errorClass).toBeTruthy();
   });
+
+  it("baselines against an inline official price (the go-direct cost), not the priciest route", async () => {
+    const onCall = vi.fn();
+    const generate = createMediaLCR({
+      registry: {
+        "x/img": {
+          ...registry["x/img"]!,
+          official: { unit: "image", cents: 20 }, // direct price 20¢ ≫ priciest route 9¢
+        },
+      },
+      adapters: { cheap: okAdapter("cheap"), pricey: okAdapter("pricey") },
+      onCall,
+    });
+    await generate("x/img", { prompt: "hi" });
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.costUsd).toBeCloseTo(0.02, 6); // served by cheapest, 2¢
+    expect(rec.baselineUsd).toBeCloseTo(0.2, 6); // savings vs official 20¢, not 9¢
+  });
+
+  it("baselines from the officialPrices map when the def carries no inline price", async () => {
+    const onCall = vi.fn();
+    const generate = createMediaLCR({
+      registry,
+      adapters: { cheap: okAdapter("cheap"), pricey: okAdapter("pricey") },
+      officialPrices: { "x/img": { unit: "image", cents: 15 } },
+      onCall,
+    });
+    await generate("x/img", { prompt: "hi" });
+    expect(onCall.mock.calls[0]![0].baselineUsd).toBeCloseTo(0.15, 6);
+  });
 });

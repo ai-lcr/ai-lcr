@@ -4,6 +4,28 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-06-02
+
+All additions are optional and backward compatible.
+
+### Added
+
+- **Official-price savings baseline for media.** A media model's savings baseline
+  is now the model-maker's first-party list price — what a user pays going
+  *direct*, bypassing the cheaper providers we route to — instead of the priciest
+  provider we happen to route between. For the common case of a model served by a
+  single aggregator (Runware, fal, …), the old baseline equalled the actual cost,
+  so savings showed as `$0`; the official price surfaces the real saving.
+  - `MediaModelDef.official?: MediaPricing` — an inline first-party price on a
+    model def. When set, it wins.
+  - `MediaLCRConfig.officialPrices?: Record<string, MediaPricing>` — a modelId →
+    price map so a downstream registry gets correct baselines without inlining
+    prices. Defaults to the bundled **`OFFICIAL_PRICES`** (now exported), lifted
+    from the cross-provider price table by `scripts/gen-media-official.mjs`.
+  - When no official price is known (e.g. open-weight models served only by
+    aggregators), the baseline falls back to the priciest configured route — or
+    none if there's a single route — exactly as before.
+
 ## [0.4.0] — 2026-06-02
 
 All additions are optional and backward compatible.

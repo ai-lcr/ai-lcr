@@ -54,6 +54,7 @@ export type {
   MediaRunResult,
 } from "./media";
 export { MEDIA_PRICING } from "./media-registry";
+export { OFFICIAL_PRICES } from "./media-official";
 export { createKunavoMediaAdapter } from "./adapters/kunavo-media";
 export { createRunwareMediaAdapter } from "./adapters/runware-media";
 export { createFalMediaAdapter } from "./adapters/fal-media";
