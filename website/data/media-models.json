@@ -534,7 +534,8 @@
           "unit": "image",
           "cents": 3
         }
-      ]
+      ],
+      "note": "Replicate lists $0.03/img vs $0.075 at Official/Runware/WaveSpeed — a 2.5× gap worth verifying (likely a smaller default resolution)."
     },
     {
       "id": "hidream/hidream-i1-fast",
@@ -812,7 +813,8 @@
           "unit": "image",
           "cents": 12.8
         }
-      ]
+      ],
+      "note": "Replicate bills gpt-image-2 by token at auto quality (~$0.128); fal/WaveSpeed/Official quote the fixed High-1K tier (~$0.21) — Replicate's effective detail can be lower."
     },
     {
       "id": "openai/gpt-image-1-5",
