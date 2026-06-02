@@ -73,15 +73,20 @@ export default function Prices() {
           output). <b>Official</b> is the model maker&apos;s own first-party list price (OpenAI,
           Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>,{" "}
           <b>TokenMart</b> and <b>DeepInfra</b> are pulled live from each provider&apos;s <code>/v1/models</code>. The{" "}
-          <b style={{ color: "var(--green)" }}>green</b> cell + <em>Best</em> column mark the cheapest
-          buyable route and its discount versus Official. A listed price ≠ a working route — some
+          <b style={{ color: "var(--green)" }}>green</b> cell + <em>Best&nbsp;Value</em> column mark the
+          cheapest buyable route and its discount versus Official. A listed price ≠ a working route — some
           discount upstreams aren&apos;t provisioned and 502 in practice, so re-probe before routing;
           the live status page tracks which are actually up. Image &amp; video models are normalized
           to {REFERENCE_LABEL} instead (Kunavo bills a flat <em>per-call</em> fee while fal/Runware
           bill <em>per-second</em>); their <b>Official</b> column is the maker&apos;s first-party API
           rate at the closest standard tier (open-weight models with no first-party API show
-          &ldquo;—&rdquo;), so it&apos;s a directional reference, not a SKU-exact match. License tags
-          are best-effort (<em>open</em> = downloadable weights, <em>proprietary</em> = API-only).
+          &ldquo;—&rdquo;), so it&apos;s a directional reference, not a SKU-exact match.{" "}
+          <b style={{ color: "var(--muted)" }}>Same model, different SKU:</b> aggregators (fal, Runware,
+          WaveSpeed, Replicate) sometimes quote a different resolution, duration, quality tier, or a
+          distilled &ldquo;fast&rdquo; variant — so a cheaper cell isn&apos;t always the same output.
+          Rows where the basis doesn&apos;t line up carry an <em>italic note</em> spelling out the
+          difference; trust those over the raw number. License tags are best-effort (<em>open</em> =
+          downloadable weights, <em>proprietary</em> = API-only).
         </p>
       </main>
     </>

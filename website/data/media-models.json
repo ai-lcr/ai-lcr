@@ -755,7 +755,7 @@
       "vendor": "openai",
       "license": "proprietary",
       "kind": "generate",
-      "note": "Standard quality (fal carries the High tier separately)",
+      "note": "Quality tiers differ: Official/WaveSpeed are medium-1K; Replicate bills per token at auto/high. Match quality before comparing.",
       "routes": [
         {
           "provider": "official",
@@ -1072,7 +1072,8 @@
           "unit": "image",
           "cents": 2
         }
-      ]
+      ],
+      "note": "Cross-tier — this row is the Quality tier (Official $0.07/img). WaveSpeed/Replicate quote the standard Grok image tier (~$0.02), not Quality, so their lower price isn't like-for-like."
     },
     {
       "id": "runway/gen-4-image",
@@ -1102,7 +1103,8 @@
           "unit": "image",
           "cents": 5
         }
-      ]
+      ],
+      "note": "Replicate's $0.05 is 720p; Official/fal/Runware/WaveSpeed are 1080p ($0.08). At equal 1080p, Replicate is ~$0.08 too."
     },
     {
       "id": "fal/birefnet",
@@ -1267,7 +1269,8 @@
           "unit": "call",
           "cents": 100
         }
-      ]
+      ],
+      "note": "WAN 2.2 is 720p-only at every provider (no 1080p tier); per-clip prices still vary a lot by host."
     },
     {
       "id": "alibaba/wan-2-2-t2v",
@@ -1297,7 +1300,8 @@
           "unit": "call",
           "cents": 10
         }
-      ]
+      ],
+      "note": "Replicate's $0.10 is the distilled wan-2.2-t2v-fast variant — not the full model WaveSpeed/Runware price at 720p."
     },
     {
       "id": "alibaba/wan-2-5-i2v",
@@ -1387,7 +1391,8 @@
           "unit": "call",
           "cents": 50
         }
-      ]
+      ],
+      "note": "Replicate bills a flat $0.10/sec (resolution-agnostic); the others are $0.15/sec at 1080p."
     },
     {
       "id": "google/veo-3-1",
@@ -1698,7 +1703,7 @@
           "cents": 75
         }
       ],
-      "note": "Official at native 720p (1080p not supported on Fast)."
+      "note": "Fast has no 1080p tier: Official & Replicate are 720p; WaveSpeed's $2.50 is a 1080p quote, so it's not comparable."
     },
     {
       "id": "bytedance/seedance-2-0-fast-i2v",
@@ -1729,7 +1734,7 @@
           "cents": 75
         }
       ],
-      "note": "Official at native 720p (1080p not supported on Fast)."
+      "note": "Fast has no 1080p tier: Official & Replicate are 720p; WaveSpeed's $2.50 is a 1080p quote, so it's not comparable."
     },
     {
       "id": "kuaishou/kling-v3-pro",
@@ -1909,7 +1914,8 @@
           "unit": "call",
           "cents": 35
         }
-      ]
+      ],
+      "note": "Prices span different Kling versions/tiers (v2.6 vs v3, std vs pro) — not a like-for-like motion-control SKU."
     },
     {
       "id": "minimax/hailuo-02-standard",
@@ -2082,7 +2088,8 @@
           "unit": "call",
           "cents": 90
         }
-      ]
+      ],
+      "note": "WaveSpeed bills Ray 2 flat per-clip (~$0.20, 720p); Replicate/fal bill per-second — the flat rate wins at 5s but isn't a per-second comparison."
     }
   ],
   "_textNote": "Text LLM cross-provider pricing, mirror of README.md 'Text model pricing' (verified 2026-05). inUsd/outUsd = USD per 1M tokens. OpenRouter passes list price (= official); Kunavo is a flat 20% off official (Anthropic + Google only); TokenMart varies 15–65% off and is shown only where the README gives an explicit effective rate. Ranked cheapest by blended in+out. Re-probe before routing — list price ≠ effective price.",
