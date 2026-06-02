@@ -22,8 +22,18 @@ import type {
 
 /** USD per 1M tokens. */
 export interface ProviderCost {
+  /** USD per 1M input (prompt) tokens. */
   input: number;
+  /** USD per 1M output (completion) tokens. */
   output: number;
+  /**
+   * USD per 1M *cached* input tokens read (prompt-cache hits). Optional. When a
+   * call reports `usage.inputTokens.cacheRead`, those tokens are billed at this
+   * rate instead of `input` — so the cost stays honest for cache-heavy traffic
+   * (e.g. Anthropic, where a cache read is ~0.1× the input price). Omit it and
+   * cached tokens fall back to the full `input` rate (the pre-0.3 behavior).
+   */
+  cacheRead?: number;
 }
 
 export interface RoutedProvider {
@@ -94,15 +104,36 @@ export interface CallRecord {
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Cached input (prompt-cache) tokens the winner read, when the provider
+   * reported them (`usage.inputTokens.cacheRead`). Present only when > 0. Lets
+   * the dashboard show cache-hit volume and audit why `costUsd` is lower than
+   * sticker × tokens. Undefined when the provider reports no cache info.
+   */
+  cachedInputTokens?: number;
   /** Computed from the winner's `cost`; 0 if no price was given or the call failed. */
   costUsd: number;
   /**
-   * What the same request would have cost on the most expensive configured
-   * provider — the savings baseline (`baselineUsd - costUsd`). Set by the media
-   * router; the text router omits it (left undefined) until a per-call text
-   * baseline lands. Optional so both routers share one {@link CallRecord} shape.
+   * What the same request would have cost on the most expensive *priced*
+   * provider in the chain, on identical token usage — the savings baseline
+   * (`baselineUsd - costUsd`). Set by both routers whenever at least one
+   * provider carries a `cost`; undefined only when no provider was priced.
    */
   baselineUsd?: number;
+  /**
+   * Caller-supplied correlation id, read from `providerOptions.lcr.requestId`
+   * on the call. Multi-step tool loops emit one record per `doStream`/
+   * `doGenerate` step; stamp the same `requestId` on every step to let the
+   * dashboard roll a whole user request up into one cost/`calls` figure.
+   */
+  requestId?: string;
+  /**
+   * True when the winner served OK but reported **zero** input *and* output
+   * tokens — i.e. the provider didn't emit usage. A silent danger: `costUsd`
+   * collapses to 0 and any token-based credit metering under-charges with no
+   * other signal. Treat a flagged record as "cost unknown", not "free".
+   */
+  usageMissing?: boolean;
 }
 
 export interface FallbackOptions {
@@ -328,6 +359,36 @@ interface CallCtx {
   id: string;
   attempts: RouteAttempt[];
   startedAt: number;
+  /** Caller-supplied correlation id from `providerOptions.lcr.requestId`, if any. */
+  requestId?: string;
+}
+
+/**
+ * Cost of one settled call on a given price, honoring prompt-cache reads:
+ * cached input tokens bill at `cost.cacheRead` when set (else the full `input`
+ * rate — pre-0.3 behavior). Pure; reused for the winner's cost AND the
+ * baseline (most-expensive-provider) figure so both stay consistent.
+ */
+function costForUsage(
+  cost: ProviderCost,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+): number {
+  const cached = Math.min(Math.max(cacheReadTokens, 0), inputTokens);
+  const fullInput = inputTokens - cached;
+  const cachedRate = cost.cacheRead ?? cost.input;
+  return (
+    (fullInput / 1e6) * cost.input +
+    (cached / 1e6) * cachedRate +
+    (outputTokens / 1e6) * cost.output
+  );
+}
+
+/** Read a caller-supplied correlation id from `providerOptions.lcr.requestId`. */
+function requestIdFrom(options: LanguageModelV3CallOptions): string | undefined {
+  const raw = options.providerOptions?.lcr?.requestId;
+  return typeof raw === "string" && raw.length > 0 ? raw : undefined;
 }
 
 export class LcrFallbackModel implements LanguageModelV3 {
@@ -425,8 +486,13 @@ export class LcrFallbackModel implements LanguageModelV3 {
     }
   }
 
-  private startCall(): CallCtx {
-    return { id: newCallId(), attempts: [], startedAt: Date.now() };
+  private startCall(options: LanguageModelV3CallOptions): CallCtx {
+    return {
+      id: newCallId(),
+      attempts: [],
+      startedAt: Date.now(),
+      requestId: requestIdFrom(options),
+    };
   }
 
   /** Record a failed attempt onto the call's chain (no event yet). */
@@ -445,6 +511,22 @@ export class LcrFallbackModel implements LanguageModelV3 {
     });
   }
 
+  /**
+   * Baseline = what this same usage would have cost on the most expensive
+   * *priced* provider in the chain (typically the OpenRouter fallback leg). The
+   * winner's savings is `baselineUsd - costUsd`. Undefined when no provider in
+   * the chain carries a price (nothing to compare against).
+   */
+  private baselineUsd(inputTokens: number, outputTokens: number, cacheReadTokens: number): number | undefined {
+    let max: number | undefined;
+    for (const p of this.opts.providers) {
+      if (!p.cost) continue;
+      const c = costForUsage(p.cost, inputTokens, outputTokens, cacheReadTokens);
+      if (max === undefined || c > max) max = c;
+    }
+    return max;
+  }
+
   /** Winner settled: record the attempt, fire `onCost` (compat) + `onCall`. */
   private finalizeOk(
     ctx: CallCtx,
@@ -455,9 +537,13 @@ export class LcrFallbackModel implements LanguageModelV3 {
     ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
     const inputTokens = usage?.inputTokens?.total ?? 0;
     const outputTokens = usage?.outputTokens?.total ?? 0;
+    const cacheReadTokens = usage?.inputTokens?.cacheRead ?? 0;
     const costUsd = provider.cost
-      ? (inputTokens / 1e6) * provider.cost.input + (outputTokens / 1e6) * provider.cost.output
+      ? costForUsage(provider.cost, inputTokens, outputTokens, cacheReadTokens)
       : 0;
+    // Winner served but reported no usage at all → cost/credit metering would
+    // silently read 0. Surface it as a flag rather than a believable "free" row.
+    const usageMissing = inputTokens === 0 && outputTokens === 0;
     this.emitCost({
       model: this.opts.modelName,
       provider: provider.label,
@@ -475,7 +561,11 @@ export class LcrFallbackModel implements LanguageModelV3 {
       latencyMs: Date.now() - ctx.startedAt,
       inputTokens,
       outputTokens,
+      ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
       costUsd,
+      baselineUsd: this.baselineUsd(inputTokens, outputTokens, cacheReadTokens),
+      ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
+      ...(usageMissing ? { usageMissing: true } : {}),
     });
   }
 
@@ -492,13 +582,14 @@ export class LcrFallbackModel implements LanguageModelV3 {
       inputTokens: 0,
       outputTokens: 0,
       costUsd: 0,
+      ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
     });
   }
 
   async doGenerate(
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3GenerateResult> {
-    const ctx = this.startCall();
+    const ctx = this.startCall(options);
     const providers = this.opts.providers;
     const n = providers.length;
     const start = this.startIndex();
@@ -532,7 +623,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
   async doStream(
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3StreamResult> {
-    return this.doStreamWithCtx(options, this.startCall(), this.startIndex(), 0);
+    return this.doStreamWithCtx(options, this.startCall(options), this.startIndex(), 0);
   }
 
   // The stream's failover recursion re-enters here with the SAME `ctx` and a

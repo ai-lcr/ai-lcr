@@ -20,6 +20,7 @@ import {
 export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind } from "./fallback";
 export { classifyError, classifyErrorKind } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
+export { createHttpSink, type HttpSinkOptions } from "./sink";
 
 // ── Image & video Least Cost Routing (parallel to the text router above) ──
 // The text router is LanguageModelV3-bound (token-billed). Media (image/video)
