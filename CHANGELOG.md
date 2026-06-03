@@ -4,6 +4,27 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] — 2026-06-03
+
+All additions are optional and backward compatible.
+
+### Added
+
+- **`defaultCacheReadRatio` — chain-wide fallback price for prompt-cache reads.**
+  ai-lcr already detects cache hits from the provider's reported usage and emits
+  `cachedInputTokens` for any provider that reports them (Anthropic, Gemini's
+  implicit cache, DeepSeek, …). But the *saving* (`cachedSavingUsd`) and the
+  cache-discounted `costUsd` were only computed when a leg set an explicit
+  `cost.cacheRead` — so a route that forgot it (e.g. a Gemini OpenRouter leg)
+  silently reported `$0` saved and billed cached tokens at the full input rate.
+
+  `createLCR({ defaultCacheReadRatio: 0.1 })` now supplies a fallback cache-read
+  price as a fraction of each leg's `input`, applied **only** to legs that omit
+  an explicit `cacheRead`. Most providers' cache-read price is ~0.1× input, so
+  `0.1` makes cache cost + savings "just work" across every model without each
+  route hardcoding a rate. Legs with their own `cacheRead` are untouched (set it
+  for outliers like OpenAI's ~0.5×). Unset = previous behavior. Must be in [0, 1].
+
 ## [0.5.0] — 2026-06-02
 
 All additions are optional and backward compatible.
