@@ -1,0 +1,11 @@
+{
+  "title": "Providers",
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "openrouter",
+    "tokenmart",
+    "deepinfra",
+    "kunavo"
+  ]
+}

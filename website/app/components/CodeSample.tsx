@@ -9,9 +9,9 @@ const lcr = createLCR({
   autoSort: true,                  // order each model's providers cheapest-first
   models: {
     "claude-sonnet-4-6": [
-      { model: tokenmart("…"), cost: { input: 2.55, output: 12.75 } },
-      { model: kunavo("…"),    cost: { input: 2.40, output: 12.00 } },
-      { model: anthropic("…"), cost: { input: 3.00, output: 15.00 } },
+      { model: tokenmart("…"),  cost: { input: 2.55, output: 12.75 } },
+      { model: openrouter("…"), cost: { input: 2.70, output: 13.50 } },
+      { model: anthropic("…"),  cost: { input: 3.00, output: 15.00 } },
     ],
   },
   onCost: ({ provider, costUsd }) => log(provider, costUsd),  // real $ per call

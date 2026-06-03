@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr 把每个模型路由到各自最便宜的 provider——Gemini 走 Kunavo，DeepSeek 走 OpenRouter，Seedream 走 fal，Flux Schnell 走 Runware——失败时自动 fallback" width="820">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr 为每个模型维护一份「最便宜优先」的 provider 列表——默认走最便宜的（省约 40%），出错时切到下一个，约 60 秒后自动切回最便宜" width="720">
 </p>
 
 同一个模型在不同 provider 上的价格不同——而且没有任何单一 provider 在所有模型上都最便宜。`ai-lcr` 为每个模型维护一份「最便宜优先」的列表，路由到其中最便宜且健康的 provider（下表中的 ⭐），失败时向下穿透——这正是电话运营商几十年来一直在做的 [最低成本路由（Least Cost Routing）](https://en.wikipedia.org/wiki/Least-cost_routing)。
@@ -143,10 +143,6 @@ DeepInfra 只承载开源权重——没有第一方 Claude / GPT / Gemini。那
 1. **最便宜优先。** provider 按顺序依次尝试——把它们排成最便宜优先，或设置 `autoSort: true` 让它按 `cost` 自动排序。
 2. **失败时向下穿透。** 遇到可重试的错误（限流、5xx、超时）时，前进到下一个 provider，且对流式安全。硬错误（400、401、403、422）会直接透传，不做重试。
 3. **恢复。** 在一段空闲窗口（`resetIntervalMs`，默认 60s）之后，自动回到最便宜的 provider。
-
-<p align="center">
-  <img src="assets/ai-lcr-routing.svg" alt="路由示意图：最便宜优先、失败时 fallback、空闲后恢复" width="820">
-</p>
 
 ## 支持的 provider
 

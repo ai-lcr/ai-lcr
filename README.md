@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr routes each model to its own cheapest provider — Gemini to Kunavo, DeepSeek to OpenRouter, Seedream to fal, Flux Schnell to Runware — and falls back on failure" width="820">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr keeps a cheapest-first list of providers per model — serves the cheapest (saving ~40%), fails over to the next on error, and snaps back to the cheapest after ~60s" width="720">
 </p>
 
 The same model costs different amounts on different providers — and no single provider is cheapest for everything. `ai-lcr` keeps a cheapest-first list per model, routes to the cheapest healthy one (⭐ below), and falls through on failure — the way phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing) for decades.
@@ -143,10 +143,6 @@ DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. Fo
 1. **Cheapest first.** Providers are tried in order — list them cheapest-first, or set `autoSort: true` to order them by `cost` automatically.
 2. **Fall through on failure.** On a retryable error — rate limit, 5xx, timeout, or a **billing cap** (402 / out-of-credit / quota) — it advances to the next provider, streaming-safe. A caller's own bad request (e.g. 400, 422) passes through immediately.
 3. **Recover.** After an idle window (`resetIntervalMs`, default 60s) it snaps back to the cheapest provider.
-
-<p align="center">
-  <img src="assets/ai-lcr-routing.svg" alt="routing diagram: cheapest first, fallback on failure, recover after idle" width="820">
-</p>
 
 ## See what happened (`onCall`)
 

@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import { withPlausibleProxy } from "next-plausible";
+import { createMDX } from "fumadocs-mdx/next";
+
+const withMDX = createMDX();
 
 // The parent repo (the npm package) has its own lockfile, so pin the
 // workspace root to this folder to avoid Next picking the wrong root.
@@ -15,4 +18,4 @@ const nextConfig: NextConfig = {
 
 export default withPlausibleProxy({
   customDomain: "https://plausible.ideamarketfit.com",
-})(nextConfig);
+})(withMDX(nextConfig));

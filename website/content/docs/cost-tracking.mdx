@@ -1,0 +1,152 @@
+---
+title: Cost tracking
+description: Best practices for measuring real spend and savings — per-call cost, the savings baseline, prompt-cache-aware pricing, rolling up tool loops, and shipping records to a dashboard. (ai-lcr 0.3.0+)
+---
+
+Routing to the cheapest provider only pays off if you can *see* what it saved.
+`ai-lcr` reports real per-call cost and the savings versus the priciest route —
+here's how to use it well. Everything below is from **0.3.0+** and is optional;
+the router works without any of it.
+
+## Two ways to observe a call
+
+- **`onCost(event)`** — fires once per call with `{ model, provider, inputTokens, outputTokens, costUsd }`. Quick to wire; good for a running total.
+- **`onCall(record)`** — fires once per settled request with the **full failover chain** (`CallRecord`: every attempt, the winner, latency (and streaming time-to-first-token), tokens, cost, and the savings baseline). This is what a dashboard wants.
+
+Prefer `onCall` for anything real — `onCost` can't tell you a failover happened.
+
+```ts
+import { createLCR, formatCallRecord } from "ai-lcr";
+
+const lcr = createLCR({
+  autoSort: true,
+  models: { /* … */ },
+  onCall: (rec) => console.log(formatCallRecord(rec)),
+  // ✓ text  tokenmart  840ms (ttft 96ms)  $0.0004  (saved $0.0011)
+  // ⚠ text  tokenmart→openrouter  910ms  $0.0004  ⤷ tokenmart 502
+});
+```
+
+## The headline number: savings = `baselineUsd − costUsd`
+
+`CallRecord.baselineUsd` is what the *same* token usage would have cost on the
+most expensive priced provider in that model's list. So `baselineUsd − costUsd`
+is the dollar figure to put on a dashboard — "ai-lcr saved you $X." As of 0.3.0
+this is filled for **text**, not just media.
+
+```ts
+onCall: (rec) => {
+  if (rec.baselineUsd !== undefined) {
+    metrics.add("ai_spend_usd", rec.costUsd);
+    metrics.add("ai_saved_usd", rec.baselineUsd - rec.costUsd);
+  }
+},
+```
+
+It's set whenever at least one provider in the list carries a `cost` — so **price
+your providers** (the `cost` field) even if you don't use `autoSort`, or there's
+nothing to compare against.
+
+## Responsiveness: time to first token
+
+For streaming calls, `CallRecord.ttftMs` reports **time to first token** — ms from
+the winning provider's stream start to its first content token. It's measured
+against the *winner's* attempt, so failover overhead (already in `latencyMs`)
+doesn't distort it. `undefined` for non-streaming calls and for calls that failed
+before producing content.
+
+```ts
+onCall: (rec) => {
+  if (rec.ttftMs != null) metrics.add("ai_ttft_ms", rec.ttftMs);
+  // throughput is derivable from the same record:
+  const tps = rec.outputTokens / ((rec.latencyMs - rec.ttftMs) / 1000);
+},
+```
+
+Pair it with `costUsd` to compare providers on **both** price and speed — the
+cheapest route isn't always the snappiest.
+
+## Prompt-cache-aware cost
+
+If you use Anthropic-style prompt caching, cached input tokens bill far cheaper
+than fresh input. Tell ai-lcr by adding `cacheRead` (USD per 1M cached input
+tokens) to a provider's `cost`:
+
+```ts
+models: {
+  "claude-sonnet-4-6": [
+    {
+      model: tokenmart("claude-sonnet-4-6"),
+      label: "tokenmart",
+      cost: { input: 3.0, output: 15.0, cacheRead: 0.3 }, // cached reads at 1/10th
+    },
+  ],
+}
+```
+
+When a call reports `usage.inputTokens.cacheRead`, those tokens bill at
+`cacheRead` instead of `input`; omit it and they fall back to the full `input`
+rate (so adding it can only make the estimate *more* accurate). `CallRecord.cachedInputTokens`
+exposes the cache-hit volume so you can audit why `costUsd` came in under
+sticker × tokens. (Accounting only — caching doesn't change routing weights.)
+
+## Roll a tool loop up into one cost
+
+An agent doing a multi-step tool loop makes many model calls for **one** logical
+request. Stamp the same correlation id on every step via
+`providerOptions.lcr.requestId`, and each `CallRecord.requestId` carries it — so
+your dashboard can sum the steps into a single request's cost:
+
+```ts
+import { generateText } from "ai";
+
+const requestId = crypto.randomUUID();
+await generateText({
+  model: lcr("smart"),
+  prompt,
+  stopWhen: stepCountIs(10),
+  providerOptions: { lcr: { requestId } }, // same id on every step
+});
+// every CallRecord for this loop now shares rec.requestId → group + sum by it
+```
+
+## Don't mistake "free" for "cost unknown"
+
+Some providers serve a call fine but report **zero** usage tokens. Then `costUsd`
+silently reads `0` — which looks free but really means *unmeasured*. `CallRecord.usageMissing`
+flags exactly that case, so credit-metering doesn't under-bill:
+
+```ts
+onCall: (rec) => {
+  if (rec.usageMissing) {
+    logger.warn(`no usage from ${rec.winner} on ${rec.model} — cost is unmeasured, not zero`);
+  }
+},
+```
+
+`formatCallRecord` renders it as a `⚠no-usage` suffix.
+
+## Ship records to a dashboard
+
+`createHttpSink` builds an `onCall` handler that POSTs each `CallRecord` as JSON
+to a collector:
+
+```ts
+import { createLCR, createHttpSink } from "ai-lcr";
+import { after } from "next/server";
+
+const lcr = createLCR({
+  models: { /* … */ },
+  onCall: createHttpSink({
+    url: "https://your-collector.example/ingest",
+    headers: { authorization: `Bearer ${process.env.LCR_INGEST_KEY}` },
+    project: "my-app",      // merged into each payload as { project, ...record }
+    dispatch: after,        // ← see the serverless note below
+  }),
+});
+```
+
+**Serverless gotcha:** on Vercel/Lambda an un-awaited POST can be killed when the
+function returns. Pass `dispatch: after` (Next.js `after` from `next/server`, or
+any `waitUntil`-style fn) so the record actually ships. On a long-lived server
+you can omit it.

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { PROVIDERS, REACHABILITY_MODEL, type Provider } from "@/lib/providers";
 import { officialStatusColor, officialStatusLabel } from "@/lib/official-status";
+import SiteNav from "../../components/SiteNav";
 
 export const dynamic = "force-dynamic";
 
@@ -244,16 +245,7 @@ export default async function ProviderStatus({
 
   return (
     <>
-      <nav className="nav">
-        <div className="wrap nav__row">
-          <a className="brand" href="/" style={{ textDecoration: "none", color: "inherit" }}>
-            <span className="brand__word">ai<b>-lcr</b></span>
-          </a>
-          <div className="nav__links">
-            <a href="/status">All providers</a>
-          </div>
-        </div>
-      </nav>
+      <SiteNav current="status" />
 
       <main className="wrap" style={{ paddingTop: 40, paddingBottom: 80 }}>
         <a href="/status" style={{ color: "var(--muted)", fontSize: 13 }}>

@@ -34,7 +34,7 @@ const FAQS: QA[] = [
   },
   {
     q: "Which providers and models are supported?",
-    a: "ai-lcr routes across OpenRouter, Kunavo, TokenMart, fal and Runware today, covering 80+ text, image and video models. The cheapest provider for each model is listed on the prices page, and you can add any OpenAI-compatible provider yourself.",
+    a: "ai-lcr routes across OpenRouter, TokenMart, DeepInfra, fal and Runware today, covering 80+ text, image and video models. The cheapest provider for each model is listed on the prices page, and you can add any OpenAI-compatible provider yourself.",
   },
 ];
 
