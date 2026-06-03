@@ -336,6 +336,56 @@ describe("onCall — savings baseline (text side)", () => {
     expect(records[0]!.cachedSavingUsd).toBeUndefined();
   });
 
+  it("applies defaultCacheReadRatio to a leg that omits cacheRead", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3 }, // no explicit cacheRead
+          },
+        ],
+      },
+      defaultCacheReadRatio: 0.1, // → effective cacheRead = 3 * 0.1 = 0.3
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    // same as the explicit-0.3 case: 900 cached × (3 − 0.3)/1e6
+    expect(records[0]!.cachedSavingUsd).toBeCloseTo(2.43e-3, 12);
+  });
+
+  it("lets an explicit cacheRead win over defaultCacheReadRatio", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3, cacheRead: 0.6 }, // explicit — ratio ignored
+          },
+        ],
+      },
+      defaultCacheReadRatio: 0.1,
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    // uses 0.6, not the ratio's 0.3: 900 × (3 − 0.6)/1e6 = 2.16e-3
+    expect(records[0]!.cachedSavingUsd).toBeCloseTo(2.16e-3, 12);
+  });
+
+  it("rejects an out-of-range defaultCacheReadRatio", () => {
+    expect(() =>
+      createLCR({ models: { m: [] }, defaultCacheReadRatio: 1.5 }),
+    ).toThrow(/defaultCacheReadRatio must be in \[0, 1\]/);
+  });
+
   it("leaves baselineUsd undefined when no provider is priced", async () => {
     const records: CallRecord[] = [];
     const lcr = createLCR({
