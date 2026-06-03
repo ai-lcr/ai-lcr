@@ -25,6 +25,7 @@ const EXPECTED_EXPORTS = [
   "referenceMegapixels",
   "DEFAULT_REFERENCE",
   "MEDIA_PRICING",
+  "OFFICIAL_PRICES",
   "createKunavoMediaAdapter",
   "createRunwareMediaAdapter",
   "createFalMediaAdapter",

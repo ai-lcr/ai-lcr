@@ -152,10 +152,11 @@ export interface CallRecord {
    * `baselineUsd - costUsd` is what routing actually saved. Text router: the
    * always-on fallback leg — the LAST priced provider in the chain, i.e. the
    * list-price provider you'd fall back to without routing (e.g. OpenRouter).
-   * Media router: the priciest configured route. NOT the most expensive leg of
-   * the chain: prompt caching can make a sticker-cheaper provider cost more on a
-   * cache-heavy call, and a max-of-chain baseline would fabricate a "saving" on
-   * calls the fallback itself served. Undefined only when no provider was priced.
+   * Media router: the model-maker's official direct price. NOT the most
+   * expensive leg of the chain: prompt caching can make a sticker-cheaper
+   * provider cost more on a cache-heavy call, and a max-of-chain baseline would
+   * fabricate a "saving" on calls the fallback itself served. Undefined only
+   * when no provider was priced.
    */
   baselineUsd?: number;
   /**

@@ -14,6 +14,7 @@
  * normalizing every provider's price to ONE reference output (see ReferenceSpec).
  */
 import { classifyError, isRetryableError, type CallRecord } from "./fallback";
+import { OFFICIAL_PRICES } from "./media-official";
 
 export type MediaModality = "image" | "video";
 
@@ -53,6 +54,15 @@ export interface MediaModelDef {
   modality: MediaModality;
   /** Providers that serve this model. Order is irrelevant — routing sorts by cost. */
   routes: MediaRoute[];
+  /**
+   * The model-maker's first-party list price — what a user pays going DIRECT,
+   * bypassing the cheaper providers we route to. When set, it's the savings
+   * baseline (savings = official − actual cost). Omit for open-weight models
+   * with no first-party API price; those fall back to the priciest configured
+   * route, or no baseline if there's only one. Can also be supplied out-of-band
+   * via {@link MediaLCRConfig.officialPrices} so a registry needn't carry it inline.
+   */
+  official?: MediaPricing;
 }
 
 export type MediaRegistry = Record<string, MediaModelDef>;
@@ -196,6 +206,14 @@ export interface MediaLCRConfig {
   /** Adapters keyed by provider. A route with no adapter is skipped. */
   adapters: Record<string, MediaAdapter>;
   reference?: ReferenceSpec;
+  /**
+   * Model-maker first-party list prices keyed by modelId — the savings baseline
+   * for a model whose registry def carries no inline `official` price. Lets a
+   * downstream registry (e.g. ai-art's) get correct baselines without inlining
+   * prices. Defaults to the bundled {@link OFFICIAL_PRICES} (lifted from the
+   * cross-provider price table). A def's inline `official` wins over this.
+   */
+  officialPrices?: Record<string, MediaPricing>;
   onError?: (error: Error, provider: string) => void;
   onCost?: (event: MediaCostEvent) => void;
   /**
@@ -226,7 +244,15 @@ function newMediaCallId(): string {
 }
 
 export function createMediaLCR(config: MediaLCRConfig) {
-  const { registry, adapters, reference = DEFAULT_REFERENCE, onError, onCost, onCall } = config;
+  const {
+    registry,
+    adapters,
+    reference = DEFAULT_REFERENCE,
+    officialPrices = OFFICIAL_PRICES,
+    onError,
+    onCost,
+    onCall,
+  } = config;
 
   // Observer callbacks are caller-supplied logging hooks: a throw from one must
   // never turn a settled request into a different outcome (a throwing db9 sink
@@ -262,10 +288,19 @@ export function createMediaLCR(config: MediaLCRConfig) {
       throw new Error(`ai-lcr: unknown media model "${modelId}" — add it to the registry`);
     }
     const ranked = rankRoutes(def, reference);
-    // Baseline = the priciest configured route for this model, normalized to the
-    // reference output → savings = baselineUsd - costUsd, same shape as text.
+    // Baseline = what this output costs going DIRECT to the model maker (its
+    // first-party list price), normalized to the reference output → savings =
+    // baselineUsd - costUsd, same shape as text. That's the honest "what you'd
+    // pay without ai-lcr" number. When no official price is known (open-weight
+    // models with no first-party API), fall back to the priciest configured
+    // route, preserving the cross-provider savings story.
+    const official = def.official ?? officialPrices[modelId];
     const baselineUsd =
-      ranked.length > 0 ? Math.max(...ranked.map((r) => r.refCents)) / 100 : 0;
+      official !== undefined
+        ? normalizedCents(official, reference) / 100
+        : ranked.length > 0
+          ? Math.max(...ranked.map((r) => r.refCents)) / 100
+          : 0;
 
     const startedAt = Date.now();
     const attempts: CallRecord["attempts"] = [];
