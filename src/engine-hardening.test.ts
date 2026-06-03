@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { generateText } from "ai";
+import { generateText, streamText, simulateReadableStream } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import type { LanguageModelV3GenerateResult } from "@ai-sdk/provider";
-import { classifyErrorKind } from "./fallback";
-import { createLCR, type CallRecord } from "./index";
+import type {
+  LanguageModelV3GenerateResult,
+  LanguageModelV3StreamPart,
+} from "@ai-sdk/provider";
+import { classifyError, classifyErrorKind, EmptyCompletionError } from "./fallback";
+import { createLCR, formatCallRecord, type CallRecord } from "./index";
 
 const noRetry = { maxRetries: 0 as const };
 
@@ -127,5 +130,182 @@ describe("auth/billing visibility (#6 — failover survives, but is flagged)", (
     const failed = records[0]!.attempts.find((a) => !a.ok)!;
     expect(failed.provider).toBe("misconfigured");
     expect(failed.kind).toBe("auth"); // the loud signal to alert on
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #7 — empty-completion (content-integrity) failover + flag.
+//
+// The TokenMart failure mode: a clean HTTP 200, prompt billed, but zero output
+// tokens and not a single content part. Every status/network check says
+// "healthy"; the user gets a blank. The engine must (B) fail over past it like
+// a transient error and (A) flag the record when failover can't rescue it
+// (every provider came back empty), without ever misreading a legitimate
+// no-text step (e.g. a tool call, which bills output tokens) as empty.
+// ---------------------------------------------------------------------------
+
+// doGenerate that returns a clean 200 with the given content + output tokens.
+function genModel(id: string, content: LanguageModelV3GenerateResult["content"], output: number) {
+  return new MockLanguageModelV3({
+    modelId: id,
+    provider: id,
+    doGenerate: async (): Promise<LanguageModelV3GenerateResult> => ({
+      content,
+      finishReason: { unified: "stop" as const, raw: undefined },
+      usage: usage(10, output),
+      warnings: [],
+    }),
+  });
+}
+
+// A streaming model that emits exactly the chunks given (no text → empty).
+function streamModel(id: string, chunks: LanguageModelV3StreamPart[]) {
+  return new MockLanguageModelV3({
+    modelId: id,
+    provider: id,
+    doStream: async () => ({
+      stream: simulateReadableStream({ chunks, initialDelayInMs: 0, chunkDelayInMs: 0 }),
+    }),
+  });
+}
+
+const emptyStreamChunks: LanguageModelV3StreamPart[] = [
+  { type: "stream-start", warnings: [] },
+  { type: "finish", usage: usage(10, 0), finishReason: { unified: "stop", raw: undefined } },
+];
+
+function textStreamChunks(text: string): LanguageModelV3StreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "0" },
+    { type: "text-delta", id: "0", delta: text },
+    { type: "text-end", id: "0" },
+    { type: "finish", usage: usage(10, 5), finishReason: { unified: "stop", raw: undefined } },
+  ];
+}
+
+describe("empty completion — classification", () => {
+  it("classifies EmptyCompletionError as 'empty_completion' / kind 'empty'", () => {
+    const err = new EmptyCompletionError("tokenmart");
+    expect(classifyError(err)).toBe("empty_completion");
+    expect(classifyErrorKind(err)).toBe("empty"); // NOT misread as 'client'
+  });
+});
+
+describe("empty completion — doGenerate (B: fail over, A: flag)", () => {
+  it("fails over past an empty 200 to a provider that actually generates", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [genModel("tokenmart", [], 0), genModel("openrouter", [{ type: "text", text: "real answer" }], 5)] },
+      onCall: (r) => records.push(r),
+    });
+
+    const { text } = await generateText({ model: lcr("m"), prompt: "draw me an image", ...noRetry });
+
+    expect(text).toBe("real answer"); // user got content, not a blank
+    const r = records[0]!;
+    expect(r.winner).toBe("openrouter");
+    expect(r.failedOver).toBe(true);
+    expect(r.emptyCompletion).toBeUndefined(); // winner produced output → not flagged
+    const failed = r.attempts.find((a) => !a.ok)!;
+    expect(failed.provider).toBe("tokenmart");
+    expect(failed.errorClass).toBe("empty_completion");
+    expect(failed.kind).toBe("empty");
+  });
+
+  it("flags the record when EVERY provider returns empty (failover can't rescue it)", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [genModel("tokenmart", [], 0), genModel("openrouter", [], 0)] },
+      onCall: (r) => records.push(r),
+    });
+
+    const { text } = await generateText({ model: lcr("m"), prompt: "draw me an image", ...noRetry });
+
+    expect(text).toBe(""); // nothing to deliver — but the request did not hard-fail
+    const r = records[0]!;
+    expect(r.ok).toBe(true);
+    expect(r.emptyCompletion).toBe(true); // the loud content-integrity signal
+    expect(r.attempts).toHaveLength(2); // tried both before settling
+  });
+
+  it("does NOT treat a legitimate no-text step (output tokens > 0) as empty", async () => {
+    // A tool-call step generates no text but bills output tokens — it must be
+    // served straight through, never failed over or flagged.
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [genModel("tokenmart", [], 7), genModel("openrouter", [{ type: "text", text: "backup" }], 5)] },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "use a tool", ...noRetry });
+
+    const r = records[0]!;
+    expect(r.winner).toBe("tokenmart"); // served by the first provider
+    expect(r.failedOver).toBe(false);
+    expect(r.emptyCompletion).toBeUndefined();
+  });
+});
+
+describe("empty completion — doStream (B: fail over, A: flag)", () => {
+  it("fails over past an empty stream to one that actually streams text", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [streamModel("tokenmart", emptyStreamChunks), streamModel("openrouter", textStreamChunks("streamed answer"))],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    const res = streamText({ model: lcr("m"), prompt: "draw me an image", ...noRetry });
+    let out = "";
+    for await (const delta of res.textStream) out += delta;
+
+    expect(out).toBe("streamed answer"); // user got the real stream
+    const r = records[0]!;
+    expect(r.winner).toBe("openrouter");
+    expect(r.failedOver).toBe(true);
+    expect(r.emptyCompletion).toBeUndefined();
+    const failed = r.attempts.find((a) => !a.ok)!;
+    expect(failed.provider).toBe("tokenmart");
+    expect(failed.errorClass).toBe("empty_completion");
+    expect(failed.kind).toBe("empty");
+  });
+
+  it("flags the record when every streaming provider returns empty", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [streamModel("tokenmart", emptyStreamChunks), streamModel("openrouter", emptyStreamChunks)] },
+      onCall: (r) => records.push(r),
+    });
+
+    const res = streamText({ model: lcr("m"), prompt: "draw me an image", ...noRetry });
+    let out = "";
+    for await (const delta of res.textStream) out += delta;
+
+    expect(out).toBe("");
+    const r = records[0]!;
+    expect(r.ok).toBe(true);
+    expect(r.emptyCompletion).toBe(true);
+    expect(r.attempts).toHaveLength(2);
+  });
+});
+
+describe("empty completion — formatCallRecord surfaces it", () => {
+  it("appends ⚠empty to the one-liner", () => {
+    const line = formatCallRecord({
+      id: "x",
+      model: "m",
+      attempts: [{ provider: "tokenmart", ok: true, latencyMs: 100 }],
+      winner: "tokenmart",
+      ok: true,
+      failedOver: false,
+      latencyMs: 100,
+      inputTokens: 10,
+      outputTokens: 0,
+      costUsd: 0,
+      emptyCompletion: true,
+    });
+    expect(line).toContain("⚠empty");
   });
 });
