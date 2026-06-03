@@ -1,0 +1,71 @@
+---
+title: How routing works
+description: The mechanics — cheapest-first ordering, health-based fallback that's streaming-safe, automatic recovery to the cheapest provider, and which errors trigger a switch versus an alert.
+---
+
+A `createLCR` model wraps an **ordered, cheapest-first list of providers** per
+logical model. It serves from the first healthy one, switches to the next on a
+retryable failure, and periodically snaps back to the cheapest. Here's each part.
+
+<RoutingDiagram />
+
+## Cheapest-first ordering
+
+Each logical model maps to a list of provider entries. **List order is priority
+order** — the router tries them top to bottom.
+
+```ts
+models: {
+  smart: [
+    { model: tokenmart("gemini-2.5-flash"), label: "tokenmart", cost: { input: 0.3, output: 1.2 } },
+    { model: openrouter("google/gemini-2.5-flash"), label: "openrouter", cost: { input: 0.3, output: 2.5 } },
+  ],
+}
+```
+
+Set `autoSort: true` and the router sorts each list **cheapest-first by `cost`**
+for you, so you can list providers in any order. Without `autoSort`, you control
+priority by hand — useful when you'd rather rank by reliability than price.
+
+## Health-based fallback (streaming-safe)
+
+The router serves from the first healthy provider. On a **retryable** error
+(rate limit, overload, 5xx, connection reset, timeout) it switches to the next
+provider in the list — even mid-stream, before any tokens have been committed —
+so a provider dropping out doesn't fail the request.
+
+A non-retryable error (a `400`-class client mistake) is **not** masked — it
+surfaces immediately, because retrying it elsewhere would just fail again.
+
+## Automatic recovery
+
+After a failover the router is "parked" on a more expensive provider. Left
+alone, a brief outage would cost you the pricey fallback forever. So every
+`resetIntervalMs` (default **60s**) it re-probes the cheapest provider and snaps
+back when it's healthy again — under load too, not only on the next idle call.
+
+```ts
+createLCR({ models, autoSort: true, resetIntervalMs: 30_000 }); // re-probe every 30s
+```
+
+## Which errors mean what
+
+Every failed attempt is tagged with an `ErrorKind`, surfaced via `onError` and on
+each `RouteAttempt`. Use it to tell self-healing failures apart from problems you
+should be paged on:
+
+| `kind` | Meaning | What to do |
+|---|---|---|
+| `transient` | rate limit / overload / 5xx | nothing — expected, self-heals |
+| `auth` | 401 / 403 — bad or revoked key | **alert** — config problem |
+| `billing` | 402 / out of credit / quota | **alert** — top up the account |
+| `client` | 400-class caller error | fix the request; not retried |
+
+`auth` and `billing` are the dangerous ones: a misconfigured key makes a provider
+look "unhealthy," silently shifting all traffic onto the pricey fallback while
+everything still *works* — exactly the thing to catch early.
+
+## Next
+
+- **[Cost tracking](/docs/cost-tracking)** — measure what routing actually saved.
+- **[Providers](/docs/providers)** — wire each provider into a list.

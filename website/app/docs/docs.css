@@ -1,0 +1,10 @@
+/*
+ * Docs-only stylesheet. Imported ONLY by app/docs/layout.tsx, so Next.js
+ * code-splits it to /docs routes — Tailwind's preflight never reaches the
+ * hand-rolled marketing pages (/, /prices, /status).
+ */
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@source "../../node_modules/fumadocs-ui/dist/**/*.js";

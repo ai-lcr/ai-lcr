@@ -1,0 +1,27 @@
+---
+title: TokenMart
+description: TokenMart — cheap mainstream catalog. Host is model.service-inference.ai; plain un-prefixed model ids; prompt caching works.
+---
+
+TokenMart (also branded "Inference AI") is a cheap mainstream catalog — Gemini,
+Claude, GPT, and more at a discount.
+
+```ts
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const tokenmart = createOpenAICompatible({
+  name: "tokenmart",
+  baseURL: "https://model.service-inference.ai/v1",
+  apiKey: process.env.INFERENCE_API_KEY,
+});
+// plain ids: tokenmart("gemini-2.5-flash"), tokenmart("claude-sonnet-4-6")
+```
+
+Two things to know:
+
+- The host is **`model.service-inference.ai`**. `api.tokenmart.ai` does **not**
+  resolve — don't use it.
+- Model ids are **plain, un-prefixed** (`gemini-2.5-flash`, not `google/…`).
+
+Prompt caching works on TokenMart (`cache_read` fires on repeats), so you can set
+[`cacheRead` pricing](/docs/cost-tracking) and get accurate cached-token cost.

@@ -50,6 +50,9 @@ export function formatCallRecord(record: CallRecord, opts: FormatOptions = {}): 
   }
   // A winner that reported no usage: cost/credit metering read 0 — flag it.
   if (record.usageMissing) line += `  ⚠no-usage`;
+  // A winner that generated nothing (every provider came back blank): the user
+  // got an empty response. Loudest content-integrity signal on the line.
+  if (record.emptyCompletion) line += `  ⚠empty`;
 
   const failed = record.attempts.filter((a) => !a.ok);
   if (failed.length > 0) {

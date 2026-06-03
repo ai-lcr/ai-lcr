@@ -1,0 +1,91 @@
+---
+title: Migrate from plain AI SDK
+description: If you already call the Vercel AI SDK directly, routing through ai-lcr is a one-line change. Your business logic doesn't move.
+---
+
+If your code already calls the Vercel AI SDK, you don't rewrite anything. You
+move the model definition into an `ai-lcr` config once, then swap the model
+argument. Every `generateText` / `streamText` / `generateObject` call stays
+exactly as it is.
+
+## Before — single provider, price hard-wired, no fallback
+
+```ts
+import { openai } from "@ai-sdk/openai";
+import { generateText } from "ai";
+
+const { text } = await generateText({
+  model: openai("gpt-4o-mini"), // one provider; if it 429s or dies, so do you
+  prompt,
+});
+```
+
+## After — cheapest-first routing, automatic fallback, zero logic changes
+
+```ts
+import { createLCR } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { openai } from "@ai-sdk/openai";
+import { generateText } from "ai";
+
+// 1. Define providers + a cheapest-first list — once, at startup.
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    smart: [
+      { model: openrouter("openai/gpt-4o-mini"), label: "openrouter", cost: { input: 0.15, output: 0.6 } },
+      { model: openai("gpt-4o-mini"), label: "openai-direct", cost: { input: 0.15, output: 0.6 } },
+    ],
+  },
+  onCost: ({ provider, costUsd }) => console.log(`${provider}: $${costUsd.toFixed(6)}`),
+});
+
+// 2. Swap the model argument. Nothing else moves.
+const { text } = await generateText({
+  model: lcr("smart"), // ← the only change in your call sites
+  prompt,
+});
+```
+
+The diff at every call site is literally `openai("gpt-4o-mini")` →
+`lcr("smart")`. Streaming, tools, structured output, and agents all keep
+working because `lcr("smart")` **is** an AI SDK model.
+
+## What you get for that one line
+
+- **Fallback** — if the cheapest provider errors, rate-limits, or times out,
+  the call retries on the next provider in the list instead of failing.
+- **Cost tracking** — `onCost` fires per call with the real cost on whichever
+  provider actually served it.
+- **One place to change prices/providers** — add or reorder providers in the
+  config; call sites never change again.
+
+## Migration checklist
+
+1. Move each `provider("model")` you call today into an `ai-lcr` `models` entry.
+2. Add at least one second provider for the same logical model (that's the point).
+3. Replace `provider("model")` with `lcr("yourKey")` at the call sites.
+4. Wire `onCost` to your logging so you can see the savings.
+
+## Already on Vercel AI Gateway or OpenRouter?
+
+You don't have to remove them — `ai-lcr` routes **across** providers, including
+a gateway as one entry in the list:
+
+```ts
+models: {
+  smart: [
+    { model: kunavo("gemini-3-flash"), label: "kunavo" },          // cheapest niche provider
+    { model: gateway("google/gemini-3-flash"), label: "ai-gateway" }, // hosted gateway as fallback
+  ],
+}
+```
+
+A gateway picks within its own catalog; `ai-lcr` picks *between* gateways and
+direct providers — and runs in-process, so it adds no network hop of its own.

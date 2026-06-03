@@ -22,7 +22,7 @@ const body = Hanken_Grotesk({
 });
 
 const description =
-  "Route every model call to the cheapest provider that can serve it, fall back automatically on failure, and track real cost. One config across OpenRouter, Kunavo, fal & Runware. Built for the Vercel AI SDK.";
+  "Route every model call to the cheapest provider that can serve it, fall back automatically on failure, and track real cost. One config across OpenRouter, TokenMart, fal & Runware. Built for the Vercel AI SDK.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -55,6 +55,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${display.variable} ${mono.variable} ${body.variable}`}
+      // fumadocs RootProvider (next-themes) writes color-scheme/class onto
+      // <html> on the client under /docs; suppress the expected SSR diff.
+      suppressHydrationWarning
     >
       <PlausibleProvider
         domain="ailcr.js.org"

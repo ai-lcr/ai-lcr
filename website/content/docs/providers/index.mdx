@@ -1,0 +1,54 @@
+---
+title: Overview
+description: ai-lcr doesn't ship provider clients — it routes across the AI SDK models you construct. Create each provider once with createOpenAICompatible, then list them cheapest-first.
+---
+
+`ai-lcr` doesn't ship provider clients — it routes across the AI SDK models *you*
+construct. Almost every provider is OpenAI-compatible, so you create each one
+once with [`createOpenAICompatible`](https://ai-sdk.dev/providers/openai-compatible-providers),
+then drop them into a cheapest-first list.
+
+```ts
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+```
+
+## Supported providers
+
+- **[OpenRouter](/docs/providers/openrouter)** — widest coverage, the safe fallback.
+- **[TokenMart](/docs/providers/tokenmart)** — cheap mainstream catalog.
+- **[DeepInfra](/docs/providers/deepinfra)** — open-weights host.
+- **[Kunavo](/docs/providers/kunavo)** — discounted partner models.
+
+Any OpenAI-compatible endpoint works — the four above are just the ones with
+notes worth calling out. A model vendor's **own official API** (`@ai-sdk/openai`,
+`@ai-sdk/anthropic`, …) is also just another entry in a list.
+
+## Putting them in one cheapest-first list
+
+Each logical model lists every provider that serves it, cheapest-first. The same
+model is named differently per provider — that's exactly what the router maps:
+
+```ts
+import { createLCR } from "ai-lcr";
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    // one logical model → cheapest provider that serves it, with fallback
+    "gemini-2.5-flash": [
+      { model: tokenmart("gemini-2.5-flash"), label: "tokenmart", cost: { input: 0.3, output: 1.2 } },
+      { model: kunavo("gemini-2.5-flash"), label: "kunavo", cost: { input: 0.3, output: 1.25 } },
+      { model: openrouter("google/gemini-2.5-flash"), label: "openrouter", cost: { input: 0.3, output: 2.5 } },
+    ],
+    "deepseek-v4-flash": [
+      { model: deepinfra("deepseek-ai/DeepSeek-V4-Flash"), label: "deepinfra", cost: { input: 0.27, output: 0.4 } },
+      { model: openrouter("deepseek/deepseek-v4-flash"), label: "openrouter", cost: { input: 0.3, output: 0.5 } },
+    ],
+  },
+  onCost: ({ provider, costUsd }) => console.log(`${provider}: $${costUsd.toFixed(6)}`),
+});
+```
+
+Check each provider's live `GET /v1/models` for valid ids — catalogs change
+(a model can 502 on one provider while serving fine on another), which is the
+whole reason to keep more than one route per model.

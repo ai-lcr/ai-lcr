@@ -1,0 +1,101 @@
+---
+title: Image & video
+description: ai-lcr routes image and video generation too — but through a separate API, because media outputs are files with mixed pricing units, not token-billed model objects.
+---
+
+`ai-lcr` routes image and video generation across providers the same way it
+routes text — cheapest-first, with fallback. But media is a **separate API**,
+not the text router.
+
+## Why a separate API
+
+The text router returns a standard AI SDK model (`lcr("...")`) because LLM calls
+are token-billed and share one interface. Media is a different world:
+
+- outputs are **files (URLs)**, not streamed tokens;
+- pricing units **differ per provider** — flat per-image, per-megapixel of
+  compute, per-second of video, or a flat per-clip charge;
+- video is often an **async job** (submit, then poll).
+
+So media has its own entry point, [`createMediaLCR`](https://github.com/victorzhrn/ai-lcr),
+which normalizes those mixed units to a common reference output (16:9 1080p
+image, 5-second clip) to compare prices apples-to-apples.
+
+## Shape of it
+
+You give it a **registry** (logical models → provider routes with pricing) and
+**adapters** (one per provider). It returns a `generate(modelId, input)`
+function.
+
+```ts
+import {
+  createMediaLCR,
+  createRunwareMediaAdapter,
+  createFalMediaAdapter,
+  createKunavoMediaAdapter,
+} from "ai-lcr";
+
+const generate = createMediaLCR({
+  // one adapter per provider
+  adapters: {
+    runware: createRunwareMediaAdapter({ apiKey: process.env.RUNWARE_API_KEY! }),
+    fal: createFalMediaAdapter({ apiKey: process.env.FAL_KEY! }),
+    kunavo: createKunavoMediaAdapter({ apiKey: process.env.KUNAVO_API_KEY! }),
+  },
+  // logical model → the providers that serve it, each with its native id + price
+  registry: {
+    "black-forest-labs/flux-schnell": {
+      id: "black-forest-labs/flux-schnell",
+      modality: "image",
+      routes: [
+        { provider: "runware", externalId: "runware:100@1", pricing: { unit: "image", cents: 0.13 } },
+        { provider: "fal", externalId: "fal-ai/flux/schnell", pricing: { unit: "image", cents: 0.3 } },
+      ],
+    },
+  },
+  onCost: ({ modelId, provider, costCents }) =>
+    console.log(`${modelId} · ${provider}: $${(costCents / 100).toFixed(4)}`),
+});
+
+const result = await generate("black-forest-labs/flux-schnell", {
+  prompt: "a red panda coding at night, neon",
+});
+
+// result.outputs[].url — the generated file(s); result.provider / result.costCents
+console.log(result.provider, result.outputs[0].url);
+```
+
+`pricing.unit` is one of `"image"` (flat per image), `"megapixel"` (compute —
+scales with resolution), `"second"` (per second of video), or `"call"` (flat
+per clip). The router normalizes all of them to the reference output before
+sorting, so a per-megapixel compute price and a flat per-image fee compete
+fairly.
+
+## Video
+
+Video works the same — declare `modality: "video"` routes. **fal** is the live
+video path (its async queue API; the adapter submits and polls for you). Kunavo's
+Veo poll path is implemented but unverified — prefer fal for video today.
+
+```ts
+registry: {
+  "bytedance/seedance-lite": {
+    id: "bytedance/seedance-lite",
+    modality: "video",
+    routes: [
+      { provider: "fal", externalId: "fal-ai/bytedance/seedance/v1/lite", pricing: { unit: "second", cents: 3.6 } },
+    ],
+  },
+}
+
+const clip = await generate("bytedance/seedance-lite", {
+  prompt: "drone shot over a misty forest",
+  // input also carries image_url, duration, aspect_ratio, … per the provider
+});
+```
+
+## Just want to compare prices?
+
+`comparePrices(registry)` returns, per model, the cheapest provider and each
+route's normalized cost — the same data behind the [/prices](/prices) page — without
+running any generation.

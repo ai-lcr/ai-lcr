@@ -1,0 +1,81 @@
+---
+title: Getting Started
+description: Route every LLM call to its cheapest healthy provider, fall back on failure, and track real cost — in one line.
+---
+
+`ai-lcr` keeps a **cheapest-first list of providers per model**, routes each call
+to the cheapest healthy one, and falls through to the next on failure — the way
+phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing)
+for decades. It's a thin wrapper around the [Vercel AI SDK](https://ai-sdk.dev):
+`lcr("...")` returns a **standard AI SDK model**, so it drops into anything that
+already takes one.
+
+<RoutingDiagram />
+
+## Install
+
+```bash
+npm install ai-lcr
+```
+
+`ai` (the Vercel AI SDK) is a peer dependency.
+
+## Quick start
+
+Declare one logical model, list the providers that can serve it cheapest-first,
+then call it like any AI SDK model.
+
+```ts
+import { createLCR } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { generateText } from "ai";
+
+const kunavo = createOpenAICompatible({
+  name: "kunavo",
+  baseURL: "https://api.kunavo.com/v1",
+  apiKey: process.env.KUNAVO_API_KEY,
+});
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true, // sort each model's providers cheapest-first by `cost`
+  models: {
+    "gemini-3-flash": [
+      { model: kunavo("gemini-3-flash"), label: "kunavo", cost: { input: 0.4, output: 2.4 } },
+      { model: openrouter("google/gemini-3-flash-preview"), label: "openrouter", cost: { input: 0.5, output: 3.0 } },
+    ],
+  },
+  // See exactly what each call cost, on whichever provider served it.
+  onCost: ({ provider, costUsd }) => console.log(`${provider}: $${costUsd.toFixed(6)}`),
+});
+
+const { text } = await generateText({
+  model: lcr("gemini-3-flash"),
+  prompt: "Explain Least Cost Routing in one sentence.",
+});
+```
+
+`cost` and `label` are optional — pass bare models if you don't need cost
+accounting or `autoSort`.
+
+## The key property
+
+`lcr("gemini-3-flash")` returns a **standard AI SDK `LanguageModel`**. It works
+everywhere a model does:
+
+- `generateText`, `streamText`, `generateObject`, `streamObject`
+- tool calling and the AI SDK `Agent`
+- any framework that accepts an AI SDK model (e.g. [Mastra](/docs/integrations))
+
+That's why adopting `ai-lcr` is usually a **one-line change** — see
+[Migrate from plain AI SDK](/docs/migrate-from-ai-sdk).
+
+## Where to go next
+
+- **[Migrate from plain AI SDK](/docs/migrate-from-ai-sdk)** — the before/after diff.
+- **[How routing works](/docs/routing)** — cheapest-first, fallback, and recovery.
+- **[Integrations](/docs/integrations)** — drop `lcr(...)` into the AI SDK, Mastra, and more.
