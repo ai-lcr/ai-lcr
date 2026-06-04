@@ -1,4 +1,4 @@
-import Switchboard from "./components/Switchboard";
+import RoutingDiagram from "./components/RoutingDiagram";
 import CopyInstall from "./components/CopyInstall";
 import CodeSample from "./components/CodeSample";
 import SavingsCalculator from "./components/SavingsCalculator";
@@ -11,7 +11,7 @@ const REPO = "victorzhrn/ai-lcr";
 const PKG = "ai-lcr";
 const GITHUB_URL = `https://github.com/${REPO}`;
 const NPM_URL = `https://www.npmjs.com/package/${PKG}`;
-const DOCS_URL = `${GITHUB_URL}#readme`;
+const DOCS_URL = "/docs";
 
 const FALLBACK_VERSION = "0.0.1";
 
@@ -155,7 +155,7 @@ export default async function Home() {
             <a href="/prices" title="Cheapest provider per model">
               <span className="label-hide">Prices</span>
             </a>
-            <a className="nav__docs" href={DOCS_URL} target="_blank" rel="noreferrer">
+            <a className="nav__docs" href={DOCS_URL}>
               <span className="label-hide">Docs</span>
             </a>
             <a href={NPM_URL} target="_blank" rel="noreferrer">
@@ -191,7 +191,7 @@ export default async function Home() {
           <p className="sub reveal" style={{ animationDelay: "0.14s" }}>
             <strong>Route each call to the cheapest provider that can serve it</strong>, and
             fall back automatically when one fails. One config across OpenRouter,
-            Kunavo, fal &amp; Runware — lowest price per token, every time. Built for the
+            TokenMart, fal &amp; Runware — lowest price per token, every time. Built for the
             Vercel AI SDK.
           </p>
 
@@ -232,11 +232,13 @@ export default async function Home() {
                 <i /> LIVE
               </span>
             </div>
-            <Switchboard />
+            <div style={{ padding: "8px 20px 16px" }}>
+              <RoutingDiagram maxWidth={640} />
+            </div>
           </div>
           <p className="caption">
-            Each request takes the <b>cheapest healthy provider</b> — when one goes
-            offline, traffic reroutes mid-flight to the next cheapest. No dropped calls.
+            ai-lcr takes the <b>cheapest healthy provider</b> — saving ~40% — and when
+            one goes offline, reroutes mid-flight to the next cheapest. No dropped calls.
           </p>
         </section>
 
@@ -379,7 +381,7 @@ export default async function Home() {
                 </span>
               )}
             </a>
-            <a className="btn btn--ghost" href={DOCS_URL} target="_blank" rel="noreferrer">
+            <a className="btn btn--ghost" href={DOCS_URL}>
               Read the docs
               <ArrowIcon />
             </a>
@@ -395,7 +397,7 @@ export default async function Home() {
             <a href="/prices">Prices</a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
             <a href={NPM_URL} target="_blank" rel="noreferrer">npm</a>
-            <a href={DOCS_URL} target="_blank" rel="noreferrer">Docs</a>
+            <a href={DOCS_URL}>Docs</a>
           </span>
         </div>
       </footer>

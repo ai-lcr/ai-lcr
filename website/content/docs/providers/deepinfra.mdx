@@ -1,0 +1,26 @@
+---
+title: DeepInfra
+description: DeepInfra — open-weights host. The one quirk that trips everyone — the chat endpoint lives at /v1/openai, so baseURL must end in /v1/openai.
+---
+
+DeepInfra hosts open-weights models (DeepSeek, MiniMax, Kimi, …) cheaply.
+
+The one quirk that trips everyone: DeepInfra serves the OpenAI-compatible API at
+**`/v1/openai/chat/completions`** — the `/v1/` comes *before* `openai`. Since
+`createOpenAICompatible` appends `/chat/completions` to your `baseURL`, set the
+base to `…/v1/openai`:
+
+```ts
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const deepinfra = createOpenAICompatible({
+  name: "deepinfra",
+  baseURL: "https://api.deepinfra.com/v1/openai", // ← not /v1
+  apiKey: process.env.DEEPINFRA_API_KEY,
+});
+// HuggingFace-style ids: deepinfra("deepseek-ai/DeepSeek-V4-Flash")
+```
+
+Model ids are **HuggingFace-style** paths (`deepseek-ai/DeepSeek-V4-Flash`).
+DeepInfra returns `usage.estimated_cost` on each response — handy for reconciling
+what you were actually billed against the [cost you tracked](/docs/cost-tracking).

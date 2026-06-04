@@ -190,8 +190,56 @@ describe("onCall — streaming failover accumulates into ONE record", () => {
   });
 });
 
+describe("onCall — TTFT (time to first token)", () => {
+  it("streaming success carries ttftMs, within [0, latencyMs]", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [streamOkModel("tokenmart", "hello world")] },
+      onCall: (r) => records.push(r),
+    });
+
+    const res = streamText({ model: lcr("m"), prompt: "x", ...noRetry });
+    let out = "";
+    for await (const delta of res.textStream) out += delta;
+
+    expect(out).toBe("hello world");
+    const r = records[0]!;
+    expect(typeof r.ttftMs).toBe("number");
+    expect(r.ttftMs!).toBeGreaterThanOrEqual(0);
+    // First token can't arrive after the whole stream finished.
+    expect(r.ttftMs!).toBeLessThanOrEqual(r.latencyMs);
+  });
+
+  it("non-streaming (doGenerate) leaves ttftMs undefined — no 'first token' concept", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [okModel("tokenmart", "hi")] },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.ttftMs).toBeUndefined();
+  });
+
+  it("on a streaming failover, ttftMs belongs to the winner that actually streamed", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: { m: [streamMidFailModel("tokenmart", 503), streamOkModel("openrouter", "streamed")] },
+      onCall: (r) => records.push(r),
+    });
+    const res = streamText({ model: lcr("m"), prompt: "x", ...noRetry });
+    let out = "";
+    for await (const delta of res.textStream) out += delta;
+
+    expect(out).toBe("streamed");
+    const r = records[0]!;
+    expect(r.winner).toBe("openrouter");
+    expect(typeof r.ttftMs).toBe("number");
+    expect(r.ttftMs!).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe("onCall — savings baseline (text side)", () => {
-  it("sets baselineUsd from the most expensive priced provider on the same usage", async () => {
+  it("sets baselineUsd from the always-on fallback (last priced leg) on the same usage", async () => {
     const records: CallRecord[] = [];
     const lcr = createLCR({
       models: {
@@ -207,10 +255,135 @@ describe("onCall — savings baseline (text side)", () => {
 
     const r = records[0]!;
     expect(r.winner).toBe("tokenmart");
-    // winner: 10/1e6*1 + 5/1e6*2 = 2e-5 ; baseline (openrouter): 10/1e6*3 + 5/1e6*4 = 5e-5
+    // winner: 10/1e6*1 + 5/1e6*2 = 2e-5 ; baseline = last leg (openrouter): 10/1e6*3 + 5/1e6*4 = 5e-5
     expect(r.costUsd).toBeCloseTo(2e-5, 12);
     expect(r.baselineUsd).toBeCloseTo(5e-5, 12);
     expect(r.baselineUsd! - r.costUsd).toBeGreaterThan(0);
+  });
+
+  it("baselines on the fallback leg, not the priciest leg → no fabricated saving when the fallback serves", async () => {
+    // Cache-heavy call: the sticker-cheaper leg (tokenmart, no cacheRead) would
+    // cost MORE than the fallback (openrouter, cacheRead) on these tokens. The
+    // old max-of-chain baseline picked tokenmart and showed a "saving" even
+    // though openrouter itself served at list price. Last-leg baseline = the
+    // winner's own cost here → saving is 0, which is the honest answer.
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          // tokenmart fails → fail over to openrouter (the last leg) which serves.
+          { model: failModel("tokenmart", 429), label: "tokenmart", cost: { input: 2, output: 2 } },
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3, cacheRead: 0.3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    expect(r.winner).toBe("openrouter");
+    // openrouter cost = 100 full@3 + 900 cached@0.3 + 100 out@3 = 3e-4 + 2.7e-4 + 3e-4 = 8.7e-4
+    expect(r.costUsd).toBeCloseTo(8.7e-4, 12);
+    // baseline = last leg (openrouter) on the same usage = costUsd → no saving.
+    expect(r.baselineUsd).toBeCloseTo(8.7e-4, 12);
+    expect(r.baselineUsd! - r.costUsd).toBe(0);
+  });
+
+  it("reports cachedSavingUsd (caching benefit) separately from the routing baseline", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3, cacheRead: 0.3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    // 900 cached tokens billed at 0.3 instead of 3 → saved 900/1e6 * (3 - 0.3) = 2.43e-3
+    expect(r.cachedSavingUsd).toBeCloseTo(2.43e-3, 12);
+    // it is NOT a routing saving: single priced leg → baseline == cost.
+    expect(r.baselineUsd! - r.costUsd).toBe(0);
+  });
+
+  it("omits cachedSavingUsd when the provider has no cacheRead rate", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("p", "hi", usageWithCache(1000, 100, 900)),
+            label: "p",
+            cost: { input: 3, output: 3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+    expect(records[0]!.cachedSavingUsd).toBeUndefined();
+  });
+
+  it("applies defaultCacheReadRatio to a leg that omits cacheRead", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3 }, // no explicit cacheRead
+          },
+        ],
+      },
+      defaultCacheReadRatio: 0.1, // → effective cacheRead = 3 * 0.1 = 0.3
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    // same as the explicit-0.3 case: 900 cached × (3 − 0.3)/1e6
+    expect(records[0]!.cachedSavingUsd).toBeCloseTo(2.43e-3, 12);
+  });
+
+  it("lets an explicit cacheRead win over defaultCacheReadRatio", async () => {
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("openrouter", "hi", usageWithCache(1000, 100, 900)),
+            label: "openrouter",
+            cost: { input: 3, output: 3, cacheRead: 0.6 }, // explicit — ratio ignored
+          },
+        ],
+      },
+      defaultCacheReadRatio: 0.1,
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    // uses 0.6, not the ratio's 0.3: 900 × (3 − 0.6)/1e6 = 2.16e-3
+    expect(records[0]!.cachedSavingUsd).toBeCloseTo(2.16e-3, 12);
+  });
+
+  it("rejects an out-of-range defaultCacheReadRatio", () => {
+    expect(() =>
+      createLCR({ models: { m: [] }, defaultCacheReadRatio: 1.5 }),
+    ).toThrow(/defaultCacheReadRatio must be in \[0, 1\]/);
   });
 
   it("leaves baselineUsd undefined when no provider is priced", async () => {
@@ -382,6 +555,19 @@ describe("formatCallRecord", () => {
       usageMissing: true,
     });
     expect(line).toBe("✓ text  p  412ms  $0  ⚠no-usage");
+  });
+
+  it("shows TTFT next to total latency when present (streaming)", () => {
+    const line = formatCallRecord({
+      ...base,
+      attempts: [{ provider: "tokenmart", ok: true, latencyMs: 412 }],
+      winner: "tokenmart",
+      ok: true,
+      failedOver: false,
+      ttftMs: 88,
+      costUsd: 0.0003,
+    });
+    expect(line).toBe("✓ text  tokenmart  412ms (ttft 88ms)  $0.0003");
   });
 
   it("color option wraps the line in ANSI", () => {

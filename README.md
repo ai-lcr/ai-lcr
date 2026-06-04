@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr routes each model to its own cheapest provider — Gemini to Kunavo, DeepSeek to OpenRouter, Seedream to fal, Flux Schnell to Runware — and falls back on failure" width="820">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr keeps a cheapest-first list of providers per model — serves the cheapest (saving ~40%), fails over to the next on error, and snaps back to the cheapest after ~60s" width="720">
 </p>
 
 The same model costs different amounts on different providers — and no single provider is cheapest for everything. `ai-lcr` keeps a cheapest-first list per model, routes to the cheapest healthy one (⭐ below), and falls through on failure — the way phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing) for decades.
@@ -144,10 +144,6 @@ DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. Fo
 2. **Fall through on failure.** On any provider failure — rate limit, 5xx, timeout, a **billing cap** (402 / out-of-credit / quota), *and* a client error like a **400** — it advances to the next provider, streaming-safe. A 400 fails over on purpose: across OpenAI-compatible aggregators a 400 is usually "*this* provider won't take this request" (an unsupported param, a model it hasn't listed, a stricter schema), not a universally-broken request — so the next provider may well serve it. If every provider rejects the request it still fails, surfacing the **original** error so a genuine caller bug stays debuggable. The one failure that never fails over is a deliberate caller cancellation (`AbortSignal`). Pass `shouldRetry: isRetryableError` to `createLCR` to restore the stricter "client errors fail fast" behavior.
 3. **Recover.** After an idle window (`resetIntervalMs`, default 60s) it snaps back to the cheapest provider.
 
-<p align="center">
-  <img src="assets/ai-lcr-routing.svg" alt="routing diagram: cheapest first, fallback on failure, recover after idle" width="820">
-</p>
-
 ## See what happened (`onCall`)
 
 `onError`/`onCost` fire separately and uncorrelated, so a failover is hard to read after the fact. `onCall` gives you **one record per request** — the full chain, the winner, the reason for each failed hop, latency, and cost — and `formatCallRecord` turns it into a one-liner you can scan:
@@ -184,6 +180,7 @@ interface CallRecord {
   ok: boolean;
   failedOver: boolean;       // more than one provider was tried
   latencyMs: number;
+  ttftMs?: number;           // streaming only: time to first token (winner's first content delta) — industry-standard responsiveness metric
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number; // prompt-cache hits the winner read (when reported)
@@ -195,6 +192,8 @@ interface CallRecord {
 ```
 
 **Savings, not just spend.** Whenever at least one provider in a chain carries a `cost`, `baselineUsd` is what the same call would have cost on the most expensive priced leg (typically your safety-net fallback). `baselineUsd − costUsd` is the money routing saved on that call — the number a cost dashboard exists to show.
+
+**Responsiveness, not just total time.** On streaming calls (`streamText`, `streamObject`, streaming agents), `ttftMs` is the **time to first token** — measured from the winning provider's attempt start to its first content delta. It's the metric most LLM dashboards lead with, because it's what a user feels as "how fast did it start replying". Total `latencyMs` covers the whole stream including any failover; `ttftMs` isolates the serving model's responsiveness. It's `undefined` for `generateText`/`generateObject` (no streaming → no "first" token) and for calls that failed before any content. Output throughput (tokens/sec) is then `outputTokens / ((latencyMs − ttftMs) / 1000)`.
 
 **Cache-aware cost.** Add `cacheRead` (USD per 1M cached input tokens) to a provider's `cost` and ai-lcr bills prompt-cache hits at that rate when the call reports `usage.inputTokens.cacheRead`. Omit it and cached tokens fall back to the full `input` rate (unchanged from before). For cache-heavy traffic (e.g. Anthropic, where a cache read is ~0.1×) this keeps `costUsd` honest — and `cachedInputTokens` lets a dashboard audit it:
 

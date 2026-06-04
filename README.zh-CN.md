@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr 把每个模型路由到各自最便宜的 provider——Gemini 走 Kunavo，DeepSeek 走 OpenRouter，Seedream 走 fal，Flux Schnell 走 Runware——失败时自动 fallback" width="820">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr 为每个模型维护一份「最便宜优先」的 provider 列表——默认走最便宜的（省约 40%），出错时切到下一个，约 60 秒后自动切回最便宜" width="720">
 </p>
 
 同一个模型在不同 provider 上的价格不同——而且没有任何单一 provider 在所有模型上都最便宜。`ai-lcr` 为每个模型维护一份「最便宜优先」的列表，路由到其中最便宜且健康的 provider（下表中的 ⭐），失败时向下穿透——这正是电话运营商几十年来一直在做的 [最低成本路由（Least Cost Routing）](https://en.wikipedia.org/wiki/Least-cost_routing)。
@@ -143,10 +143,6 @@ DeepInfra 只承载开源权重——没有第一方 Claude / GPT / Gemini。那
 1. **最便宜优先。** provider 按顺序依次尝试——把它们排成最便宜优先，或设置 `autoSort: true` 让它按 `cost` 自动排序。
 2. **失败时向下穿透。** 遇到任何 provider 失败——限流、5xx、超时、**额度耗尽**（402 / 欠费 / 余额不足），以及 **400** 这类 client 错误——都会前进到下一个 provider，且对流式安全。400 会 failover 是有意为之：在 OpenAI 兼容聚合层里，400 往往是"*这家* provider 不吃这个请求"（不支持的参数、它没上架这个 model、更严格的 schema），而非请求本身坏了——换一家很可能就能服务。若所有 provider 都拒绝，请求仍会失败，并抛出**第一个**（原始）错误，让真正的调用方 bug 保持可调试。唯一永远不 failover 的是调用方主动取消（`AbortSignal`）。想恢复旧的"client 错误立即失败"行为，给 `createLCR` 传 `shouldRetry: isRetryableError`。
 3. **恢复。** 在一段空闲窗口（`resetIntervalMs`，默认 60s）之后，自动回到最便宜的 provider。
-
-<p align="center">
-  <img src="assets/ai-lcr-routing.svg" alt="路由示意图：最便宜优先、失败时 fallback、空闲后恢复" width="820">
-</p>
 
 ## 支持的 provider
 

@@ -64,8 +64,30 @@ export interface CostEvent {
  *   - "auth":      401 / 403 — a misconfigured or revoked key.
  *   - "billing":   402 / out-of-credit / quota — account needs topping up.
  *   - "client":    a non-retryable caller error (e.g. 400 bad request).
+ *   - "empty":     provider returned a clean 200 but generated nothing
+ *                  (zero output tokens, no content) — a *content*-integrity
+ *                  failure, not a transport one. The provider looks healthy to
+ *                  every status/network check yet hands the user a blank. We
+ *                  fail over on it like a transient error, but tag it separately
+ *                  so a run of `"empty"` attempts (a quietly degraded model)
+ *                  doesn't hide inside the transient noise.
  */
-export type ErrorKind = "transient" | "auth" | "billing" | "client";
+export type ErrorKind = "transient" | "auth" | "billing" | "client" | "empty";
+
+/**
+ * Marker thrown internally when a provider streams (or returns) a clean,
+ * error-free response that contains no generated content — zero output tokens
+ * and not a single content part. It carries no HTTP status and matches no
+ * network pattern, so the only way the failover engine can react to it is this
+ * explicit type. Not part of the public surface; callers never see it (the
+ * engine either fails over past it or settles the record with `emptyCompletion`).
+ */
+export class EmptyCompletionError extends Error {
+  constructor(provider: string) {
+    super(`ai-lcr: provider "${provider}" returned an empty completion (0 output tokens, no content)`);
+    this.name = "EmptyCompletionError";
+  }
+}
 
 /** One provider attempt within a single request. */
 export interface RouteAttempt {
@@ -102,6 +124,18 @@ export interface CallRecord {
   failedOver: boolean;
   /** Total wall time across all attempts, ms. */
   latencyMs: number;
+  /**
+   * Time to first token (TTFT), ms — the industry-standard responsiveness
+   * metric. Measured from the *winning* provider's stream attempt start to its
+   * first content token (`text-delta` / `reasoning-delta`), so it captures how
+   * fast the model that actually served started replying, not failover overhead
+   * (that's already in `latencyMs`). Streaming only: **undefined** for
+   * `doGenerate` (the whole response lands at once, so there's no "first token")
+   * and for calls that failed before producing any content. With `latencyMs` and
+   * `outputTokens`, output throughput is derivable: `outputTokens / ((latencyMs −
+   * ttftMs) / 1000)` tokens/sec.
+   */
+  ttftMs?: number;
   inputTokens: number;
   outputTokens: number;
   /**
@@ -114,12 +148,25 @@ export interface CallRecord {
   /** Computed from the winner's `cost`; 0 if no price was given or the call failed. */
   costUsd: number;
   /**
-   * What the same request would have cost on the most expensive *priced*
-   * provider in the chain, on identical token usage — the savings baseline
-   * (`baselineUsd - costUsd`). Set by both routers whenever at least one
-   * provider carries a `cost`; undefined only when no provider was priced.
+   * What this same usage would have cost on the savings baseline, so
+   * `baselineUsd - costUsd` is what routing actually saved. Text router: the
+   * always-on fallback leg — the LAST priced provider in the chain, i.e. the
+   * list-price provider you'd fall back to without routing (e.g. OpenRouter).
+   * Media router: the model-maker's official direct price. NOT the most
+   * expensive leg of the chain: prompt caching can make a sticker-cheaper
+   * provider cost more on a cache-heavy call, and a max-of-chain baseline would
+   * fabricate a "saving" on calls the fallback itself served. Undefined only
+   * when no provider was priced.
    */
   baselineUsd?: number;
+  /**
+   * The slice of `costUsd` that prompt-cache reads saved versus paying the full
+   * input rate for those same tokens (`cachedTokens × (input − cacheRead)`).
+   * Present only when > 0. This is the serving provider's own caching benefit —
+   * it happens with or without routing — so it is NOT a routing saving and must
+   * be surfaced separately, never folded into `baselineUsd - costUsd`.
+   */
+  cachedSavingUsd?: number;
   /**
    * Caller-supplied correlation id, read from `providerOptions.lcr.requestId`
    * on the call. Multi-step tool loops emit one record per `doStream`/
@@ -134,6 +181,21 @@ export interface CallRecord {
    * other signal. Treat a flagged record as "cost unknown", not "free".
    */
   usageMissing?: boolean;
+  /**
+   * True when the winner served a clean, error-free response that nonetheless
+   * generated **nothing**: zero output tokens with a non-empty prompt (and, for
+   * streams, not one content part). The user asked and got a blank. Distinct
+   * from {@link usageMissing} (which is input *and* output both zero — usage not
+   * reported); here the prompt was billed but the model produced no output.
+   *
+   * Set only when this empty response is what the caller actually received —
+   * i.e. every provider in the chain came back empty, so failover couldn't
+   * rescue it. (When an earlier provider returns empty but a later one produces
+   * content, that earlier attempt is recorded as a failed `empty_completion` hop
+   * and this flag stays unset, because the winner did produce output.) Alert on
+   * it: a provider that quietly returns blanks passes every health check.
+   */
+  emptyCompletion?: boolean;
 }
 
 export interface FallbackOptions {
@@ -330,6 +392,7 @@ export function shouldFailover(error: unknown): boolean {
  * Reuses the same signals as {@link isRetryableError} — no new vocabulary.
  */
 export function classifyError(error: unknown): string {
+  if (error instanceof EmptyCompletionError) return "empty_completion";
   const e = error as { statusCode?: number; status?: number } | undefined;
   const status = e?.statusCode ?? e?.status;
   if (typeof status === "number") return String(status);
@@ -363,6 +426,7 @@ const BILLING_PATTERNS = [
  * burning the pricey fallback because a key/account is broken: page on it.
  */
 export function classifyErrorKind(error: unknown): ErrorKind {
+  if (error instanceof EmptyCompletionError) return "empty";
   const e = error as { statusCode?: number; status?: number } | undefined;
   const status = e?.statusCode ?? e?.status;
   const { text } = errorSignals(error);
@@ -424,11 +488,44 @@ function costForUsage(
   );
 }
 
+/**
+ * The slice of a settled call's bill that prompt-cache reads saved, vs paying
+ * the full `input` rate for those same tokens: `cachedTokens × (input − cacheRead)`.
+ * Zero when the provider has no `cacheRead` (caching gives no discount there).
+ * This is the provider's own caching benefit — independent of routing — so the
+ * dashboard reports it on its own line, never inside the routing-savings figure.
+ */
+function cacheSavingForUsage(cost: ProviderCost, inputTokens: number, cacheReadTokens: number): number {
+  if (cost.cacheRead === undefined) return 0;
+  const cached = Math.min(Math.max(cacheReadTokens, 0), inputTokens);
+  return (cached / 1e6) * (cost.input - cost.cacheRead);
+}
+
 /** Read a caller-supplied correlation id from `providerOptions.lcr.requestId`. */
 function requestIdFrom(options: LanguageModelV3CallOptions): string | undefined {
   const raw = options.providerOptions?.lcr?.requestId;
   return typeof raw === "string" && raw.length > 0 ? raw : undefined;
 }
+
+// Stream parts that carry actual model output the consumer would see. Used to
+// decide two things: (1) whether a stream that ended with zero output tokens is
+// truly *empty* (none of these arrived) vs a legitimate no-text step like a
+// tool call (which emits tool-call / tool-input parts and bills output tokens),
+// and (2) whether it is still safe to fail over — once real content has reached
+// the consumer we can't rewind, but stream-start / response-metadata / finish
+// have not shown them anything, so a switch after only those is fine.
+const CONTENT_PART_TYPES = new Set([
+  "text-delta",
+  "reasoning-delta",
+  "tool-call",
+  "tool-input-start",
+  "tool-input-delta",
+  "tool-input-end",
+  "file",
+  "source",
+  "tool-result",
+  "raw",
+]);
 
 export class LcrFallbackModel implements LanguageModelV3 {
   readonly specificationVersion = "v3" as const;
@@ -552,19 +649,22 @@ export class LcrFallbackModel implements LanguageModelV3 {
   }
 
   /**
-   * Baseline = what this same usage would have cost on the most expensive
-   * *priced* provider in the chain (typically the OpenRouter fallback leg). The
-   * winner's savings is `baselineUsd - costUsd`. Undefined when no provider in
-   * the chain carries a price (nothing to compare against).
+   * Baseline = what this same usage would have cost on the always-on fallback:
+   * the LAST priced leg of the chain (by convention the list-price provider you'd
+   * use without routing — e.g. OpenRouter, always last). The winner's saving is
+   * `baselineUsd - costUsd`. We take the last priced leg, NOT the most expensive
+   * one: prompt caching can make a sticker-cheaper provider (no `cacheRead`) cost
+   * MORE on a cache-heavy call, and a max-of-chain baseline would then fabricate a
+   * "saving" even on calls the fallback itself served. Undefined when no provider
+   * in the chain carries a price (nothing to compare against).
    */
   private baselineUsd(inputTokens: number, outputTokens: number, cacheReadTokens: number): number | undefined {
-    let max: number | undefined;
+    let baseline: number | undefined;
     for (const p of this.opts.providers) {
       if (!p.cost) continue;
-      const c = costForUsage(p.cost, inputTokens, outputTokens, cacheReadTokens);
-      if (max === undefined || c > max) max = c;
+      baseline = costForUsage(p.cost, inputTokens, outputTokens, cacheReadTokens);
     }
-    return max;
+    return baseline;
   }
 
   /** Winner settled: record the attempt, fire `onCost` (compat) + `onCall`. */
@@ -573,6 +673,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
     provider: RoutedProvider,
     attemptStart: number,
     usage: LanguageModelV3GenerateResult["usage"] | undefined,
+    ttftMs?: number,
   ): void {
     ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
     const inputTokens = usage?.inputTokens?.total ?? 0;
@@ -581,9 +682,17 @@ export class LcrFallbackModel implements LanguageModelV3 {
     const costUsd = provider.cost
       ? costForUsage(provider.cost, inputTokens, outputTokens, cacheReadTokens)
       : 0;
+    const cachedSavingUsd = provider.cost
+      ? cacheSavingForUsage(provider.cost, inputTokens, cacheReadTokens)
+      : 0;
     // Winner served but reported no usage at all → cost/credit metering would
     // silently read 0. Surface it as a flag rather than a believable "free" row.
     const usageMissing = inputTokens === 0 && outputTokens === 0;
+    // Winner served a clean response that generated nothing (prompt billed, zero
+    // output). The user got a blank. Failover already tried to dodge this; if it
+    // reaches here it's because every provider came back empty, so flag the
+    // settled record. (input === 0 is the usageMissing case above, not this one.)
+    const emptyCompletion = inputTokens > 0 && outputTokens === 0;
     this.emitCost({
       model: this.opts.modelName,
       provider: provider.label,
@@ -599,13 +708,16 @@ export class LcrFallbackModel implements LanguageModelV3 {
       ok: true,
       failedOver: ctx.attempts.length > 1,
       latencyMs: Date.now() - ctx.startedAt,
+      ...(ttftMs !== undefined ? { ttftMs } : {}),
       inputTokens,
       outputTokens,
       ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
       costUsd,
       baselineUsd: this.baselineUsd(inputTokens, outputTokens, cacheReadTokens),
+      ...(cachedSavingUsd > 0 ? { cachedSavingUsd } : {}),
       ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
       ...(usageMissing ? { usageMissing: true } : {}),
+      ...(emptyCompletion ? { emptyCompletion: true } : {}),
     });
   }
 
@@ -642,6 +754,20 @@ export class LcrFallbackModel implements LanguageModelV3 {
       const attemptStart = Date.now();
       try {
         const result = await provider.model.doGenerate(options);
+        // Empty completion: a clean 200 that generated nothing (prompt billed,
+        // zero output tokens). Treat it like a retryable failure and move to the
+        // next provider — but only while one remains. On the last provider we
+        // settle the empty result and let `finalizeOk` flag it, rather than
+        // escalating a blank into a hard request failure with nowhere to turn.
+        const out = result.usage?.outputTokens?.total ?? 0;
+        const inp = result.usage?.inputTokens?.total ?? 0;
+        if (inp > 0 && out === 0 && tried < n - 1) {
+          const emptyErr = new EmptyCompletionError(provider.label);
+          lastError = emptyErr;
+          this.emitError(emptyErr, provider.label);
+          this.recordFail(ctx, provider, attemptStart, emptyErr);
+          continue;
+        }
         this.settleSticky(idx);
         this.finalizeOk(ctx, provider, attemptStart, result.usage);
         return result;
@@ -717,7 +843,18 @@ export class LcrFallbackModel implements LanguageModelV3 {
     const servingIdx = idx;
     const triedBeforeServing = tried;
     let usage: LanguageModelV3GenerateResult["usage"] | undefined;
-    let streamedAny = false;
+    // "Has the consumer seen real content yet?" — gates failover. Deliberately
+    // tracks *content* (see CONTENT_PART_TYPES), not "any chunk": stream-start,
+    // response-metadata and finish reveal nothing, so a switch after only those
+    // is safe, and an empty stream that emitted a stray metadata chunk can still
+    // fail over.
+    let contentStreamed = false;
+    // TTFT: stamped on the first content token (text/reasoning delta), measured
+    // from this serving provider's attempt start. Deliberately the first *delta*,
+    // not the first chunk — `stream-start` / `text-start` / `response-metadata`
+    // arrive before the model has generated anything, so timing to them would
+    // understate TTFT.
+    let ttftMs: number | undefined;
 
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       async start(controller) {
@@ -726,24 +863,40 @@ export class LcrFallbackModel implements LanguageModelV3 {
           reader = result.stream.getReader();
           for (;;) {
             const { done, value } = await reader.read();
-            // An error surfaced as the first chunk → fail over (only if nothing
+            // An error surfaced as a chunk → fail over (only while nothing
             // user-visible has streamed yet).
-            if (!streamedAny && value && typeof value === "object" && "error" in value) {
+            if (!contentStreamed && value && typeof value === "object" && "error" in value) {
               const err = (value as { error: unknown }).error;
               if (self.shouldRetry(err)) throw err;
             }
             if (done) break;
-            if (value.type === "finish") usage = value.usage;
+            if (value.type === "finish") {
+              usage = value.usage;
+              // Empty completion mid-stream: a clean finish that generated
+              // nothing (prompt billed, zero output) with no content emitted.
+              // Throw to route into the same failover machinery as a pre-stream
+              // error — but only while a provider remains. On the last provider
+              // we fall through, enqueue finish, and let finalizeOk flag it
+              // rather than turn a blank into a hard stream error.
+              const out = value.usage?.outputTokens?.total ?? 0;
+              const inp = value.usage?.inputTokens?.total ?? 0;
+              if (inp > 0 && out === 0 && !contentStreamed && triedBeforeServing + 1 < n) {
+                throw new EmptyCompletionError(servingProvider.label);
+              }
+            }
+            if (ttftMs === undefined && (value.type === "text-delta" || value.type === "reasoning-delta")) {
+              ttftMs = Date.now() - servingAttemptStart;
+            }
             controller.enqueue(value);
-            if (value.type !== "stream-start") streamedAny = true;
+            if (CONTENT_PART_TYPES.has(value.type)) contentStreamed = true;
           }
           self.settleSticky(servingIdx);
-          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage);
+          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage, ttftMs);
           controller.close();
         } catch (error) {
           self.emitError(error, servingProvider.label);
           self.recordFail(ctx, servingProvider, servingAttemptStart, error);
-          if (!streamedAny) {
+          if (!contentStreamed) {
             // This serving provider is now also a failure → bump the count and
             // bail if every provider has been tried.
             const nextTried = triedBeforeServing + 1;

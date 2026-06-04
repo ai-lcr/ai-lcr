@@ -1,0 +1,25 @@
+---
+title: Overview
+description: lcr("...") returns a standard AI SDK model, so anything that accepts one works unchanged — the Vercel AI SDK itself, Mastra agents, and any framework built on the AI SDK.
+---
+
+The reason `ai-lcr` integrates so widely is one property: **`lcr("...")` returns
+a standard AI SDK `LanguageModel`.** Anything that takes an AI SDK model takes a
+routed one — you change the model argument and nothing else.
+
+> New here? [Migrate from plain AI SDK](/docs/migrate-from-ai-sdk) shows the core
+> one-line swap. The integrations below all build on it.
+
+## Pick your framework
+
+- **[Vercel AI SDK](/docs/integrations/ai-sdk)** — `generateText`, `streamText`, `generateObject`, tools, and the `Agent` loop.
+- **[Mastra](/docs/integrations/mastra)** — drop `lcr(...)` into a Mastra agent's `model` field.
+
+## Other frameworks
+
+Any library that accepts an AI SDK `LanguageModel` works the same way — pass
+`lcr("...")` where it expects a model. Frameworks that use their *own* model
+classes (e.g. LangChain's chat models) or run outside JavaScript (Python tools,
+visual flow builders like n8n) don't consume an AI SDK model directly; bridging
+those needs an OpenAI-compatible proxy in front of ai-lcr, which is on the
+roadmap rather than shipping today.

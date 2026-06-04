@@ -1,0 +1,22 @@
+---
+title: OpenRouter
+description: OpenRouter — widest model coverage, the safe fallback. Vendor-prefixed model ids.
+---
+
+OpenRouter aggregates almost every model behind one OpenAI-compatible endpoint —
+the safe last entry in a cheapest-first list when you want guaranteed coverage.
+
+```ts
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+// vendor-prefixed ids: openrouter("google/gemini-2.5-flash")
+```
+
+Model ids are **vendor-prefixed** (`google/…`, `anthropic/…`, `deepseek/…`).
+OpenRouter is also a good baseline for [vetting other providers](/docs/cost-tracking) —
+compare a cheaper provider's token counts and output against it.

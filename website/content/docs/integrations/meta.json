@@ -1,0 +1,9 @@
+{
+  "title": "Integrations",
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "ai-sdk",
+    "mastra"
+  ]
+}

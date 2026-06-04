@@ -1,0 +1,23 @@
+---
+title: Vercel AI SDK
+description: lcr("...") drops into every Vercel AI SDK call — generateText, streamText, generateObject, tools, and the Agent loop — unchanged.
+---
+
+`lcr("...")` returns a standard AI SDK `LanguageModel`, so it drops into every
+AI SDK call: `generateText`, `streamText`, `generateObject`, `streamObject`,
+tool calling, and the `Agent` loop.
+
+```ts
+import { streamText } from "ai";
+
+const result = streamText({
+  model: lcr("smart"),       // routed + fallback, same API
+  messages,
+  tools,                     // tool calling unaffected
+});
+```
+
+Because the routed model implements the same interface, streaming, structured
+output, and tools all keep working — a failover mid-stream is transparent to
+your code. See [Migrate from plain AI SDK](/docs/migrate-from-ai-sdk) for the
+before/after on an existing call site.

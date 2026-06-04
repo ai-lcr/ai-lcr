@@ -1,169 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" width="900" height="470" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="AI-LCR routes each model to its own cheapest provider — Gemini to Kunavo, DeepSeek to OpenRouter, Seedream to fal, Flux Schnell to Runware">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="ai-lcr keeps a cheapest-first list of providers per model: it serves the cheapest (TokenMart, −40% vs the priciest), fails over to the next on error, and snaps back to the cheapest after ~60s.">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0b1020"/>
       <stop offset="1" stop-color="#11182f"/>
     </linearGradient>
-    <radialGradient id="winGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#3fb950" stop-opacity="0.5"/>
-      <stop offset="1" stop-color="#3fb950" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="gemini" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4796E3"/>
-      <stop offset="0.55" stop-color="#9177C7"/>
-      <stop offset="1" stop-color="#D96570"/>
-    </linearGradient>
-    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="2.6" result="b"/>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <rect x="0.5" y="0.5" width="899" height="469" rx="18" fill="url(#bg)" stroke="#222b44"/>
+  <rect x="0.5" y="0.5" width="479" height="269" rx="16" fill="url(#bg)" stroke="#222b44"/>
 
-  <!-- title -->
-  <text x="40" y="50" font-size="27" font-weight="700">
-    <tspan fill="#e6edf3">AI-LCR</tspan><tspan fill="#4a5568" font-weight="400"> — </tspan><tspan fill="#c9d1d9" font-weight="600">AI Least Cost Routing</tspan>
-  </text>
-  <text x="40" y="75" fill="#8b949e" font-size="14.5">Every model routed to <tspan fill="#7fe7d6" font-weight="600">its own cheapest provider</tspan>, with auto fallback on failure</text>
+  <!-- header -->
+  <text x="116" y="40" fill="#5b647d" font-size="10.5" font-weight="600" letter-spacing="0.6">CHEAPEST-FIRST LIST</text>
 
-  <!-- column headers -->
-  <text x="130" y="112" text-anchor="middle" fill="#5b647d" font-size="11.5" font-weight="600" letter-spacing="0.6">MODELS YOU CALL</text>
-  <text x="450" y="112" text-anchor="middle" fill="#5b647d" font-size="11.5" font-weight="600" letter-spacing="0.6">ROUTER</text>
-  <text x="775" y="112" text-anchor="middle" fill="#5b647d" font-size="11.5" font-weight="600" letter-spacing="0.6">CHEAPEST PROVIDER · PER MODEL</text>
-
-  <!-- ── connection paths (model → router → its cheapest provider) ── -->
-  <!-- Gemini 3 Pro → Kunavo (blue) -->
-  <path d="M220,150 C300,150 320,262 440,262 C560,262 600,150 680,150" fill="none" stroke="#58a6ff" stroke-width="2.4" opacity="0.7"/>
-  <!-- DeepSeek V4 → OpenRouter (purple) -->
-  <path d="M220,225 C300,225 330,262 440,262 C550,262 600,225 680,225" fill="none" stroke="#a371f7" stroke-width="2.4" opacity="0.7"/>
-  <!-- Seedream 4 → fal (pink) -->
-  <path d="M220,300 C300,300 330,262 440,262 C550,262 600,300 680,300" fill="none" stroke="#f778ba" stroke-width="2.4" opacity="0.7"/>
-  <!-- Flux Schnell → Runware (teal) -->
-  <path d="M220,375 C300,375 320,262 440,262 C560,262 600,375 680,375" fill="none" stroke="#2dd4bf" stroke-width="2.4" opacity="0.7"/>
-
-  <!-- ── model chips (with simplified vendor marks) ── -->
-  <!-- Gemini — Google sparkle -->
+  <!-- savings badge -->
   <g>
-    <rect x="40" y="126" width="180" height="48" rx="11" fill="#161d31" stroke="#2b3552"/>
-    <path transform="translate(54,138)" d="M12 1.5 C12.4 6.7 17.3 11.6 22.5 12 C17.3 12.4 12.4 17.3 12 22.5 C11.6 17.3 6.7 12.4 1.5 12 C6.7 11.6 11.6 6.7 12 1.5 Z" fill="url(#gemini)"/>
-    <text x="88" y="148" fill="#e6edf3" font-size="13.5" font-weight="600">Gemini 3 Pro</text>
-    <text x="88" y="165" fill="#6e7891" font-size="11">Google · text</text>
-  </g>
-  <!-- DeepSeek — whale mark -->
-  <g>
-    <rect x="40" y="201" width="180" height="48" rx="11" fill="#161d31" stroke="#2b3552"/>
-    <g transform="translate(54,213)">
-      <rect width="24" height="24" rx="6" fill="#4D6BFE"/>
-      <path d="M4 13 C4 9.5 7 8 10 8 C13.5 8 16 10.5 16.6 12.6 C17.6 11.6 19 11.2 20 11.7 C19.4 13.2 18.4 14 17.4 14.1 C16.7 16 14 17 11 17 C7 17 4 15.5 4 13 Z" fill="#fff"/>
-      <circle cx="8.2" cy="12" r="1" fill="#4D6BFE"/>
-    </g>
-    <text x="88" y="223" fill="#e6edf3" font-size="13.5" font-weight="600">DeepSeek V4</text>
-    <text x="88" y="240" fill="#6e7891" font-size="11">DeepSeek · text</text>
-  </g>
-  <!-- Seedream — ByteDance, sprout mark -->
-  <g>
-    <rect x="40" y="276" width="180" height="48" rx="11" fill="#161d31" stroke="#2b3552"/>
-    <g transform="translate(54,288)">
-      <rect width="24" height="24" rx="6" fill="#1F9E8B"/>
-      <path d="M12 18.5 L12 9.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>
-      <path d="M12 11.5 C8.8 11.5 6.5 9.3 6.5 6 C9.7 6 12 8.2 12 11.5 Z" fill="#fff"/>
-      <path d="M12 13.5 C15.2 13.5 17.5 11.6 17.5 8.8 C14.6 8.8 12 10.8 12 13.5 Z" fill="#fff" opacity="0.8"/>
-    </g>
-    <text x="88" y="298" fill="#e6edf3" font-size="13.5" font-weight="600">Seedream 4</text>
-    <text x="88" y="315" fill="#6e7891" font-size="11">ByteDance · image</text>
-  </g>
-  <!-- Flux — Black Forest Labs, flow mark -->
-  <g>
-    <rect x="40" y="351" width="180" height="48" rx="11" fill="#161d31" stroke="#2b3552"/>
-    <g transform="translate(54,363)">
-      <rect width="24" height="24" rx="6" fill="#0d0d0f" stroke="#33333a"/>
-      <path d="M4 10 C7 6 9 14 12 10 C15 6 17 14 20 10" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-      <path d="M4 15 C7 11 9 19 12 15 C15 11 17 19 20 15" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.55"/>
-    </g>
-    <text x="88" y="373" fill="#e6edf3" font-size="13.5" font-weight="600">Flux Schnell</text>
-    <text x="88" y="390" fill="#6e7891" font-size="11">Black Forest · image</text>
+    <rect x="338" y="26" width="124" height="24" rx="12" fill="#0b1120" stroke="#4fe39a" stroke-width="1"/>
+    <circle cx="357" cy="38" r="3.4" fill="#4fe39a" filter="url(#glow)">
+      <animate attributeName="opacity" values="1;0.3;1" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <text x="369" y="42" font-size="12"><tspan fill="#97a3c0">saving </tspan><tspan fill="#4fe39a" font-weight="700">−40%</tspan></text>
   </g>
 
-  <!-- ── router node ── -->
+  <!-- request token -->
   <g>
-    <rect x="360" y="222" width="180" height="80" rx="14" fill="#141b2e" stroke="#2dd4bf" stroke-width="1.6"/>
-    <rect x="360" y="222" width="180" height="80" rx="14" fill="none" stroke="#2dd4bf" stroke-width="1.6" opacity="0.5">
-      <animate attributeName="opacity" values="0.12;0.6;0.12" dur="2.4s" repeatCount="indefinite"/>
-    </rect>
-    <text x="450" y="256" text-anchor="middle" fill="#e6edf3" font-size="17" font-weight="700">AI-LCR</text>
-    <text x="450" y="277" text-anchor="middle" fill="#7fe7d6" font-size="11.5">sort by price · per model</text>
-    <text x="450" y="293" text-anchor="middle" fill="#6e7891" font-size="11">→ route to cheapest</text>
+    <rect x="18" y="128" width="60" height="34" rx="9" fill="#0e1626" stroke="#273253"/>
+    <text x="48" y="143" text-anchor="middle" fill="#e9eef9" font-size="11.5" font-weight="600">call</text>
+    <text x="48" y="156" text-anchor="middle" fill="#5b647d" font-size="8.5">lcr("smart")</text>
   </g>
 
-  <!-- ── provider chips (each is the cheapest for its model; the route plugs into a green ✓) ── -->
-  <!-- Kunavo -->
-  <g>
-    <ellipse cx="775" cy="150" rx="118" ry="34" fill="url(#winGlow)">
-      <animate attributeName="opacity" values="0.35;0.9;0.35" dur="2.2s" repeatCount="indefinite"/>
-    </ellipse>
-    <rect x="680" y="126" width="190" height="48" rx="11" fill="#10241a" stroke="#58a6ff" stroke-width="1.6"/>
-    <text x="698" y="148" fill="#e6edf3" font-size="13.5" font-weight="600">Kunavo</text>
-    <text x="698" y="165" fill="#3fb950" font-size="11">$1.40 / 1M · −30%</text>
-    <g transform="translate(680,150)">
-      <circle r="9" fill="#0d1117" stroke="#3fb950" stroke-width="1.6"/>
-      <path d="M-3.6 0 l2.5 2.7 l4.9 -5.6" fill="none" stroke="#3fb950" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-  </g>
-  <!-- OpenRouter -->
-  <g>
-    <ellipse cx="775" cy="225" rx="118" ry="34" fill="url(#winGlow)">
-      <animate attributeName="opacity" values="0.35;0.9;0.35" dur="2.2s" begin="0.5s" repeatCount="indefinite"/>
-    </ellipse>
-    <rect x="680" y="201" width="190" height="48" rx="11" fill="#10241a" stroke="#a371f7" stroke-width="1.6"/>
-    <text x="698" y="223" fill="#e6edf3" font-size="13.5" font-weight="600">OpenRouter</text>
-    <text x="698" y="240" fill="#3fb950" font-size="11">$0.43 / 1M · only carrier</text>
-    <g transform="translate(680,225)">
-      <circle r="9" fill="#0d1117" stroke="#3fb950" stroke-width="1.6"/>
-      <path d="M-3.6 0 l2.5 2.7 l4.9 -5.6" fill="none" stroke="#3fb950" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-  </g>
-  <!-- fal.ai -->
-  <g>
-    <ellipse cx="775" cy="300" rx="118" ry="34" fill="url(#winGlow)">
-      <animate attributeName="opacity" values="0.35;0.9;0.35" dur="2.2s" begin="1s" repeatCount="indefinite"/>
-    </ellipse>
-    <rect x="680" y="276" width="190" height="48" rx="11" fill="#10241a" stroke="#f778ba" stroke-width="1.6"/>
-    <text x="698" y="298" fill="#e6edf3" font-size="13.5" font-weight="600">fal.ai</text>
-    <text x="698" y="315" fill="#3fb950" font-size="11">$0.030 / img</text>
-    <g transform="translate(680,300)">
-      <circle r="9" fill="#0d1117" stroke="#3fb950" stroke-width="1.6"/>
-      <path d="M-3.6 0 l2.5 2.7 l4.9 -5.6" fill="none" stroke="#3fb950" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-  </g>
-  <!-- Runware -->
-  <g>
-    <ellipse cx="775" cy="375" rx="118" ry="34" fill="url(#winGlow)">
-      <animate attributeName="opacity" values="0.35;0.9;0.35" dur="2.2s" begin="1.5s" repeatCount="indefinite"/>
-    </ellipse>
-    <rect x="680" y="351" width="190" height="48" rx="11" fill="#10241a" stroke="#2dd4bf" stroke-width="1.6"/>
-    <text x="698" y="373" fill="#e6edf3" font-size="13.5" font-weight="600">Runware</text>
-    <text x="698" y="390" fill="#3fb950" font-size="11">$0.0013 / img</text>
-    <g transform="translate(680,375)">
-      <circle r="9" fill="#0d1117" stroke="#3fb950" stroke-width="1.6"/>
-      <path d="M-3.6 0 l2.5 2.7 l4.9 -5.6" fill="none" stroke="#3fb950" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-  </g>
-
-  <!-- ── animated flow dots: each model streams to its own cheapest provider ── -->
-  <circle r="4.8" fill="#58a6ff" filter="url(#soft)">
-    <animateMotion dur="2.2s" repeatCount="indefinite" path="M220,150 C300,150 320,262 440,262 C560,262 600,150 680,150"/>
-  </circle>
-  <circle r="4.8" fill="#a371f7" filter="url(#soft)">
-    <animateMotion dur="2.2s" begin="0.5s" repeatCount="indefinite" path="M220,225 C300,225 330,262 440,262 C550,262 600,225 680,225"/>
-  </circle>
-  <circle r="4.8" fill="#f778ba" filter="url(#soft)">
-    <animateMotion dur="2.2s" begin="1s" repeatCount="indefinite" path="M220,300 C300,300 330,262 440,262 C550,262 600,300 680,300"/>
-  </circle>
-  <circle r="4.8" fill="#2dd4bf" filter="url(#soft)">
-    <animateMotion dur="2.2s" begin="1.5s" repeatCount="indefinite" path="M220,375 C300,375 320,262 440,262 C560,262 600,375 680,375"/>
+  <!-- green wire request → cheapest (TokenMart), with a flowing packet -->
+  <path d="M82,145 C104,145 96,91 116,91" fill="none" stroke="#4fe39a" stroke-width="2" opacity="0.85"/>
+  <circle r="3.4" fill="#4fe39a" filter="url(#glow)">
+    <animateMotion dur="1.4s" repeatCount="indefinite" calcMode="linear" path="M82,145 C104,145 96,91 116,91"/>
   </circle>
 
-  <!-- footer caption -->
-  <text x="40" y="442" fill="#6e7891" font-size="12.5">no single provider is cheapest for everything · AI-LCR keeps a cheapest-first list per model · retryable error → next in line</text>
+  <!-- TokenMart — serving (cheapest) -->
+  <g>
+    <rect x="116" y="70" width="312" height="42" rx="11" fill="#0b1120" stroke="#4fe39a" stroke-width="1.8" filter="url(#glow)"/>
+    <circle cx="136" cy="91" r="4" fill="#4fe39a" filter="url(#glow)"/>
+    <text x="152" y="88" fill="#e9eef9" font-size="12.5" font-weight="600">TokenMart</text>
+    <text x="152" y="103" fill="#97a3c0" font-size="10.5">$0.30 / 1M <tspan fill="#4fe39a" font-weight="700">· −40%</tspan></text>
+    <text x="416" y="95" text-anchor="end" fill="#4fe39a" font-size="10.5" font-weight="700">● serving</text>
+  </g>
+
+  <!-- auto-failover annotation (cheapest down → next in line) -->
+  <path d="M244,112 L244,124" fill="none" stroke="#ffb35c" stroke-width="1.6" stroke-dasharray="3 4"/>
+  <path d="M244,125 l-3.5,-6 l7,0 z" fill="#ffb35c"/>
+  <text x="256" y="121.5" fill="#ffb35c" font-size="9.5" font-weight="600">if down → fails over</text>
+
+  <!-- OpenRouter — next in line -->
+  <g opacity="0.58">
+    <rect x="116" y="124" width="312" height="42" rx="11" fill="#0b1120" stroke="#273253"/>
+    <circle cx="136" cy="145" r="4" fill="#5b647d"/>
+    <text x="152" y="142" fill="#e9eef9" font-size="12.5" font-weight="600">OpenRouter</text>
+    <text x="152" y="157" fill="#97a3c0" font-size="10.5">$0.43 / 1M</text>
+    <text x="416" y="149" text-anchor="end" fill="#5b647d" font-size="10">next in line</text>
+  </g>
+
+  <!-- Anthropic API -->
+  <g opacity="0.58">
+    <rect x="116" y="178" width="312" height="42" rx="11" fill="#0b1120" stroke="#273253"/>
+    <circle cx="136" cy="199" r="4" fill="#5b647d"/>
+    <text x="152" y="196" fill="#e9eef9" font-size="12.5" font-weight="600">Anthropic API</text>
+    <text x="152" y="211" fill="#97a3c0" font-size="10.5">$0.50 / 1M</text>
+  </g>
+
+  <!-- caption -->
+  <circle cx="18" cy="244" r="3.4" fill="#4fe39a"/>
+  <text x="30" y="248" fill="#97a3c0" font-size="11">cheapest healthy provider, every call · fails over on error · snaps back after ~60s</text>
 </svg>

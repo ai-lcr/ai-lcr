@@ -1,0 +1,56 @@
+---
+title: Mastra
+description: Mastra agents take a Vercel AI SDK model. ai-lcr returns one — so a Mastra agent gets cheapest-first routing and fallback by changing a single field.
+---
+
+[Mastra](https://mastra.ai) is a TypeScript agent framework built on the Vercel
+AI SDK. A Mastra agent's `model` field is a standard AI SDK `LanguageModel` —
+exactly what `lcr("...")` returns. So an agent gets least-cost routing and
+fallback with **one field changed**.
+
+```ts
+import { Agent } from "@mastra/core/agent";
+import { createLCR } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { openai } from "@ai-sdk/openai";
+
+const openrouter = createOpenAICompatible({
+  name: "openrouter",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const lcr = createLCR({
+  autoSort: true,
+  models: {
+    "support-llm": [
+      { model: openrouter("openai/gpt-4o-mini"), label: "openrouter", cost: { input: 0.15, output: 0.6 } },
+      { model: openai("gpt-4o-mini"), label: "openai-direct", cost: { input: 0.15, output: 0.6 } },
+    ],
+  },
+  onCost: ({ provider, costUsd }) => console.log(`support agent · ${provider}: $${costUsd.toFixed(6)}`),
+});
+
+export const support = new Agent({
+  name: "support",
+  instructions: "You are a concise support agent.",
+  model: lcr("support-llm"), // ← the only change
+});
+```
+
+Tool calls, memory, workflows, and streaming inside Mastra are unaffected — they
+operate on the model interface, which `ai-lcr` preserves.
+
+## Dynamic model selection
+
+Mastra also supports a function-form `model`. `ai-lcr` composes with it — return
+`lcr("...")` based on runtime context:
+
+```ts
+export const support = new Agent({
+  name: "support",
+  instructions: "...",
+  model: ({ runtimeContext }) =>
+    runtimeContext.get("tier") === "premium" ? lcr("smart") : lcr("cheap"),
+});
+```

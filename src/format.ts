@@ -6,6 +6,7 @@
  * latency, cost, and — when anything failed — the reason for each failed hop.
  *
  *   ✓ text  tokenmart                      412ms  $0.0003
+ *   ✓ text  tokenmart                      412ms (ttft 88ms)  $0.0003   ← streaming: TTFT shown when known
  *   ⚠ text  tokenmart→openrouter           910ms  $0.0004   ⤷ tokenmart 502
  *   ✗ text  deepseek→tokenmart→openrouter  1240ms FAILED    ⤷ deepseek 401, tokenmart 502, openrouter 429
  *
@@ -36,7 +37,12 @@ export function formatCallRecord(record: CallRecord, opts: FormatOptions = {}): 
   const chain = record.attempts.map((a) => a.provider).join("→") || record.winner || "—";
   const status = formatCost(record);
 
-  let line = `${glyph} ${record.model}  ${chain}  ${record.latencyMs}ms  ${status}`;
+  // TTFT (streaming only) rides alongside total latency when known.
+  const timing =
+    record.ttftMs !== undefined
+      ? `${record.latencyMs}ms (ttft ${record.ttftMs}ms)`
+      : `${record.latencyMs}ms`;
+  let line = `${glyph} ${record.model}  ${chain}  ${timing}  ${status}`;
 
   // Savings vs the priciest priced leg — the headline the dashboard cares about.
   if (record.ok && record.baselineUsd !== undefined && record.baselineUsd > record.costUsd) {
@@ -44,6 +50,9 @@ export function formatCallRecord(record: CallRecord, opts: FormatOptions = {}): 
   }
   // A winner that reported no usage: cost/credit metering read 0 — flag it.
   if (record.usageMissing) line += `  ⚠no-usage`;
+  // A winner that generated nothing (every provider came back blank): the user
+  // got an empty response. Loudest content-integrity signal on the line.
+  if (record.emptyCompletion) line += `  ⚠empty`;
 
   const failed = record.attempts.filter((a) => !a.ok);
   if (failed.length > 0) {

@@ -54,6 +54,7 @@ export type {
   MediaRunResult,
 } from "./media";
 export { MEDIA_PRICING } from "./media-registry";
+export { OFFICIAL_PRICES } from "./media-official";
 export { createKunavoMediaAdapter } from "./adapters/kunavo-media";
 export { createRunwareMediaAdapter } from "./adapters/runware-media";
 export { createFalMediaAdapter } from "./adapters/fal-media";
@@ -101,6 +102,21 @@ export interface LCRConfig {
    * stricter behavior where a client error (e.g. 400) fails fast.
    */
   shouldRetry?: (error: unknown) => boolean;
+  /**
+   * Fallback prompt-cache read rate, as a fraction of each leg's `input` price,
+   * applied ONLY to legs whose `cost` omits an explicit `cacheRead`. So a leg
+   * priced `{ input: 0.5, output: 3 }` with `defaultCacheReadRatio: 0.1` bills
+   * its cached input tokens at `0.05`/1M and reports the resulting
+   * `cachedSavingUsd` — without every route having to hardcode `cacheRead`.
+   *
+   * Most providers' cache-read price is ~0.1× input (Anthropic, Gemini, DeepSeek);
+   * `0.1` is a sane default. Legs with their own `cacheRead` are untouched, so set
+   * it explicitly for outliers (e.g. OpenAI's ~0.5×). Unset = pre-existing
+   * behavior: cached tokens bill at the full input rate and save nothing.
+   * Caching is detected from the provider's reported usage either way; this only
+   * controls the *price* applied to it. Must be in [0, 1].
+   */
+  defaultCacheReadRatio?: number;
 }
 
 /** Resolve a logical model name to a routed model. */
@@ -126,16 +142,42 @@ function priceKey(p: RoutedProvider): number {
 }
 
 /**
+ * Fill a leg's `cacheRead` from the chain-wide `defaultCacheReadRatio` when the
+ * leg priced its input but left `cacheRead` unset. Returns a NEW cost object so
+ * the caller's `models` config is never mutated. Legs with an explicit
+ * `cacheRead` (or no `cost`) pass through untouched.
+ */
+function withDefaultCacheRead(p: RoutedProvider, ratio: number | undefined): RoutedProvider {
+  if (ratio === undefined || !p.cost || p.cost.cacheRead !== undefined) return p;
+  return { ...p, cost: { ...p.cost, cacheRead: p.cost.input * ratio } };
+}
+
+/**
  * Build a Least Cost Router. Returns a function that resolves a logical model
  * name to a routed model usable anywhere in the Vercel AI SDK (generateText,
  * streamText, generateObject, tools, agents).
  */
 export function createLCR(config: LCRConfig): LCRRouter {
-  const { models, autoSort = false, resetIntervalMs, onError, onCost, onCall, shouldRetry } = config;
+  const {
+    models,
+    autoSort = false,
+    resetIntervalMs,
+    onError,
+    onCost,
+    onCall,
+    shouldRetry,
+    defaultCacheReadRatio,
+  } = config;
+
+  if (defaultCacheReadRatio !== undefined && (defaultCacheReadRatio < 0 || defaultCacheReadRatio > 1)) {
+    throw new Error(
+      `ai-lcr: defaultCacheReadRatio must be in [0, 1], got ${defaultCacheReadRatio}`,
+    );
+  }
 
   const routed = new Map<string, LcrFallbackModel>();
   for (const [name, entries] of Object.entries(models)) {
-    let providers = entries.map(normalize);
+    let providers = entries.map(normalize).map((p) => withDefaultCacheRead(p, defaultCacheReadRatio));
     if (autoSort) {
       providers = [...providers].sort((a, b) => priceKey(a) - priceKey(b));
     }

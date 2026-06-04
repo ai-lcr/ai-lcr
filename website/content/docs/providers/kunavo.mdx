@@ -1,0 +1,25 @@
+---
+title: Kunavo
+description: Kunavo — discounted partner models (~20% off). Dashed model ids. Also serves image and video.
+---
+
+Kunavo resells partner models (Gemini, Claude, …) at a discount — roughly 20%
+off the vendor's own price.
+
+```ts
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const kunavo = createOpenAICompatible({
+  name: "kunavo",
+  baseURL: "https://api.kunavo.com/v1",
+  apiKey: process.env.KUNAVO_API_KEY,
+});
+// dashed ids: kunavo("gemini-2.5-flash"), kunavo("claude-sonnet-4-6")
+```
+
+Model ids are **dashed** (`gemini-2.5-flash`, `claude-sonnet-4-6`). Kunavo also
+serves image and video models — see [Image & video](/docs/image-video).
+
+> A model vendor's **own official API** (`@ai-sdk/openai`, `@ai-sdk/anthropic`,
+> …) is just another entry in the list — often the cheapest, and least likely to
+> break native features like prompt caching or tool calls.

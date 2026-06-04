@@ -11,6 +11,7 @@ import {
   TEXT_MODEL_COUNT,
 } from "@/lib/prices";
 import PriceTable from "./PriceTable";
+import SiteNav from "../components/SiteNav";
 
 export const metadata: Metadata = {
   title: "ai-lcr — Cheapest provider per model (text, image & video)",
@@ -37,17 +38,7 @@ export default function Prices() {
 
   return (
     <>
-      <nav className="nav">
-        <div className="wrap nav__row">
-          <a className="brand" href="/" style={{ textDecoration: "none", color: "inherit" }}>
-            <span className="brand__word">ai<b>-lcr</b></span>
-          </a>
-          <div className="nav__links">
-            <a href="/status">Status</a>
-            <a href="/">Home</a>
-          </div>
-        </div>
-      </nav>
+      <SiteNav current="prices" />
 
       <main className="wrap" style={{ paddingTop: 48, paddingBottom: 80 }}>
         <header style={{ marginBottom: 28 }}>

@@ -1,0 +1,12 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "migrate-from-ai-sdk",
+    "routing",
+    "cost-tracking",
+    "providers",
+    "integrations",
+    "image-video"
+  ]
+}
