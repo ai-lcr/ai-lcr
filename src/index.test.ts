@@ -3,7 +3,7 @@ import { generateText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModelV3GenerateResult } from "@ai-sdk/provider";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createLCR, type CostEvent } from "./index";
+import { createLCR, isRetryableError, type CostEvent } from "./index";
 
 // ── mock helpers ──────────────────────────────────────────────
 function usage(input: number, output: number): LanguageModelV3GenerateResult["usage"] {
@@ -99,17 +99,71 @@ describe("createLCR — routing & failover (mocked)", () => {
     expect(c.calls.count).toBe(1);
   });
 
-  it("does NOT fail over on a non-retryable error (400)", async () => {
+  it("fails over on a provider 400 — the next provider may accept the request", async () => {
+    // In the OpenAI-compatible aggregator world a 400 is usually "THIS provider
+    // won't take this request" (unsupported param / unlisted model / stricter
+    // schema), not a universally-broken request — so try the next one.
+    const bad = failModel("bad", 400, "bad request");
+    const backup = okModel("backup", "recovered");
+    const lcr = createLCR({ models: { m: [bad.model, backup.model] } });
+
+    const { text } = await generateText({ model: lcr("m"), prompt: "hi", ...noRetry });
+
+    expect(text).toBe("recovered");
+    expect(bad.calls.count).toBe(1); // tried first, 400'd
+    expect(backup.calls.count).toBe(1); // failed over and served
+  });
+
+  it("when every provider 400s, throws the FIRST (original) error", async () => {
+    const a = failModel("a", 400, "first-error");
+    const b = failModel("b", 400, "second-error");
+    const lcr = createLCR({ models: { m: [a.model, b.model] } });
+
+    // A genuinely-bad request that no provider accepts still fails — surfacing
+    // the original reason, not whatever the last fallback happened to say.
+    await expect(
+      generateText({ model: lcr("m"), prompt: "hi", ...noRetry }),
+    ).rejects.toThrow("first-error");
+
+    expect(a.calls.count).toBe(1);
+    expect(b.calls.count).toBe(1);
+  });
+
+  it("does NOT fail over on a deliberate caller cancellation (AbortError)", async () => {
+    const calls = { count: 0 };
+    const aborter = new MockLanguageModelV3({
+      modelId: "aborter",
+      provider: "aborter",
+      doGenerate: async (): Promise<LanguageModelV3GenerateResult> => {
+        calls.count++;
+        throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+      },
+    });
+    const backup = okModel("backup", "should-not-be-reached");
+    const lcr = createLCR({ models: { m: [aborter, backup.model] } });
+
+    await expect(
+      generateText({ model: lcr("m"), prompt: "hi", ...noRetry }),
+    ).rejects.toThrow();
+
+    expect(calls.count).toBe(1);
+    expect(backup.calls.count).toBe(0); // a cancel must not be re-issued elsewhere
+  });
+
+  it("honors a custom shouldRetry that opts back into strict 400 fail-fast", async () => {
     const bad = failModel("bad", 400, "bad request");
     const backup = okModel("backup", "should-not-be-reached");
-    const lcr = createLCR({ models: { m: [bad.model, backup.model] } });
+    const lcr = createLCR({
+      models: { m: [bad.model, backup.model] },
+      shouldRetry: isRetryableError, // restore "client errors fail fast"
+    });
 
     await expect(
       generateText({ model: lcr("m"), prompt: "hi", ...noRetry }),
     ).rejects.toThrow();
 
     expect(bad.calls.count).toBe(1);
-    expect(backup.calls.count).toBe(0); // a 400 is the caller's fault — don't waste the fallback
+    expect(backup.calls.count).toBe(0); // strict mode: a 400 does not fail over
   });
 
   it("throws for an unknown model name", () => {

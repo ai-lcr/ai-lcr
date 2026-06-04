@@ -16,6 +16,11 @@ const EXPECTED_EXPORTS = [
   "classifyErrorKind",
   "formatCallRecord",
   "createHttpSink",
+  // error predicates (failover policy / custom shouldRetry building blocks)
+  "isRetryableError",
+  "isNetworkError",
+  "isAbortError",
+  "shouldFailover",
   // media router
   "createMediaLCR",
   "comparePrices",

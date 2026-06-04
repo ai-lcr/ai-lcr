@@ -292,6 +292,38 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 /**
+ * A deliberate caller cancellation (an `AbortSignal` fired by the app). This is
+ * the one failure we must NEVER fail over: re-issuing an aborted request to the
+ * next provider is the opposite of what the caller asked for. Detected by name
+ * (`fetch`/AI SDK emit an `AbortError`) and by the canonical abort message.
+ */
+export function isAbortError(error: unknown): boolean {
+  const e = error as { name?: unknown } | undefined;
+  if (typeof e?.name === "string" && e.name === "AbortError") return true;
+  const { text } = errorSignals(error);
+  return text.includes("operation was aborted") || text.includes("operation was canceled");
+}
+
+/**
+ * Default failover criterion — broader than {@link isRetryableError} on purpose.
+ * It fails over on *anything* except a deliberate caller cancellation, including
+ * a client error such as a 400. In the OpenAI-compatible aggregator world a 400
+ * is most often "THIS provider won't take this request" (an unsupported param, a
+ * model it hasn't listed, a stricter schema) rather than a universally-broken
+ * request — and the next provider may well serve it, which is the whole point of
+ * the router. When every provider rejects the request, the engine still throws
+ * (surfacing the original error), so a genuinely-bad request stays debuggable.
+ * The failed attempts keep their precise {@link ErrorKind} (`"client"` for a
+ * 400) so a real caller bug is still visible in the {@link CallRecord}.
+ *
+ * Pass a custom `shouldRetry` to opt out (e.g. `isRetryableError` to restore the
+ * stricter "client errors fail fast" behavior).
+ */
+export function shouldFailover(error: unknown): boolean {
+  return !isAbortError(error);
+}
+
+/**
  * Normalize an error into a short, log-friendly class for {@link CallRecord}.
  * An HTTP status wins (e.g. "502", "429"); otherwise the first matching
  * retryable pattern (e.g. "rate_limit", "timeout"); otherwise "error".
@@ -361,6 +393,13 @@ interface CallCtx {
   startedAt: number;
   /** Caller-supplied correlation id from `providerOptions.lcr.requestId`, if any. */
   requestId?: string;
+  /**
+   * The first error in the failover chain. When every provider fails we throw
+   * THIS rather than the last provider's error — so a genuinely-bad request
+   * surfaces the original (representative) reason instead of whatever the final
+   * fallback happened to say. Set once, on the first recorded failure.
+   */
+  firstError?: unknown;
 }
 
 /**
@@ -456,7 +495,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
   }
 
   private shouldRetry(error: unknown): boolean {
-    return (this.opts.shouldRetry ?? isRetryableError)(error);
+    return (this.opts.shouldRetry ?? shouldFailover)(error);
   }
 
   // Observer callbacks are caller-supplied logging hooks: a throw from one of
@@ -502,6 +541,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
     attemptStart: number,
     error: unknown,
   ): void {
+    if (ctx.firstError === undefined) ctx.firstError = error;
     ctx.attempts.push({
       provider: provider.label,
       ok: false,
@@ -617,7 +657,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       }
     }
     this.finalizeFail(ctx);
-    throw lastError;
+    throw ctx.firstError ?? lastError;
   }
 
   async doStream(
@@ -666,7 +706,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
         tried++;
         if (tried >= n) {
           this.finalizeFail(ctx);
-          throw error;
+          throw ctx.firstError ?? error;
         }
         idx = (idx + 1) % n;
       }
@@ -709,7 +749,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
             const nextTried = triedBeforeServing + 1;
             if (nextTried >= n) {
               self.finalizeFail(ctx);
-              controller.error(error);
+              controller.error(ctx.firstError ?? error);
               return;
             }
             // Re-enter on the next provider with the SAME ctx and threaded

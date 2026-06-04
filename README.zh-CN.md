@@ -141,7 +141,7 @@ DeepInfra 只承载开源权重——没有第一方 Claude / GPT / Gemini。那
 ## 它如何路由
 
 1. **最便宜优先。** provider 按顺序依次尝试——把它们排成最便宜优先，或设置 `autoSort: true` 让它按 `cost` 自动排序。
-2. **失败时向下穿透。** 遇到可重试的错误（限流、5xx、超时）时，前进到下一个 provider，且对流式安全。硬错误（400、401、403、422）会直接透传，不做重试。
+2. **失败时向下穿透。** 遇到任何 provider 失败——限流、5xx、超时、**额度耗尽**（402 / 欠费 / 余额不足），以及 **400** 这类 client 错误——都会前进到下一个 provider，且对流式安全。400 会 failover 是有意为之：在 OpenAI 兼容聚合层里，400 往往是"*这家* provider 不吃这个请求"（不支持的参数、它没上架这个 model、更严格的 schema），而非请求本身坏了——换一家很可能就能服务。若所有 provider 都拒绝，请求仍会失败，并抛出**第一个**（原始）错误，让真正的调用方 bug 保持可调试。唯一永远不 failover 的是调用方主动取消（`AbortSignal`）。想恢复旧的"client 错误立即失败"行为，给 `createLCR` 传 `shouldRetry: isRetryableError`。
 3. **恢复。** 在一段空闲窗口（`resetIntervalMs`，默认 60s）之后，自动回到最便宜的 provider。
 
 <p align="center">
@@ -284,7 +284,7 @@ npm run typecheck
 npm test          # mock 的路由 / failover 测试 + 真实 Kunavo 测试
 ```
 
-测试套件覆盖了：最便宜优先路由、可重试错误时的 failover（以及遇到 400 时*不*做 failover）、穷尽整条链路，以及一次真实的「provider 故障 → Kunavo 恢复」。真实测试仅在环境变量 `KUNAVO_API_KEY` 设置时运行，否则跳过。
+测试套件覆盖了：最便宜优先路由、可重试错误以及 provider 400 时的 failover（但调用方主动取消时*不*做 failover）、穷尽整条链路时抛出原始错误，以及一次真实的「provider 故障 → Kunavo 恢复」。真实测试仅在环境变量 `KUNAVO_API_KEY` 设置时运行，否则跳过。
 
 ## 致谢
 

@@ -18,7 +18,7 @@ import {
 } from "./fallback";
 
 export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind } from "./fallback";
-export { classifyError, classifyErrorKind } from "./fallback";
+export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isAbortError, shouldFailover } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
 
@@ -93,6 +93,14 @@ export interface LCRConfig {
    * you. Pair with `formatCallRecord` for a one-line log. See {@link CallRecord}.
    */
   onCall?: (record: CallRecord) => void;
+  /**
+   * Decide whether a failed attempt should fail over to the next provider.
+   * Defaults to {@link shouldFailover} — fail over on everything except a
+   * deliberate caller cancellation, so a provider-specific 400 still survives by
+   * trying the next provider. Pass {@link isRetryableError} to restore the
+   * stricter behavior where a client error (e.g. 400) fails fast.
+   */
+  shouldRetry?: (error: unknown) => boolean;
 }
 
 /** Resolve a logical model name to a routed model. */
@@ -123,7 +131,7 @@ function priceKey(p: RoutedProvider): number {
  * streamText, generateObject, tools, agents).
  */
 export function createLCR(config: LCRConfig): LCRRouter {
-  const { models, autoSort = false, resetIntervalMs, onError, onCost, onCall } = config;
+  const { models, autoSort = false, resetIntervalMs, onError, onCost, onCall, shouldRetry } = config;
 
   const routed = new Map<string, LcrFallbackModel>();
   for (const [name, entries] of Object.entries(models)) {
@@ -133,7 +141,7 @@ export function createLCR(config: LCRConfig): LCRRouter {
     }
     routed.set(
       name,
-      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost, onCall }),
+      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost, onCall, shouldRetry }),
     );
   }
 

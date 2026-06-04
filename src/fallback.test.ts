@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModelV3GenerateResult } from "@ai-sdk/provider";
-import { isRetryableError, isNetworkError, classifyError, classifyErrorKind } from "./fallback";
+import { isRetryableError, isNetworkError, isAbortError, shouldFailover, classifyError, classifyErrorKind } from "./fallback";
 import { createLCR } from "./index";
 
 const noRetry = { maxRetries: 0 as const };
@@ -101,6 +101,37 @@ describe("isRetryableError", () => {
       name: "AbortError",
     });
     expect(isNetworkError(abort)).toBe(false);
+  });
+});
+
+describe("isAbortError", () => {
+  it("detects a caller cancellation by name or canonical message", () => {
+    expect(isAbortError(Object.assign(new Error("boom"), { name: "AbortError" }))).toBe(true);
+    expect(isAbortError(new Error("The operation was aborted"))).toBe(true);
+    expect(isAbortError(new Error("This operation was canceled"))).toBe(true);
+  });
+
+  it("does NOT flag a provider error as an abort", () => {
+    expect(isAbortError({ statusCode: 400, message: "bad request" })).toBe(false);
+    expect(isAbortError(new Error("rate limit exceeded"))).toBe(false);
+  });
+});
+
+describe("shouldFailover (default gate)", () => {
+  it("fails over on a client 400 — the next provider may accept it", () => {
+    expect(shouldFailover({ statusCode: 400 })).toBe(true);
+    expect(shouldFailover(new Error("invalid prompt"))).toBe(true);
+  });
+
+  it("still fails over on transient / billing / network failures", () => {
+    expect(shouldFailover({ statusCode: 503 })).toBe(true);
+    expect(shouldFailover(new Error("Insufficient credits"))).toBe(true);
+    expect(shouldFailover(new TypeError("fetch failed"))).toBe(true);
+  });
+
+  it("does NOT fail over on a deliberate caller cancellation", () => {
+    const abort = Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+    expect(shouldFailover(abort)).toBe(false);
   });
 });
 

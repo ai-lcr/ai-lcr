@@ -4,6 +4,36 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-06-03
+
+### Changed
+
+- **A provider 400 now fails over instead of being passed through.** Previously
+  any client error (400/422/…) was treated as the caller's fault and thrown
+  immediately, killing the request even when another provider would have served
+  it. But across OpenAI-compatible aggregators a 400 is most often
+  *provider-specific* — an unsupported parameter, a model the provider hasn't
+  listed, a stricter JSON schema — not a universally-broken request. The default
+  failover gate (`shouldFailover`) now advances to the next provider on **any**
+  failure except a deliberate caller cancellation (`AbortSignal`), which is the
+  one thing we must never re-issue elsewhere. When every provider rejects the
+  request it still throws — now surfacing the **first** (original) error rather
+  than the last fallback's, so a genuine caller bug stays debuggable. Failed
+  attempts keep their precise `ErrorKind` (`"client"` for a 400) in the
+  `CallRecord`, so a real bug is still visible.
+
+  To restore the old "client errors fail fast" behavior, pass
+  `shouldRetry: isRetryableError` to `createLCR`.
+
+### Added
+
+- **`createLCR({ shouldRetry })`.** The failover predicate is now configurable
+  from the top-level API (it previously existed only on the internal engine), so
+  callers can tune or fully override the policy above.
+- **Exported error predicates** `isRetryableError`, `isNetworkError`,
+  `isAbortError`, and `shouldFailover` — building blocks for a custom
+  `shouldRetry`.
+
 ## [0.3.0] — 2026-06-02
 
 Integration-feedback pass from wiring ai-lcr into a real agentic product
