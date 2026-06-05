@@ -18,7 +18,7 @@ import {
 } from "./fallback";
 
 export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind } from "./fallback";
-export { classifyError, classifyErrorKind } from "./fallback";
+export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isAbortError, shouldFailover } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
 
@@ -95,6 +95,14 @@ export interface LCRConfig {
    */
   onCall?: (record: CallRecord) => void;
   /**
+   * Decide whether a failed attempt should fail over to the next provider.
+   * Defaults to {@link shouldFailover} — fail over on everything except a
+   * deliberate caller cancellation, so a provider-specific 400 still survives by
+   * trying the next provider. Pass {@link isRetryableError} to restore the
+   * stricter behavior where a client error (e.g. 400) fails fast.
+   */
+  shouldRetry?: (error: unknown) => boolean;
+  /**
    * Fallback prompt-cache read rate, as a fraction of each leg's `input` price,
    * applied ONLY to legs whose `cost` omits an explicit `cacheRead`. So a leg
    * priced `{ input: 0.5, output: 3 }` with `defaultCacheReadRatio: 0.1` bills
@@ -150,8 +158,16 @@ function withDefaultCacheRead(p: RoutedProvider, ratio: number | undefined): Rou
  * streamText, generateObject, tools, agents).
  */
 export function createLCR(config: LCRConfig): LCRRouter {
-  const { models, autoSort = false, resetIntervalMs, onError, onCost, onCall, defaultCacheReadRatio } =
-    config;
+  const {
+    models,
+    autoSort = false,
+    resetIntervalMs,
+    onError,
+    onCost,
+    onCall,
+    shouldRetry,
+    defaultCacheReadRatio,
+  } = config;
 
   if (defaultCacheReadRatio !== undefined && (defaultCacheReadRatio < 0 || defaultCacheReadRatio > 1)) {
     throw new Error(
@@ -167,7 +183,7 @@ export function createLCR(config: LCRConfig): LCRRouter {
     }
     routed.set(
       name,
-      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost, onCall }),
+      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost, onCall, shouldRetry }),
     );
   }
 

@@ -141,7 +141,7 @@ DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. Fo
 ## How it routes
 
 1. **Cheapest first.** Providers are tried in order — list them cheapest-first, or set `autoSort: true` to order them by `cost` automatically.
-2. **Fall through on failure.** On a retryable error — rate limit, 5xx, timeout, or a **billing cap** (402 / out-of-credit / quota) — it advances to the next provider, streaming-safe. A caller's own bad request (e.g. 400, 422) passes through immediately.
+2. **Fall through on failure.** On any provider failure — rate limit, 5xx, timeout, a **billing cap** (402 / out-of-credit / quota), *and* a client error like a **400** — it advances to the next provider, streaming-safe. A 400 fails over on purpose: across OpenAI-compatible aggregators a 400 is usually "*this* provider won't take this request" (an unsupported param, a model it hasn't listed, a stricter schema), not a universally-broken request — so the next provider may well serve it. If every provider rejects the request it still fails, surfacing the **original** error so a genuine caller bug stays debuggable. The one failure that never fails over is a deliberate caller cancellation (`AbortSignal`). Pass `shouldRetry: isRetryableError` to `createLCR` to restore the stricter "client errors fail fast" behavior.
 3. **Recover.** After an idle window (`resetIntervalMs`, default 60s) it snaps back to the cheapest provider.
 
 ## See what happened (`onCall`)
@@ -364,7 +364,7 @@ npm run typecheck
 npm test          # mocked routing/failover tests + live Kunavo tests
 ```
 
-The suite covers cheapest-first routing, failover on retryable errors (and *not* failing over on a 400), exhausting the whole chain, and a real broken-provider → Kunavo recovery. Live tests run only when `KUNAVO_API_KEY` is set in the environment; otherwise they're skipped.
+The suite covers cheapest-first routing, failover on retryable errors *and* on a provider 400 (but *not* on a caller cancellation), surfacing the original error when the whole chain is exhausted, and a real broken-provider → Kunavo recovery. Live tests run only when `KUNAVO_API_KEY` is set in the environment; otherwise they're skipped.
 
 ## Credits
 
