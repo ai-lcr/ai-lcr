@@ -73,9 +73,11 @@ fairly.
 
 ## Video
 
-Video works the same — declare `modality: "video"` routes. **fal** is the live
-video path (its async queue API; the adapter submits and polls for you). Kunavo's
-Veo poll path is implemented but unverified — prefer fal for video today.
+Video works the same — declare `modality: "video"` routes. Both **fal** and
+**Kunavo** are live, verified video paths. fal uses its async queue API; Kunavo
+defaults to its async API (`POST /v1/videos` → poll `GET /v1/videos/{id}`) with
+a blocking sync fallback (`videoMode: "sync"`). The adapter submits and polls
+for you, and a poll timeout fails over to the next route.
 
 ```ts
 registry: {

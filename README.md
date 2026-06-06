@@ -232,7 +232,7 @@ Any OpenAI-compatible endpoint works — and so does any AI SDK provider package
 
 - **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
 - **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo + Runware + fal. Video: fal (live, via its async queue API); Kunavo's Veo poll path is implemented but unverified
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo (generations + `*-edit` reference-image endpoints) + Runware + fal. Video: fal (async queue) and Kunavo (async `POST /v1/videos` + poll, sync fallback) — both verified live
 
 ## Text model pricing
 
@@ -277,6 +277,8 @@ USD per image, as of 2026-05 (provider list / retail; verify current rates). Kun
 
 USD per second, as of 2026-05 — verify current rates. Video billing differs by provider, so a clean cross-provider table isn't apples-to-apples: fal.ai and Runware charge per second, while Kunavo's Veo is per clip (Fast ~$0.28 / Lite ~$0.168 / Quality ~$1.34). Below are fal.ai's per-second rates (the video workhorse in testing); a normalized fal / Runware / Kunavo comparison is a TODO.
 
+> **Kunavo video — verified live 2026-06-06.** `veo-3-lite` renders a real 720p mp4 via Kunavo's async API (`POST /v1/videos` → poll `GET /v1/videos/{id}`, ~80s) and its sync fallback (`POST /v1/video/generations`, ~108s). The `createMediaLCR` Kunavo adapter defaults to async (non-blocking, fal-isomorphic). Two caveats: per-clip prices are hand-entered (`GET /v1/models` returns no pricing), and the async queue can occasionally sit much longer than 80s — the adapter's `pollTimeoutMs` bounds it so the router can fail over.
+
 | Model | fal.ai ($/s) |
 |---|---|
 | Seedance Lite | $0.036 |
@@ -292,6 +294,8 @@ USD per second, as of 2026-05 — verify current rates. Video billing differs by
 ## Vetting a provider (capability + cost probe)
 
 A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency check (`scripts/check-provider.sh`, just `bash` + `curl` + `python3`) that vets the things that actually cost you money or corrupt output, **per model**:
+
+> **Media providers** have their own probe: `scripts/check-kunavo-media.sh` (`bash` + `curl` + `jq`) live-tests Kunavo's image generation, `*-edit` reference endpoint, and async + sync video — the same checks used to verify the routes above. Run it before trusting a media route in production.
 
 - **tool calling** — single call and a multi-step round-trip with `content: null` (the shape every agent loop sends)
 - **`max_tokens` honored** — caps must bound output
@@ -349,8 +353,8 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 - [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
 - [ ] Provider-quirk middleware (transparently patch known per-provider request quirks, e.g. Kunavo's ignored `max_tokens`)
 - [ ] Feed probe results into routing automatically (auto-exclude a model from a provider that fails its probe)
-- [x] Image & video model routing (`createMediaLCR`) — image via Kunavo + Runware + fal; **video live via fal** (async queue API)
-- [ ] Normalized cross-provider video price comparison + verified Kunavo/Runware video adapters
+- [x] Image & video model routing (`createMediaLCR`) — image via Kunavo (incl. `*-edit`) + Runware + fal; **video live via fal and Kunavo** (both verified)
+- [ ] Normalized cross-provider video price comparison + verified Runware video adapter
 
 ## Affiliate disclosure
 

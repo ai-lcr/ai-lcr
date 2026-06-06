@@ -89,11 +89,15 @@ export const MEDIA_PRICING: MediaRegistry = {
   },
 
   // ── Google video (Veo) ──────────────────────────────────────
-  // ⚠️ Version/SKU mismatch across providers: Kunavo bills "veo-3" per CALL
-  // (flat fee per clip; Veo 3 generates ~8s, audio/res tier unconfirmed); fal
-  // bills "veo3.1" per SECOND. Normalized to a 5s clip the per-call price wins
-  // by a wide margin — verify the clip's duration/resolution/audio before
-  // trusting the gap. See note fields.
+  // Kunavo video VERIFIED live 2026-06-06: veo-3-lite renders via both the async
+  // path (POST /v1/videos + poll, ~80s) and the sync path (POST /v1/video/
+  // generations, ~108s), real 720p mp4 out. The adapter defaults to async.
+  // ⚠️ Two caveats remain on the PRICE gap, not the capability: (1) Version/SKU
+  // mismatch — Kunavo bills "veo-3" per CALL (flat per clip, ~8s 720p) while fal
+  // bills "veo3.1" per SECOND, so normalized to a 5s clip the per-call price wins
+  // by a wide margin; (2) /v1/models exposes NO pricing, so the per-call cents
+  // below are hand-entered — verify clip duration/resolution/audio before
+  // trusting the gap. veo-3 / veo-3-quality capability not individually rendered.
   "google/veo-3": {
     id: "google/veo-3",
     modality: "video",
@@ -106,7 +110,7 @@ export const MEDIA_PRICING: MediaRegistry = {
     id: "google/veo-3-lite",
     modality: "video",
     routes: [
-      { provider: "kunavo", externalId: "veo-3-lite", pricing: { unit: "call", cents: 16 }, note: "flat per clip (SKU unverified)" },
+      { provider: "kunavo", externalId: "veo-3-lite", pricing: { unit: "call", cents: 16 }, note: "flat per clip; rendering verified 2026-06-06 (720p, async+sync); price hand-entered" },
       { provider: "fal", externalId: "fal-ai/veo3.1/lite", pricing: { unit: "second", cents: 8 }, note: "veo3.1 lite, 1080p audio-on" },
     ],
   },

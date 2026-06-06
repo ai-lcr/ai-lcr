@@ -4,6 +4,43 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.5] — 2026-06-06
+
+Kunavo media (image + video) verified live and properly wired. The Kunavo
+adapter previously had a working image path but an unverified, broken video
+path; this release fixes the video path against the real API and adds the
+reference-image edit endpoint. Backward compatible — `videoMode` defaults to
+the new async path, and existing image routes are unchanged.
+
+### Fixed
+
+- **Kunavo video hit the wrong endpoints.** `createKunavoMediaAdapter`'s
+  `runVideo` POSTed to the sync `POST /v1/video/generations` but then polled a
+  non-existent `GET /v1/video/generations/{id}` — unreachable dead code that
+  only ever worked through an inline early-return. Replaced with Kunavo's real,
+  live-verified endpoints (see Added). Long video SKUs no longer risk a hung,
+  timeout-less `fetch`: both video paths are now bounded.
+
+### Added
+
+- **Kunavo async video (default).** Verified live 2026-06-06: `veo-3-lite`
+  renders a real 720p mp4 via `POST /v1/videos` → poll `GET /v1/videos/{id}`
+  (~80s). This is the adapter's default and mirrors the fal submit→poll shape.
+  A poll timeout surfaces as a retryable `504` so the media router fails over.
+- **Kunavo sync video fallback.** New `KunavoMediaConfig.videoMode: "sync"`
+  uses the blocking `POST /v1/video/generations` (~108s for veo-3-lite),
+  hard-capped by `syncVideoTimeoutMs` (default 10m, remapped to a retryable
+  `504` on timeout). `pollIntervalMs` / `pollTimeoutMs` now actually drive the
+  async path.
+- **Kunavo image edit (reference image).** `*-edit` slugs
+  (`nano-banana-edit`, `gpt-image-2-edit`) route to `POST /v1/images/edits`
+  with the caller's `image` / `image_urls[]` — the character-reference path.
+- **`scripts/check-kunavo-media.sh`** — a `bash` + `curl` + `jq` live media
+  integrity probe (image gen, edit, async + sync video) mirroring the text
+  `check-provider.sh`.
+- **Test coverage for the Kunavo media adapter**, which previously shipped with
+  none (fal and Runware had tests; Kunavo did not).
+
 ## [0.5.4] — 2026-06-03
 
 ### Changed
