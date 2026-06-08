@@ -32,6 +32,10 @@ import type {
   MediaGenerateResult,
   MediaModality,
   MediaOutput,
+  MediaStatusRequest,
+  MediaStatusResult,
+  MediaSubmitRequest,
+  MediaSubmitResult,
 } from "../media";
 
 export interface FalMediaConfig {
@@ -102,8 +106,72 @@ export function createFalMediaAdapter(config: FalMediaConfig): MediaAdapter {
     authorization: `Key ${apiKey}`,
   };
 
+  /**
+   * fal's queue base for a model id. fal hosts status/result under the app's
+   * owner/app pair, NOT the full endpoint path — `fal-ai/flux/schnell` polls
+   * under `fal-ai/flux`. The blocking `run()` dodges this by following submit's
+   * returned `status_url`/`response_url`; the cross-process `checkStatus` has only
+   * the id, so it reconstructs the documented queue path from the first two
+   * segments. (Single-segment ids are passed through unchanged.)
+   */
+  const queueBase = (externalId: string) => externalId.split("/").slice(0, 2).join("/");
+
+  /** Async submit: POST queue.fal.run/{model} → { request_id }. */
+  async function submit(req: MediaSubmitRequest): Promise<MediaSubmitResult> {
+    const submitRes = await fetchImpl(`${baseUrl}/${req.externalId}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req.input),
+    });
+    if (!submitRes.ok) {
+      throw new FalMediaError(submitRes.status, await safeText(submitRes));
+    }
+    const body = (await submitRes.json()) as FalSubmitResponse;
+    if (!body.request_id) {
+      throw new Error(
+        `ai-lcr: fal submit for "${req.externalId}" returned no request_id (keys: ${Object.keys(
+          body,
+        ).join(", ")})`,
+      );
+    }
+    return { requestId: body.request_id };
+  }
+
+  /**
+   * Poll one queued job. A non-2xx on the status or result fetch THROWS a
+   * {@link FalMediaError} (carrying the HTTP status) so the router classifies it
+   * and fails over; a COMPLETED job with no extractable output RETURNS
+   * `{ status:"error" }`.
+   */
+  async function checkStatus(req: MediaStatusRequest): Promise<MediaStatusResult> {
+    const base = queueBase(req.externalId);
+    const statusRes = await fetchImpl(
+      `${baseUrl}/${base}/requests/${req.requestId}/status`,
+      { headers },
+    );
+    if (!statusRes.ok) {
+      throw new FalMediaError(statusRes.status, await safeText(statusRes));
+    }
+    const status = String(((await statusRes.json()) as FalStatusResponse).status ?? "");
+    if (status !== "COMPLETED") {
+      // IN_QUEUE → queued; IN_PROGRESS / anything else in-flight → running.
+      return { status: status === "IN_QUEUE" ? "queued" : "running" };
+    }
+    const resultRes = await fetchImpl(`${baseUrl}/${base}/requests/${req.requestId}`, { headers });
+    if (!resultRes.ok) {
+      throw new FalMediaError(resultRes.status, await safeText(resultRes));
+    }
+    const outputs = extractOutputs(await resultRes.json());
+    if (outputs.length === 0) {
+      return { status: "error", error: `fal job ${req.requestId} completed with no media URL` };
+    }
+    return { status: "done", outputs, units: outputs.length };
+  }
+
   return {
     provider: "fal",
+    submit,
+    checkStatus,
     async run(req: MediaGenerateRequest): Promise<MediaGenerateResult> {
       // 1. Submit to the queue. The model id IS the path, e.g. fal-ai/veo3.1.
       const submitRes = await fetchImpl(`${baseUrl}/${req.externalId}`, {

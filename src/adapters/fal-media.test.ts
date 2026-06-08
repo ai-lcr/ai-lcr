@@ -138,6 +138,66 @@ describe("createFalMediaAdapter", () => {
   });
 });
 
+describe("createFalMediaAdapter — async submit/checkStatus", () => {
+  it("submit posts to the model path and returns request_id as requestId", async () => {
+    const { impl, calls } = falStub({ submit: { request_id: "req-async" } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    const r = await adapter.submit!({ externalId: "fal-ai/veo3.1/lite", input: { prompt: "a wave" } });
+
+    expect(r).toEqual({ requestId: "req-async" });
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.url).toBe("https://queue.fal.run/fal-ai/veo3.1/lite");
+    expect(post.body).toEqual({ prompt: "a wave" });
+  });
+
+  it("checkStatus reconstructs the queue base from the id (sub-path quirk)", async () => {
+    const { impl, calls } = falStub({
+      statuses: ["COMPLETED"],
+      result: { video: { url: "https://fal.media/clip.mp4" } },
+    });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    const r = await adapter.checkStatus!({ externalId: "fal-ai/flux/schnell", requestId: "req-9" });
+
+    // base = fal-ai/flux (first two segments), NOT fal-ai/flux/schnell.
+    expect(calls[0]!.url).toBe("https://queue.fal.run/fal-ai/flux/requests/req-9/status");
+    expect(calls[1]!.url).toBe("https://queue.fal.run/fal-ai/flux/requests/req-9");
+    expect(r).toEqual({
+      status: "done",
+      outputs: [{ url: "https://fal.media/clip.mp4", type: "video" }],
+      units: 1,
+    });
+  });
+
+  it("checkStatus maps IN_QUEUE → queued and IN_PROGRESS → running (no result fetch)", async () => {
+    const queued = falStub({ statuses: ["IN_QUEUE"] });
+    const aQ = createFalMediaAdapter({ apiKey: "k", fetchImpl: queued.impl });
+    expect(await aQ.checkStatus!({ externalId: "fal-ai/veo3.1", requestId: "r" })).toEqual({ status: "queued" });
+    expect(queued.calls.every((c) => c.url.endsWith("/status"))).toBe(true); // never fetched result
+
+    const running = falStub({ statuses: ["IN_PROGRESS"] });
+    const aR = createFalMediaAdapter({ apiKey: "k", fetchImpl: running.impl });
+    expect(await aR.checkStatus!({ externalId: "fal-ai/veo3.1", requestId: "r" })).toEqual({ status: "running" });
+  });
+
+  it("checkStatus THROWS a status-bearing error when the status poll is rejected", async () => {
+    const { impl } = falStub({ statuses: ["COMPLETED"], resultInit: { ok: false, status: 500 } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+    await expect(
+      adapter.checkStatus!({ externalId: "fal-ai/veo3.1", requestId: "r" }),
+    ).rejects.toMatchObject({ status: 500, name: "FalMediaError" });
+  });
+
+  it("checkStatus returns {status:'error'} when a completed job has no output", async () => {
+    const { impl } = falStub({ statuses: ["COMPLETED"], result: { images: [] } });
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl });
+    expect(await adapter.checkStatus!({ externalId: "fal-ai/veo3.1", requestId: "r" })).toMatchObject({
+      status: "error",
+    });
+  });
+});
+
 // Wired through the media router on a real registry entry: the cheapest video
 // route (Kunavo) caps out and falls over to the fal route — proving fal is now
 // a live video execution path, not a skipped (adapter-less) route.

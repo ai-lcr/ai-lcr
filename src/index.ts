@@ -52,6 +52,15 @@ export type {
   MediaCostEvent,
   MediaLCRConfig,
   MediaRunResult,
+  MediaSubmitRequest,
+  MediaSubmitResult,
+  MediaStatusRequest,
+  MediaStatusResult,
+  MediaJobStatus,
+  MediaSubmitOptions,
+  MediaJobHandle,
+  MediaPollResult,
+  MediaLCR,
 } from "./media";
 export { MEDIA_PRICING } from "./media-registry";
 export { OFFICIAL_PRICES } from "./media-official";
