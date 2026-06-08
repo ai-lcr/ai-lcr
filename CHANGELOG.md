@@ -79,8 +79,10 @@ router (the callable `generate(modelId, input)`) and every adapter's `run()` are
   callable-with-methods return type of `createMediaLCR`).
 
 - **Live probe `scripts/check-media-async.mjs`** — exercises the real
-  `submit`/`poll` API against a live provider, JSON round-tripping the handle
-  across the submit→poll boundary and watching poll-time failover.
+  `submit`/`poll` API across **every async provider** (kunavo · fal · runware)
+  whose key is present: submit → JSON round-trip the handle → poll to done →
+  assert the output URL fetches and cost is reported, per provider.
+  `PROBE_FAILOVER=1` adds a live submit-time failover case.
 
 ### Migration
 
