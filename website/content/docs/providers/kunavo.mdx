@@ -1,10 +1,14 @@
 ---
 title: Kunavo
-description: Kunavo — discounted partner models (~20% off). Dashed model ids. Also serves image and video.
+description: Kunavo — discounted partner models (~20% off) for text, plus image and video generation. Dashed model ids. Text via createOpenAICompatible; media via createKunavoMediaAdapter.
 ---
 
 Kunavo resells partner models (Gemini, Claude, …) at a discount — roughly 20%
-off the vendor's own price.
+off the vendor's own price. It's the one provider that spans **both** worlds:
+text (an OpenAI-compatible endpoint) **and** media (image + video, via an
+adapter).
+
+## Text
 
 ```ts
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -17,11 +21,78 @@ const kunavo = createOpenAICompatible({
 // dashed ids: kunavo("gemini-2.5-flash"), kunavo("claude-sonnet-4-6")
 ```
 
-Model ids are **dashed** (`gemini-2.5-flash`, `claude-sonnet-4-6`). Kunavo also
-serves image and video models (verified live) — text-to-image, `*-edit`
-reference-image editing, and Veo video via an async submit→poll API. See
-[Image & video](/docs/image-video).
+Model ids are **dashed** (`gemini-2.5-flash`, `claude-sonnet-4-6`).
 
 > A model vendor's **own official API** (`@ai-sdk/openai`, `@ai-sdk/anthropic`,
 > …) is just another entry in the list — often the cheapest, and least likely to
 > break native features like prompt caching or tool calls.
+
+## Image & video
+
+For media, wire Kunavo with `createKunavoMediaAdapter` and use it in
+[`createMediaLCR`](/docs/image-video). All paths below were verified live against
+the real API (image 2026-05-31, edit + async/sync video 2026-06-06).
+
+```ts
+import { createKunavoMediaAdapter } from "ai-lcr";
+
+const kunavo = createKunavoMediaAdapter({
+  apiKey: process.env.KUNAVO_API_KEY!,
+  videoMode: "async",       // default; "sync" uses the blocking single-call path
+  pollIntervalMs: 5000,     // async-video poll cadence (default)
+  pollTimeoutMs: 600_000,   // give up on an async job after this (default 10m)
+});
+```
+
+### Image — generate and edit
+
+Text-to-image hits `POST /v1/images/generations`. Routes whose `externalId` ends
+in `-edit` (`nano-banana-edit`, `gpt-image-2-edit`) are reference-image edits and
+route to `POST /v1/images/edits` instead — the caller supplies `image` (url or
+data-uri) or `image_urls[]` in the input.
+
+```ts
+registry: {
+  "google/nano-banana-pro": {
+    id: "google/nano-banana-pro",
+    modality: "image",
+    routes: [
+      { provider: "kunavo", externalId: "nano-banana-pro", pricing: { unit: "image", cents: 6.7 } },
+    ],
+  },
+}
+```
+
+### Video — Veo, async submit→poll (sync fallback)
+
+Kunavo serves Google's **Veo** family: `veo-3`, `veo-3-lite`, `veo-3-quality`.
+By default the adapter uses the **async** path — `POST /v1/videos` to submit, then
+polls `GET /v1/videos/{id}` (`queued → in_progress → completed`) and returns the
+clip URL. This is Kunavo's recommended production path: non-blocking, and it
+survives proxy/load-balancer connection limits on long renders. A poll timeout
+fails over to the next route.
+
+Set `videoMode: "sync"` to use the blocking single call `POST /v1/video/generations`
+instead (capped by `syncVideoTimeoutMs`, default 10m).
+
+```ts
+registry: {
+  "google/veo-3-lite": {
+    id: "google/veo-3-lite",
+    modality: "video",
+    routes: [
+      // flat per-clip price; verify clip duration/resolution/audio before trusting it
+      { provider: "kunavo", externalId: "veo-3-lite", pricing: { unit: "call", cents: 16 } },
+    ],
+  },
+}
+```
+
+Kunavo video ids are dashed and billed **per call** (flat per clip), not per
+second — so on a short clip they can beat per-second providers by a wide margin.
+But `GET /v1/models` exposes no pricing, so the per-call cents are hand-entered:
+confirm clip duration, resolution, and audio against your own render before
+trusting the gap.
+
+See [Image & video](/docs/image-video) for the full media flow and the bundled
+model catalog.
