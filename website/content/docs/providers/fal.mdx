@@ -1,0 +1,45 @@
+---
+title: fal
+description: fal — image and video generation via one async queue API. A media provider, so you wire it with createFalMediaAdapter, not createOpenAICompatible.
+---
+
+fal is a **media provider** (image + video), so it's wired differently from the
+text providers above. Instead of building an AI SDK model with
+`createOpenAICompatible`, you hand its key to `createFalMediaAdapter` and drop it
+into [`createMediaLCR`](/docs/image-video).
+
+```ts
+import { createFalMediaAdapter } from "ai-lcr";
+
+const fal = createFalMediaAdapter({
+  apiKey: process.env.FAL_KEY!,
+  // optional: async-job poll knobs
+  pollIntervalMs: 3000,   // default
+  pollTimeoutMs: 300_000, // default; a timeout fails over to the next route
+});
+```
+
+fal serves **every** model — image and video alike — through one async queue API
+(`submit → poll → fetch`). The adapter runs that loop for you, and a poll timeout
+fails over to the next provider in the route.
+
+Model ids are fal's **path-style** ids, used as the route's `externalId`:
+`fal-ai/nano-banana-2` (image), `fal-ai/veo3.1` (video). fal's queue result
+does **not** carry a per-call price, so the cost comes from the `pricing` you
+declare on each route in the registry (often `unit: "second"` for video,
+`unit: "image"` or `unit: "megapixel"` for image).
+
+```ts
+registry: {
+  "google/veo-3": {
+    id: "google/veo-3",
+    modality: "video",
+    routes: [
+      { provider: "fal", externalId: "fal-ai/veo3.1", pricing: { unit: "second", cents: 40 } },
+    ],
+  },
+}
+```
+
+See [Image & video](/docs/image-video) for the full media flow and the bundled
+model catalog.

@@ -96,6 +96,37 @@ const clip = await generate("bytedance/seedance-lite", {
 });
 ```
 
+## Bundled model catalog
+
+You don't have to hand-write the registry. `ai-lcr` ships `MEDIA_PRICING` — a
+cross-provider price table for the models where more than one provider competes,
+so the router actually has a cheapest-first choice. Feed it straight to
+`createMediaLCR({ registry: MEDIA_PRICING, ... })`.
+
+```ts
+import { createMediaLCR, MEDIA_PRICING } from "ai-lcr";
+```
+
+| Logical id | Modality | Providers that serve it |
+| --- | --- | --- |
+| `google/nano-banana` | image | Kunavo |
+| `google/nano-banana-2` | image | Kunavo · Runware · fal |
+| `google/nano-banana-pro` | image | Kunavo · fal |
+| `openai/gpt-image-2` | image | Kunavo · Runware |
+| `openai/gpt-image-2-high` | image | fal |
+| `bfl/flux-schnell` | image | Runware · fal |
+| `bfl/flux-kontext-dev` | image | Runware · fal |
+| `google/veo-3` | video | Kunavo · fal |
+| `google/veo-3-lite` | video | Kunavo · fal |
+| `google/veo-3-quality` | video | Kunavo |
+
+This table is the models that **2+ providers carry** — that's where routing has a
+decision to make. The long tail of fal/runware-only models (the rest of Flux,
+Seedream, Kling, WAN, Sora, Hunyuan, …) isn't bundled here; add those as your own
+registry entries with a single route. Some prices in the bundle are hand-entered
+pending a provider-page audit (Veo per-call clips especially) — see the notes in
+the source and verify before trusting a gap.
+
 ## Just want to compare prices?
 
 `comparePrices(registry)` returns, per model, the cheapest provider and each

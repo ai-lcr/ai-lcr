@@ -17,11 +17,17 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 - **[OpenRouter](/docs/providers/openrouter)** — widest coverage, the safe fallback.
 - **[TokenMart](/docs/providers/tokenmart)** — cheap mainstream catalog.
 - **[DeepInfra](/docs/providers/deepinfra)** — open-weights host.
-- **[Kunavo](/docs/providers/kunavo)** — discounted partner models.
+- **[Kunavo](/docs/providers/kunavo)** — discounted partner models; also image + video.
+- **[fal](/docs/providers/fal)** — image + video, via a media adapter.
+- **[Runware](/docs/providers/runware)** — cheap image generation, via a media adapter.
 
-Any OpenAI-compatible endpoint works — the four above are just the ones with
-notes worth calling out. A model vendor's **own official API** (`@ai-sdk/openai`,
-`@ai-sdk/anthropic`, …) is also just another entry in a list.
+Any OpenAI-compatible endpoint works for text — the catalog above is just the
+ones with notes worth calling out. A model vendor's **own official API**
+(`@ai-sdk/openai`, `@ai-sdk/anthropic`, …) is also just another entry in a list.
+
+The last three serve **image and video**. Those aren't OpenAI-compatible text
+endpoints — you wire them with a media adapter (`createFalMediaAdapter`, …) and
+route them through [`createMediaLCR`](/docs/image-video) instead.
 
 ## Putting them in one cheapest-first list
 

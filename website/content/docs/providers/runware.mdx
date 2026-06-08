@@ -1,0 +1,40 @@
+---
+title: Runware
+description: Runware — cheap image generation via a single synchronous call. Image-only — no video. A media provider, wired with createRunwareMediaAdapter.
+---
+
+Runware is a **media provider** for **image** generation — often the cheapest
+route for FLUX and similar models. Like fal, it's wired with an adapter, not
+`createOpenAICompatible`.
+
+> **Image only.** Runware has no video path in `ai-lcr`. Use [fal](/docs/providers/fal)
+> or [Kunavo](/docs/providers/kunavo) for `modality: "video"` routes.
+
+```ts
+import { createRunwareMediaAdapter } from "ai-lcr";
+
+const runware = createRunwareMediaAdapter({
+  apiKey: process.env.RUNWARE_API_KEY!,
+});
+```
+
+Unlike fal's queue, Runware returns the image **synchronously** from a single
+call — no polling. Model ids are Runware's `vendor:NN@N` style, used as the
+route's `externalId`: `runware:100@1` (FLUX Schnell), `google:4@3` (Nano Banana
+2). Runware bills per image / per compute, so the price comes from the `pricing`
+you declare on each route.
+
+```ts
+registry: {
+  "bfl/flux-schnell": {
+    id: "bfl/flux-schnell",
+    modality: "image",
+    routes: [
+      { provider: "runware", externalId: "runware:100@1", pricing: { unit: "image", cents: 0.14 } },
+    ],
+  },
+}
+```
+
+See [Image & video](/docs/image-video) for the full media flow and the bundled
+model catalog.
