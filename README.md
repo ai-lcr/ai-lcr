@@ -349,7 +349,7 @@ Design choices worth knowing:
 
 A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency check (`scripts/check-provider.sh`, just `bash` + `curl` + `python3`) that vets the things that actually cost you money or corrupt output, **per model**:
 
-> **Media providers** have their own probes: `scripts/check-kunavo-media.sh` (`bash` + `curl` + `jq`) live-tests Kunavo's image generation, `*-edit` reference endpoint, and async + sync video; `scripts/check-media-async.mjs` exercises `ai-lcr`'s own `submit`/`poll` API against a live provider, JSON round-tripping the handle across the submit→poll boundary and watching poll-time failover. Run them before trusting a media route in production.
+> **Media providers** have their own probes: `scripts/check-kunavo-media.sh` (`bash` + `curl` + `jq`) live-tests Kunavo's image generation, `*-edit` reference endpoint, and async + sync video; `scripts/check-media-async.mjs` exercises `ai-lcr`'s own `submit`/`poll` API across **every async provider** (kunavo · fal · runware) whose key is present — submit → JSON round-trip the handle → poll to done → assert the URL fetches and cost is reported, per provider (`PROBE_FAILOVER=1` adds a live submit-time failover case). Run them before trusting a media route in production.
 
 - **tool calling** — single call and a multi-step round-trip with `content: null` (the shape every agent loop sends)
 - **`max_tokens` honored** — caps must bound output

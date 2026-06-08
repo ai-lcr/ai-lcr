@@ -265,7 +265,7 @@ if (r.done) {
 
 折扣再大，如果 provider 偷偷破坏了协议就一文不值。`ai-lcr` 自带一个零依赖的检查脚本（`scripts/check-provider.sh`，只需 `bash` + `curl` + `python3`），**逐模型**核查那些真正会让你多花钱或污染输出的点：
 
-> **媒体 provider 有独立探针：** `scripts/check-kunavo-media.sh`（`bash` + `curl` + `jq`）实测 Kunavo 的图像生成、`*-edit` 参考图端点、以及异步 + 同步视频；`scripts/check-media-async.mjs` 则针对实时 provider 跑 `ai-lcr` 自己的 `submit`/`poll` API，把句柄在 submit→poll 边界上做 JSON 来回，并观察轮询期 failover。上生产前先跑一遍。
+> **媒体 provider 有独立探针：** `scripts/check-kunavo-media.sh`（`bash` + `curl` + `jq`）实测 Kunavo 的图像生成、`*-edit` 参考图端点、以及异步 + 同步视频；`scripts/check-media-async.mjs` 则**逐 provider**（kunavo · fal · runware，有 key 的才跑）跑 `ai-lcr` 自己的 `submit`/`poll` API——submit → 把句柄做 JSON 来回 → 轮询到 done → 断言 URL 真能 GET 到、成本有上报（`PROBE_FAILOVER=1` 再加一条实时 submit 期 failover）。上生产前先跑一遍。
 
 - **工具调用** —— 单次调用 + 带 `content: null` 的多步 round-trip（每个 agent 循环都会发的形态）
 - **`max_tokens` 是否生效** —— cap 必须能限制输出长度
