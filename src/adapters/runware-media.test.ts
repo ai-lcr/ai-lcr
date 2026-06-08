@@ -94,6 +94,73 @@ describe("createRunwareMediaAdapter", () => {
   });
 });
 
+describe("createRunwareMediaAdapter — async video submit/checkStatus", () => {
+  // Routes by taskType: videoInference (submit ack) vs getResponse (poll).
+  function videoStub(getResponseData: unknown) {
+    const calls: { taskType: string; body: Record<string, unknown> }[] = [];
+    const impl = vi.fn(async (_url: string, opts: RequestInit) => {
+      const task = (JSON.parse(String(opts.body)) as Record<string, unknown>[])[0]!;
+      calls.push({ taskType: String(task.taskType), body: task });
+      const data = task.taskType === "getResponse" ? getResponseData : [{ taskUUID: task.taskUUID }];
+      return { ok: true, status: 200, json: async () => ({ data }) } as Response;
+    });
+    return { impl: impl as unknown as typeof fetch, calls };
+  }
+
+  it("submit sends a videoInference async task and returns its taskUUID", async () => {
+    const { impl, calls } = videoStub([]);
+    const adapter = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    const r = await adapter.submit!({ externalId: "runware:200@1", input: { positivePrompt: "a wave", duration: 5 } });
+
+    expect(calls[0]!.taskType).toBe("videoInference");
+    expect(calls[0]!.body).toMatchObject({ model: "runware:200@1", deliveryMethod: "async", positivePrompt: "a wave" });
+    expect(typeof r.requestId).toBe("string");
+    expect(calls[0]!.body.taskUUID).toBe(r.requestId); // requestId IS the taskUUID
+  });
+
+  it("checkStatus polls via getResponse and maps success → done with cost", async () => {
+    const { impl, calls } = videoStub([
+      { taskUUID: "t1", status: "success", videoURL: "https://im.runware.ai/clip.mp4", cost: 0.5 },
+    ]);
+    const adapter = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    const r = await adapter.checkStatus!({ externalId: "runware:200@1", requestId: "t1" });
+
+    expect(calls[0]!.taskType).toBe("getResponse");
+    expect(r).toEqual({
+      status: "done",
+      outputs: [{ url: "https://im.runware.ai/clip.mp4", type: "video" }],
+      costCents: 50, // $0.50 → 50¢
+    });
+  });
+
+  it("checkStatus maps processing → running and error → error", async () => {
+    const proc = videoStub([{ taskUUID: "t", status: "processing" }]);
+    const aP = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: proc.impl });
+    expect(await aP.checkStatus!({ externalId: "runware:200@1", requestId: "t" })).toEqual({ status: "running" });
+
+    const empty = videoStub([]); // no data row yet → still running
+    const aE = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: empty.impl });
+    expect(await aE.checkStatus!({ externalId: "runware:200@1", requestId: "t" })).toEqual({ status: "running" });
+
+    const err = videoStub([{ taskUUID: "t", status: "error", errorMessage: "render failed" }]);
+    const aErr = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: err.impl });
+    expect(await aErr.checkStatus!({ externalId: "runware:200@1", requestId: "t" })).toMatchObject({
+      status: "error",
+      error: "render failed",
+    });
+  });
+
+  it("checkStatus THROWS a status-bearing error on an HTTP failure", async () => {
+    const { impl } = stubFetch({ errors: [{ message: "boom" }] }, { ok: false, status: 503 });
+    const adapter = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: impl });
+    await expect(
+      adapter.checkStatus!({ externalId: "runware:200@1", requestId: "t" }),
+    ).rejects.toMatchObject({ status: 503, name: "RunwareMediaError" });
+  });
+});
+
 // Wired through the media router: a capped Runware route falls over to fal,
 // exercising RunwareMediaError(429) → isRetryableError → next provider.
 describe("createRunwareMediaAdapter via createMediaLCR", () => {

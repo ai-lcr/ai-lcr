@@ -175,6 +175,72 @@ describe("createKunavoMediaAdapter — video (sync mode)", () => {
   });
 });
 
+describe("createKunavoMediaAdapter — async submit/checkStatus", () => {
+  it("submit posts to /v1/videos and returns the job id as requestId", async () => {
+    const { impl, calls } = kunavoStub({ submitBody: { id: "vid_xyz", status: "queued" } });
+    const adapter = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    const r = await adapter.submit!({ externalId: "veo-3-lite", input: { prompt: "a wave" } });
+
+    expect(r).toEqual({ requestId: "vid_xyz" });
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.url).toBe("https://api.kunavo.com/v1/videos");
+    expect(post.body).toMatchObject({ model: "veo-3-lite", prompt: "a wave" });
+  });
+
+  it("submit rejects an image model (images are synchronous)", async () => {
+    const { impl } = kunavoStub({});
+    const adapter = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: impl });
+    await expect(
+      adapter.submit!({ externalId: "nano-banana-2", input: { prompt: "x" } }),
+    ).rejects.toThrow(/synchronous/);
+  });
+
+  it("checkStatus maps queued/in_progress → queued/running and completed → done", async () => {
+    const { impl } = kunavoStub({
+      pollBody: (s) =>
+        s === "completed"
+          ? { status: s, output: { url: "https://files.kunavo.com/v.mp4", duration_seconds: 8 } }
+          : { status: s },
+    });
+    const adapter = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    // The stub's poll sequence defaults to ["completed"], so drive states explicitly.
+    const { impl: impl2 } = kunavoStub({ videoStatuses: ["queued"], pollBody: (s) => ({ status: s }) });
+    const a2 = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: impl2 });
+    expect(await a2.checkStatus!({ externalId: "veo-3-lite", requestId: "vid_1" })).toEqual({ status: "queued" });
+
+    const { impl: impl3 } = kunavoStub({ videoStatuses: ["in_progress"], pollBody: (s) => ({ status: s }) });
+    const a3 = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: impl3 });
+    expect(await a3.checkStatus!({ externalId: "veo-3-lite", requestId: "vid_1" })).toEqual({ status: "running" });
+
+    const done = await adapter.checkStatus!({ externalId: "veo-3-lite", requestId: "vid_1" });
+    // No `units` — a completed job is ONE clip. (Reporting duration_seconds as
+    // units would make the router's refCents × units estimate multiply a flat
+    // per-call price by the clip length. See the cost-estimate test in media.test.ts.)
+    expect(done).toEqual({
+      status: "done",
+      outputs: [{ url: "https://files.kunavo.com/v.mp4", type: "video" }],
+    });
+  });
+
+  it("checkStatus returns {status:'error'} for a failed job but THROWS on an HTTP error", async () => {
+    const fail = kunavoStub({ videoStatuses: ["failed"] });
+    const aFail = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: fail.impl });
+    expect(await aFail.checkStatus!({ externalId: "veo-3-lite", requestId: "v" })).toMatchObject({
+      status: "error",
+      error: "render failed",
+    });
+
+    const http = kunavoStub({ pollInit: { ok: false, status: 503 } });
+    const aHttp = createKunavoMediaAdapter({ apiKey: "k", fetchImpl: http.impl });
+    await expect(aHttp.checkStatus!({ externalId: "veo-3-lite", requestId: "v" })).rejects.toMatchObject({
+      status: 503,
+      name: "KunavoMediaError",
+    });
+  });
+});
+
 // A capped Kunavo video route (timeout → 504) must fall over to the next route.
 describe("createKunavoMediaAdapter via createMediaLCR (video failover)", () => {
   const registry: MediaRegistry = {

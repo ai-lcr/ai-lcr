@@ -30,6 +30,10 @@ import type {
   MediaGenerateRequest,
   MediaGenerateResult,
   MediaOutput,
+  MediaStatusRequest,
+  MediaStatusResult,
+  MediaSubmitRequest,
+  MediaSubmitResult,
 } from "../media";
 
 export interface KunavoMediaConfig {
@@ -118,8 +122,8 @@ export function createKunavoMediaAdapter(config: KunavoMediaConfig): MediaAdapte
     return { outputs };
   }
 
-  /** Async path: POST /v1/videos → poll GET /v1/videos/{id} until terminal. */
-  async function runVideoAsync(req: MediaGenerateRequest): Promise<MediaGenerateResult> {
+  /** Async submit: POST /v1/videos → { id:"vid_…" }. Video models only. */
+  async function submitVideo(req: MediaSubmitRequest): Promise<MediaSubmitResult> {
     const submit = await fetchImpl(`${baseUrl}/v1/videos`, {
       method: "POST",
       headers,
@@ -137,35 +141,69 @@ export function createKunavoMediaAdapter(config: KunavoMediaConfig): MediaAdapte
         )})`,
       );
     }
+    return { requestId: jobId };
+  }
 
+  /**
+   * Poll one async video job: GET /v1/videos/{id}. Maps Kunavo's status onto the
+   * canonical lifecycle. A non-2xx THROWS a {@link KunavoMediaError} (carrying
+   * the HTTP status) so the router classifies it and fails over; a job that ran
+   * and failed RETURNS `{ status:"error" }`.
+   */
+  async function checkStatusVideo(req: MediaStatusRequest): Promise<MediaStatusResult> {
+    const poll = await fetchImpl(`${baseUrl}/v1/videos/${req.requestId}`, { headers });
+    if (!poll.ok) {
+      throw new KunavoMediaError(poll.status, await safeText(poll));
+    }
+    const body = (await poll.json()) as Record<string, unknown>;
+    const status = String(body.status ?? "").toLowerCase();
+    if (status === "completed" || status === "succeeded" || status === "success") {
+      const urls = extractVideoUrls(body);
+      if (urls.length === 0) {
+        return { status: "error", error: `Kunavo video job ${req.requestId} completed with no URL` };
+      }
+      // NB: do NOT report `units` from `output.duration_seconds`. The router's
+      // cost estimate is `refCents × units`, where refCents is already
+      // normalized to ONE reference clip and `units` means OUTPUT COUNT (the
+      // convention fal/runware follow). Veo routes are priced per "call" (flat
+      // per clip), so seconds-as-units would multiply a flat price by the clip
+      // length — an 8× overcharge for an 8s clip. One completed job = one clip.
+      return {
+        status: "done",
+        outputs: urls.map((url) => ({ url, type: "video" as const })),
+      };
+    }
+    if (status === "failed" || status === "error") {
+      const err = body.error as { message?: string } | undefined;
+      return { status: "error", error: err?.message ?? JSON.stringify(body) };
+    }
+    // "queued" → queued; everything else in-flight ("in_progress", …) → running.
+    return { status: status === "queued" ? "queued" : "running" };
+  }
+
+  /**
+   * Blocking async path used by `run()`: submit, then poll until terminal. The
+   * non-blocking two-call version is exposed as the adapter's `submit` /
+   * `checkStatus` (see below) for cross-process use.
+   */
+  async function runVideoAsync(req: MediaGenerateRequest): Promise<MediaGenerateResult> {
+    const { requestId } = await submitVideo({ externalId: req.externalId, input: req.input });
     const deadline = Date.now() + pollTimeoutMs;
     while (Date.now() < deadline) {
-      const poll = await fetchImpl(`${baseUrl}/v1/videos/${jobId}`, { headers });
-      if (!poll.ok) {
-        throw new KunavoMediaError(poll.status, await safeText(poll));
+      const result = await checkStatusVideo({ externalId: req.externalId, requestId });
+      if (result.status === "done") {
+        return { outputs: result.outputs ?? [], ...(result.units !== undefined ? { units: result.units } : {}) };
       }
-      const body = (await poll.json()) as Record<string, unknown>;
-      const status = String(body.status ?? "").toLowerCase();
-      if (status === "completed" || status === "succeeded" || status === "success") {
-        const urls = extractVideoUrls(body);
-        if (urls.length === 0) {
-          throw new Error(`ai-lcr: Kunavo video job ${jobId} completed with no URL`);
-        }
-        return { outputs: urls.map((url) => ({ url, type: "video" })) };
+      if (result.status === "error") {
+        throw new Error(`ai-lcr: Kunavo video job ${requestId} failed: ${result.error ?? "unknown"}`);
       }
-      if (status === "failed" || status === "error") {
-        const err = body.error as { message?: string } | undefined;
-        throw new Error(
-          `ai-lcr: Kunavo video job ${jobId} failed: ${err?.message ?? JSON.stringify(body)}`,
-        );
-      }
-      // queued / in_progress → keep waiting.
+      // queued / running → keep waiting.
       await sleep(pollIntervalMs);
     }
     // Surface as a 504 so the router classifies it retryable and fails over.
     throw new KunavoMediaError(
       504,
-      `Kunavo video job ${jobId} timed out after ${pollTimeoutMs}ms`,
+      `Kunavo video job ${requestId} timed out after ${pollTimeoutMs}ms`,
     );
   }
 
@@ -200,13 +238,27 @@ export function createKunavoMediaAdapter(config: KunavoMediaConfig): MediaAdapte
     return { outputs: urls.map((url) => ({ url, type: "video" })) };
   }
 
+  // Video model ids on Kunavo are the veo-* family; everything else is image.
+  const isVideoId = (externalId: string) => /(^|\/)veo/i.test(externalId);
+
   return {
     provider: "kunavo",
     async run(req: MediaGenerateRequest): Promise<MediaGenerateResult> {
-      // Video model ids on Kunavo are the veo-* family; everything else is image.
-      const isVideo = /(^|\/)veo/i.test(req.externalId);
-      if (!isVideo) return runImage(req);
+      if (!isVideoId(req.externalId)) return runImage(req);
       return videoMode === "sync" ? runVideoSync(req) : runVideoAsync(req);
+    },
+    // Async path — video only. Kunavo images are synchronous (no job id to poll),
+    // so submitting an image id is a usage error: route images through `run()`.
+    async submit(req: MediaSubmitRequest): Promise<MediaSubmitResult> {
+      if (!isVideoId(req.externalId)) {
+        throw new Error(
+          `ai-lcr: Kunavo image model "${req.externalId}" is synchronous — use run(), not submit()`,
+        );
+      }
+      return submitVideo(req);
+    },
+    async checkStatus(req: MediaStatusRequest): Promise<MediaStatusResult> {
+      return checkStatusVideo(req);
     },
   };
 }

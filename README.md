@@ -291,11 +291,65 @@ USD per second, as of 2026-05 — verify current rates. Video billing differs by
 | Seedance Pro | $0.124 |
 | Veo 3.1 (audio-on) | $0.400 |
 
+## Image & video routing (`createMediaLCR`)
+
+Image and video are a separate, self-contained side of `ai-lcr` (file outputs, mixed pricing units, async jobs) — see [`src/media.ts`](src/media.ts). You give it a registry (each model's provider routes + per-unit price) and a set of adapters; it routes cheapest-first, fails over, and reports real/normalized cost through the same `onCall` sink as text.
+
+```ts
+import { createMediaLCR, createKunavoMediaAdapter, createFalMediaAdapter } from 'ai-lcr'
+
+const lcr = createMediaLCR({
+  registry: {
+    'google/veo-3-lite': {
+      id: 'google/veo-3-lite', modality: 'video',
+      routes: [
+        { provider: 'kunavo', externalId: 'veo-3-lite',        pricing: { unit: 'call',   cents: 16 } },
+        { provider: 'fal',    externalId: 'fal-ai/veo3.1/lite', pricing: { unit: 'second', cents: 8  } },
+      ],
+    },
+  },
+  adapters: {
+    kunavo: createKunavoMediaAdapter({ apiKey: process.env.KUNAVO_API_KEY! }),
+    fal:    createFalMediaAdapter({ apiKey: process.env.FAL_KEY! }),
+  },
+  onCall: rec => console.log(rec.winner, rec.costUsd, rec.failedOver),
+})
+
+// Sync: resolves when the file is ready (fine for images).
+const { outputs, provider, costCents } = await lcr('google/veo-3-lite', { prompt: 'a wave' })
+```
+
+### Async (`submit` / `poll`) — for long-running video
+
+A minutes-long video job can't hold a serverless request open. `submit` routes + enqueues and returns a **plain-JSON handle**; `poll` checks it. The two run in different processes — the handle survives a database/queue hop.
+
+```ts
+// process A — request handler: route + enqueue, return immediately
+const handle = await lcr.submit('google/veo-3-lite', { prompt: 'a wave', aspect_ratio: '16:9' })
+await db.jobs.put(jobId, JSON.stringify(handle))
+
+// process B — cron / queue worker: poll until terminal
+let handle = JSON.parse(await db.jobs.get(jobId))
+const r = await lcr.poll(handle)
+if (r.done) {
+  save(r.outputs, r.costCents)                 // settled — telemetry already emitted
+} else {
+  await db.jobs.put(jobId, JSON.stringify(r.handle))  // keep polling r.handle
+}
+```
+
+Design choices worth knowing:
+
+- **Routing is at `submit`** (cheapest async-capable provider); the handle carries the not-yet-tried fallbacks, so…
+- **Failover is at `poll`** — a provider whose job fails mid-poll is re-submitted to the next provider automatically (a fresh `r.handle` to keep polling), rather than the request just dying.
+- **Telemetry lands once, at the terminal poll** — one `onCall` `CallRecord` with the full failover chain, threaded across both processes (not at `submit`).
+- An adapter advertises async by implementing `submit` + `checkStatus`; image-only adapters omit them and are skipped by the async router. The bundled Kunavo, fal, and Runware adapters all implement the async path (Kunavo/Runware async is video-only; fal covers both).
+
 ## Vetting a provider (capability + cost probe)
 
 A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency check (`scripts/check-provider.sh`, just `bash` + `curl` + `python3`) that vets the things that actually cost you money or corrupt output, **per model**:
 
-> **Media providers** have their own probe: `scripts/check-kunavo-media.sh` (`bash` + `curl` + `jq`) live-tests Kunavo's image generation, `*-edit` reference endpoint, and async + sync video — the same checks used to verify the routes above. Run it before trusting a media route in production.
+> **Media providers** have their own probes: `scripts/check-kunavo-media.sh` (`bash` + `curl` + `jq`) live-tests Kunavo's image generation, `*-edit` reference endpoint, and async + sync video; `scripts/check-media-async.mjs` exercises `ai-lcr`'s own `submit`/`poll` API across **every async provider** (kunavo · fal · runware) whose key is present — submit → JSON round-trip the handle → poll to done → assert the URL fetches and cost is reported, per provider (`PROBE_FAILOVER=1` adds a live submit-time failover case). Run them before trusting a media route in production.
 
 - **tool calling** — single call and a multi-step round-trip with `content: null` (the shape every agent loop sends)
 - **`max_tokens` honored** — caps must bound output

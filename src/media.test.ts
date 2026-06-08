@@ -10,6 +10,7 @@ import {
   type MediaModelDef,
   type MediaRegistry,
   type MediaAdapter,
+  type MediaStatusResult,
 } from "./media";
 import { MEDIA_PRICING } from "./media-registry";
 
@@ -307,3 +308,333 @@ describe("createMediaLCR routing", () => {
     expect(onCall.mock.calls[0]![0].baselineUsd).toBeCloseTo(0.15, 6);
   });
 });
+
+describe("createMediaLCR async (submit / poll)", () => {
+  // Two-provider video model: cheap per-call 30¢, pricey per-second 40¢×5s=200¢.
+  const registry: MediaRegistry = {
+    "x/vid": {
+      id: "x/vid",
+      modality: "video",
+      official: { unit: "call", cents: 300 },
+      routes: [
+        { provider: "cheap", externalId: "c-vid", pricing: { unit: "call", cents: 30 } },
+        { provider: "pricey", externalId: "p-vid", pricing: { unit: "second", cents: 40 } },
+      ],
+    },
+  };
+
+  /**
+   * A scriptable async adapter. `statuses` is the sequence checkStatus walks
+   * through (one per poll); `onSubmit` lets a test make submit throw. The sync
+   * `run` is present but unused by these tests.
+   */
+  function asyncAdapter(
+    provider: string,
+    statuses: MediaStatusResult[],
+    opts: { submit?: () => void } = {},
+  ): MediaAdapter & { submitCount: () => number } {
+    let i = 0;
+    let submits = 0;
+    return {
+      provider,
+      run: vi.fn(async () => ({ outputs: [{ url: `https://x/${provider}.mp4`, type: "video" as const }] })),
+      submit: vi.fn(async () => {
+        submits++;
+        opts.submit?.();
+        return { requestId: `${provider}-req-${submits}` };
+      }),
+      checkStatus: vi.fn(async () => statuses[Math.min(i++, statuses.length - 1)]!),
+      submitCount: () => submits,
+    };
+  }
+
+  type Status = MediaStatusResult;
+  const done = (units?: number, costCents?: number): Status => ({
+    status: "done",
+    outputs: [{ url: "https://x/out.mp4", type: "video" }],
+    ...(units !== undefined ? { units } : {}),
+    ...(costCents !== undefined ? { costCents } : {}),
+  });
+
+  it("submit routes to the cheapest async-capable provider and returns a handle", async () => {
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [done()]), pricey: asyncAdapter("pricey", [done()]) },
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    expect(handle.provider).toBe("cheap");
+    expect(handle.requestId).toBe("cheap-req-1");
+    expect(handle.fallbacks.map((f) => f.provider)).toEqual(["pricey"]);
+    expect(handle.input).toEqual({ prompt: "hi" });
+  });
+
+  it("submit does NOT emit a CallRecord (telemetry lands at the terminal poll)", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [done()]), pricey: asyncAdapter("pricey", [done()]) },
+      onCall,
+    });
+    await lcr.submit("x/vid", { prompt: "hi" });
+    expect(onCall).not.toHaveBeenCalled();
+  });
+
+  it("poll returns pending while queued/running, then done with outputs + cost", async () => {
+    const onCall = vi.fn();
+    const onCost = vi.fn();
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: asyncAdapter("cheap", [{ status: "queued" }, { status: "running" }, done()]),
+        pricey: asyncAdapter("pricey", [done()]),
+      },
+      onCall,
+      onCost,
+    });
+    let handle = await lcr.submit("x/vid", { prompt: "hi" });
+    let r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    if (!r.done) {
+      expect(r.status).toBe("queued");
+      handle = r.handle;
+    }
+    r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) {
+      expect(r.provider).toBe("cheap");
+      expect(r.outputs).toHaveLength(1);
+      expect(r.estimated).toBe(true);
+      expect(r.costCents).toBe(30); // per-call ref price, estimated
+    }
+    expect(onCall).toHaveBeenCalledOnce();
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec).toMatchObject({ model: "x/vid", winner: "cheap", ok: true, failedOver: false });
+    expect(rec.costUsd).toBeCloseTo(0.3, 6);
+    expect(rec.baselineUsd).toBeCloseTo(3, 6); // official 300¢ → $3
+    expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ provider: "cheap", estimated: true }));
+  });
+
+  it("estimates a per-call video clip at the FLAT ref price, not × duration", async () => {
+    // Regression guard: refCents is normalized to ONE reference clip and `units`
+    // means output count. An adapter returning seconds-as-units would multiply a
+    // flat per-call price by the clip length (an 8× overcharge for an 8s clip).
+    const onCost = vi.fn();
+    const lcr = createMediaLCR({
+      registry: {
+        "x/clip": {
+          id: "x/clip",
+          modality: "video",
+          routes: [{ provider: "cheap", externalId: "c-vid", pricing: { unit: "call", cents: 16 } }],
+        },
+      },
+      adapters: { cheap: asyncAdapter("cheap", [done()]) }, // done() carries NO units
+      onCost,
+    });
+    const handle = await lcr.submit("x/clip", { prompt: "a wave" });
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.costCents).toBe(16); // flat — NOT 16 × seconds
+    expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ costCents: 16 }));
+  });
+
+  it("uses provider-reported cost + units when checkStatus returns them", async () => {
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: asyncAdapter("cheap", [done(8, 12.5)]),
+        pricey: asyncAdapter("pricey", [done()]),
+      },
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) {
+      expect(r.estimated).toBe(false);
+      expect(r.costCents).toBe(12.5);
+    }
+  });
+
+  it("re-submits to the next provider when a job fails mid-poll (failover)", async () => {
+    const onCall = vi.fn();
+    const cheap = asyncAdapter("cheap", [{ status: "running" }, { status: "error", error: "model crashed" }]);
+    const pricey = asyncAdapter("pricey", [done()]);
+    const lcr = createMediaLCR({ registry, adapters: { cheap, pricey }, onCall });
+
+    let handle = await lcr.submit("x/vid", { prompt: "hi" });
+    let r = await lcr.poll(handle); // running
+    if (!r.done) handle = r.handle;
+    r = await lcr.poll(handle); // cheap errors → re-submit to pricey
+    expect(r.done).toBe(false);
+    if (!r.done) {
+      expect(r.failedOver).toBe(true);
+      expect(r.handle.provider).toBe("pricey");
+      handle = r.handle;
+    }
+    expect(pricey.submitCount()).toBe(1);
+    expect(onCall).not.toHaveBeenCalled(); // not terminal yet
+    r = await lcr.poll(handle); // pricey done
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.provider).toBe("pricey");
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.ok).toBe(true);
+    expect(rec.winner).toBe("pricey");
+    expect(rec.failedOver).toBe(true);
+    expect(rec.attempts.map((a: { provider: string; ok: boolean }) => [a.provider, a.ok])).toEqual([
+      ["cheap", false],
+      ["pricey", true],
+    ]);
+  });
+
+  it("fails over on a thrown retryable poll error (e.g. a 504 timeout remap)", async () => {
+    const cheap: MediaAdapter = {
+      provider: "cheap",
+      run: vi.fn(),
+      submit: vi.fn(async () => ({ requestId: "c1" })),
+      checkStatus: vi.fn(async () => {
+        throw Object.assign(new Error("gateway timeout"), { status: 504 });
+      }),
+    };
+    const pricey = asyncAdapter("pricey", [done()]);
+    const lcr = createMediaLCR({ registry, adapters: { cheap, pricey } });
+    let handle = await lcr.submit("x/vid", { prompt: "hi" });
+    let r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    if (!r.done) {
+      expect(r.failedOver).toBe(true);
+      handle = r.handle;
+    }
+    r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.provider).toBe("pricey");
+  });
+
+  it("settles a fail record and throws when poll exhausts every provider", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: asyncAdapter("cheap", [{ status: "error", error: "boom" }]),
+        pricey: asyncAdapter("pricey", [{ status: "error", error: "boom2" }]),
+      },
+      onCall,
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    const r1 = await lcr.poll(handle); // cheap errors → re-submit pricey
+    expect(r1.done).toBe(false);
+    await expect(lcr.poll((r1 as { handle: typeof handle }).handle)).rejects.toThrow(/boom2/);
+    const rec = onCall.mock.calls.at(-1)![0];
+    expect(rec.ok).toBe(false);
+    expect(rec.winner).toBeUndefined();
+    expect(rec.failedOver).toBe(true);
+  });
+
+  it("the handle survives a JSON round-trip (cross-process submit→poll)", async () => {
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [done()]), pricey: asyncAdapter("pricey", [done()]) },
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    const rehydrated = JSON.parse(JSON.stringify(handle));
+    const r = await lcr.poll(rehydrated);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.provider).toBe("cheap");
+  });
+
+  it("submit skips providers without an async adapter, using the next that has submit", async () => {
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: okAdapterSyncOnly("cheap"), // sync only — no submit
+        pricey: asyncAdapter("pricey", [done()]),
+      },
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    expect(handle.provider).toBe("pricey");
+    expect(handle.fallbacks).toHaveLength(0);
+  });
+
+  it("submit throws when no provider supports async at all", async () => {
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: okAdapterSyncOnly("cheap"), pricey: okAdapterSyncOnly("pricey") },
+    });
+    await expect(lcr.submit("x/vid", { prompt: "hi" })).rejects.toThrow(/no provider .* supports async/);
+  });
+
+  it("submit fails over on a retryable submit error and records the failed leg", async () => {
+    const onCall = vi.fn();
+    const cheap = asyncAdapter("cheap", [done()], {
+      submit: () => {
+        throw Object.assign(new Error("overloaded"), { status: 429 });
+      },
+    });
+    const pricey = asyncAdapter("pricey", [done()]);
+    const lcr = createMediaLCR({ registry, adapters: { cheap, pricey }, onCall });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    expect(handle.provider).toBe("pricey");
+    expect(handle.attempts).toEqual([
+      expect.objectContaining({ provider: "cheap", ok: false }),
+    ]);
+    expect(onCall).not.toHaveBeenCalled(); // still not terminal
+  });
+
+  it("submit emits a fail record + throws when every provider rejects the submit", async () => {
+    const onCall = vi.fn();
+    const boom = () => {
+      throw Object.assign(new Error("overloaded"), { status: 429 });
+    };
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: asyncAdapter("cheap", [done()], { submit: boom }),
+        pricey: asyncAdapter("pricey", [done()], { submit: boom }),
+      },
+      onCall,
+    });
+    await expect(lcr.submit("x/vid", { prompt: "hi" })).rejects.toThrow(/overloaded/);
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.ok).toBe(false);
+    expect(rec.failedOver).toBe(true);
+    expect(rec.attempts).toHaveLength(2);
+  });
+
+  it("does not fail over on a non-retryable submit error (caller bug)", async () => {
+    const onCall = vi.fn();
+    const cheap = asyncAdapter("cheap", [done()], {
+      submit: () => {
+        throw Object.assign(new Error("bad prompt"), { status: 400 });
+      },
+    });
+    const pricey = asyncAdapter("pricey", [done()]);
+    const lcr = createMediaLCR({ registry, adapters: { cheap, pricey }, onCall });
+    await expect(lcr.submit("x/vid", { prompt: "" })).rejects.toThrow(/bad prompt/);
+    expect(pricey.submitCount()).toBe(0); // never tried the fallback
+  });
+
+  it("poll throws a clear error when the serving provider has no checkStatus", async () => {
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [done()]), pricey: asyncAdapter("pricey", [done()]) },
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    // Re-poll through a router whose adapter lacks checkStatus.
+    const lcr2 = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: { provider: "cheap", run: vi.fn(), submit: vi.fn(async () => ({ requestId: "x" })) },
+        pricey: asyncAdapter("pricey", [done()]),
+      },
+    });
+    await expect(lcr2.poll(handle)).rejects.toThrow(/no checkStatus/);
+  });
+});
+
+/** A media adapter that only serves the sync `run` path (no submit/checkStatus). */
+function okAdapterSyncOnly(provider: string): MediaAdapter {
+  return {
+    provider,
+    run: vi.fn(async () => ({ outputs: [{ url: `https://x/${provider}.mp4`, type: "video" as const }] })),
+  };
+}

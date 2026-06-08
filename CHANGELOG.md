@@ -4,6 +4,94 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.6] — 2026-06-07
+
+All additions are optional and backward compatible. The sync `createMediaLCR`
+router (the callable `generate(modelId, input)`) and every adapter's `run()` are
+**unchanged** in signature and behavior.
+
+### Added
+
+- **Async media routing — `submit` / `poll` for long-running (video) jobs.**
+  The blocking media path holds a serverless invocation open until the file is
+  ready: fine for an image (seconds), impossible for a minutes-long video job.
+  `createMediaLCR(...)` now returns a callable with two methods attached:
+
+  ```ts
+  const lcr = createMediaLCR({ registry, adapters })
+
+  // process A (request handler): route + enqueue, return immediately
+  const handle = await lcr.submit('google/veo-3-lite', { prompt, aspect_ratio: '16:9' })
+  await db.save(JSON.stringify(handle))      // the handle is plain JSON
+
+  // process B (cron / queue worker): poll until terminal
+  const r = await lcr.poll(handle)
+  if (r.done) use(r.outputs, r.costCents)    // else keep polling r.handle
+  ```
+
+  - **Routing happens at `submit`** — it picks the cheapest provider whose
+    adapter supports async, and the returned `MediaJobHandle` carries the
+    not-yet-tried fallback routes (cheapest-first), the original input, and the
+    telemetry accumulator. The handle is **serializable on purpose**: submit and
+    poll typically run in different processes, so it must survive a round-trip
+    through a database or queue.
+  - **Failover happens at `poll`, not just submit.** When a provider's job fails
+    mid-poll (a `status:"error"`, a completed-but-empty job, or a thrown
+    retryable transport error such as the video-timeout `504` remap), `poll`
+    **re-submits to the next fallback provider** and hands back a fresh handle to
+    keep polling — it does not give up. A thrown error uses the standard
+    `isRetryableError` gate (so a caller-bug `400` on the poll endpoint doesn't
+    loop); a provider's own job failure always earns a fallback attempt.
+  - **Telemetry lands once, at the terminal poll.** The single correlated
+    `CallRecord` (via `onCall`) and the `onCost` event fire when the job settles
+    (`poll` → done/exhausted), carrying the full failover chain across both
+    processes — not at `submit`. The one exception: a `submit` that *no* provider
+    accepts settles a failed record there (there is no poll to do it).
+
+- **`MediaAdapter.submit` / `MediaAdapter.checkStatus` (both optional).** The
+  adapter contract gains the async pair, shaped to match ai-art's
+  `ProviderAdapter` so a consumer can delegate its own async runtime to ai-lcr
+  with no glue:
+
+  ```ts
+  submit({ externalId, input, metadata? }) -> { requestId }
+  checkStatus({ externalId, requestId }) ->
+    { status: 'queued' | 'running' | 'done' | 'error', outputs?, costCents?, units?, error? }
+  ```
+
+  A sync-only adapter (image-only) omits both; the async router simply skips a
+  route whose adapter can't serve async.
+
+- **All three bundled adapters now implement the async path:**
+  - **Kunavo** — `submit` → `POST /v1/videos`, `checkStatus` → `GET /v1/videos/{id}`
+    (video only; submitting an image id throws, since Kunavo images are sync).
+    `run()`'s blocking async path now reuses these internally.
+  - **fal** — `submit` → `POST queue.fal.run/{model}`, `checkStatus` reconstructs
+    the queue base from the id (the `fal-ai/flux/schnell` → `fal-ai/flux`
+    sub-path quirk) for cross-process polling.
+  - **Runware** — gains an **async video** path (`videoInference` with
+    `deliveryMethod:"async"`, polled via `getResponse`). Image stays on the
+    synchronous `run()`.
+
+- **New exported types:** `MediaSubmitRequest`, `MediaSubmitResult`,
+  `MediaStatusRequest`, `MediaStatusResult`, `MediaJobStatus`,
+  `MediaSubmitOptions`, `MediaJobHandle`, `MediaPollResult`, and `MediaLCR` (the
+  callable-with-methods return type of `createMediaLCR`).
+
+- **Live probe `scripts/check-media-async.mjs`** — exercises the real
+  `submit`/`poll` API across **every async provider** (kunavo · fal · runware)
+  whose key is present: submit → JSON round-trip the handle → poll to done →
+  assert the output URL fetches and cost is reported, per provider.
+  `PROBE_FAILOVER=1` adds a live submit-time failover case.
+
+### Migration
+
+Nothing breaks. To adopt async, give your video adapters `submit`/`checkStatus`
+(the bundled fal/kunavo/runware adapters already have them) and call
+`lcr.submit(...)` / `lcr.poll(...)` instead of the blocking `lcr(...)`. The
+blocking call still works for image and for video where holding the request open
+is acceptable.
+
 ## [0.5.5] — 2026-06-06
 
 Kunavo media (image + video) verified live and properly wired. The Kunavo

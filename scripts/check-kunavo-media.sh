@@ -8,6 +8,10 @@
 #   3. Video async — POST /v1/videos  +  GET /v1/videos/{id}  (submit → poll)
 #   (bonus) price cross-check against /v1/models
 #
+# This probes the provider's RAW endpoints. To exercise ai-lcr's own async API
+# (createMediaLCR().submit / poll, with the handle round-tripped across a
+# process boundary) against the same live provider, see check-media-async.mjs.
+#
 # Spends real money: ~4.7¢ (nano-banana-2) + ~4.7¢ (edit) + 16¢ (veo-3-lite) ≈ 26¢.
 #
 # Usage:
