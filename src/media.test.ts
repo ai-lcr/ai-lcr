@@ -416,6 +416,29 @@ describe("createMediaLCR async (submit / poll)", () => {
     expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ provider: "cheap", estimated: true }));
   });
 
+  it("estimates a per-call video clip at the FLAT ref price, not × duration", async () => {
+    // Regression guard: refCents is normalized to ONE reference clip and `units`
+    // means output count. An adapter returning seconds-as-units would multiply a
+    // flat per-call price by the clip length (an 8× overcharge for an 8s clip).
+    const onCost = vi.fn();
+    const lcr = createMediaLCR({
+      registry: {
+        "x/clip": {
+          id: "x/clip",
+          modality: "video",
+          routes: [{ provider: "cheap", externalId: "c-vid", pricing: { unit: "call", cents: 16 } }],
+        },
+      },
+      adapters: { cheap: asyncAdapter("cheap", [done()]) }, // done() carries NO units
+      onCost,
+    });
+    const handle = await lcr.submit("x/clip", { prompt: "a wave" });
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.costCents).toBe(16); // flat — NOT 16 × seconds
+    expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ costCents: 16 }));
+  });
+
   it("uses provider-reported cost + units when checkStatus returns them", async () => {
     const lcr = createMediaLCR({
       registry,

@@ -215,10 +215,12 @@ describe("createKunavoMediaAdapter — async submit/checkStatus", () => {
     expect(await a3.checkStatus!({ externalId: "veo-3-lite", requestId: "vid_1" })).toEqual({ status: "running" });
 
     const done = await adapter.checkStatus!({ externalId: "veo-3-lite", requestId: "vid_1" });
+    // No `units` — a completed job is ONE clip. (Reporting duration_seconds as
+    // units would make the router's refCents × units estimate multiply a flat
+    // per-call price by the clip length. See the cost-estimate test in media.test.ts.)
     expect(done).toEqual({
       status: "done",
       outputs: [{ url: "https://files.kunavo.com/v.mp4", type: "video" }],
-      units: 8,
     });
   });
 
