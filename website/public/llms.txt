@@ -1,0 +1,30 @@
+# ai-lcr — AI Least Cost Routing
+
+> TypeScript library (npm: `ai-lcr`, MIT) that routes every AI model call to the cheapest available provider, fails over automatically on any provider error, and reports real per-call cost + savings. Text/LLM routing is built on the Vercel AI SDK (`lcr("model")` returns a standard `LanguageModelV3`); image & video routing is a separate, self-contained API (`createMediaLCR`) with sync and async (submit/poll) paths. Zero runtime dependencies beyond the `ai` peer dependency.
+
+Key facts for integrating:
+
+- Install: `npm install ai-lcr` (peer: `ai` ^6).
+- Text: `createLCR({ models: { "name": [{ model, label?, cost? }, ...] }, autoSort?, onCall?, onCost?, onError?, shouldRetry?, defaultCacheReadRatio? })` → `lcr("name")` works in `generateText`/`streamText`/`generateObject`/tools/agents. Providers are tried cheapest-first; ANY failure (429/5xx/timeout/402/400/network) fails over to the next provider except a deliberate `AbortSignal` cancellation; after `resetIntervalMs` (default 60s) routing snaps back to the cheapest. `cost` is USD per 1M tokens `{ input, output, cacheRead? }`.
+- Media: `createMediaLCR({ registry, adapters, officialPrices?, reference?, onCall? })`. Registry maps logical model ids → provider routes with `pricing: { unit: "image"|"megapixel"|"second"|"call", cents }`. Sync: `await lcr(modelId, input)`. Async: `const handle = await lcr.submit(modelId, input)` → the handle is PLAIN JSON (store in a DB; submit and poll can run in different processes) → `await lcr.poll(handle)`; a provider job that fails mid-poll is automatically re-submitted to the next provider (fresh handle returned).
+- Billing semantics (0.6+): routes are RANKED by a reference-normalized price (1080p image / 5s clip) but each call is BILLED on actual usage — per-second SKUs read `usage.seconds` or the input's `duration`; per-call SKUs bill output count. Provider-reported `costCents` wins when present. Custom adapters must report typed `usage: { seconds?, outputs?, megapixels? }`, never a bare count, and `costCents` in US cents (×100 if the API returns dollars).
+- Telemetry: `onCall(record)` fires once per settled request with a `CallRecord`: `{ id, model, attempts[], winner?, ok, failedOver, latencyMs, ttftMs?, inputTokens, outputTokens, cachedInputTokens?, costUsd, baselineUsd?, baselineKind? ("last-leg"|"official"|"priciest-route"), cachedSavingUsd?, requestId?, usageMissing?, emptyCompletion?, modality?, usage?, officialUsd?, estCostUsd? }`. Savings = `baselineUsd − costUsd` (clamp at 0 per call). `costUsd − estCostUsd` on provider-reported calls = price-table drift. Ship records anywhere with `createHttpSink({ url, headers?, project?, dispatch? })` — on serverless pass Next.js `after` as `dispatch`.
+- Companion dashboard: https://github.com/ai-lcr/ai-lcr-dashboard — self-hosted Next.js + Postgres collector for these records (savings, failover health, media $/unit, price-drift panel). POST `CallRecord` JSON to its `/api/ingest`.
+- Bundled exports: `MEDIA_PRICING` (cross-provider media price table), `OFFICIAL_PRICES` (first-party list prices), `comparePrices`, `rankRoutes`, `billableUnits`, `priceCents`, `durationFromInput`, `formatCallRecord`, error predicates (`isRetryableError`, `shouldFailover`, `classifyError`), and media adapters `createFalMediaAdapter` / `createRunwareMediaAdapter` / `createKunavoMediaAdapter`.
+
+## Docs
+
+- [Getting started](/docs): install, quick start, the one-line migration property
+- [Migrate from plain AI SDK](/docs/migrate-from-ai-sdk): the before/after diff
+- [How routing works](/docs/routing): cheapest-first, failover policy, recovery
+- [Cost tracking](/docs/cost-tracking): CallRecord, savings baseline + baselineKind, estCostUsd drift, prompt-cache-aware cost, requestId rollup, HTTP sink, dashboard
+- [Image & video](/docs/image-video): createMediaLCR, async submit/poll, ranking-vs-billing, writing your own adapter
+- [Providers](/docs/providers): OpenRouter, Kunavo, TokenMart, DeepInfra, fal, Runware setup + caveats
+- [Integrations](/docs/integrations): AI SDK, Mastra
+
+## Source
+
+- [GitHub](https://github.com/ai-lcr/ai-lcr): README is the canonical reference; CHANGELOG documents every version's migration notes
+- [README](https://github.com/ai-lcr/ai-lcr#readme)
+- [CHANGELOG](https://github.com/ai-lcr/ai-lcr/blob/main/CHANGELOG.md)
+- [npm](https://www.npmjs.com/package/ai-lcr)

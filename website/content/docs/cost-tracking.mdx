@@ -29,23 +29,49 @@ const lcr = createLCR({
 
 ## The headline number: savings = `baselineUsd − costUsd`
 
-`CallRecord.baselineUsd` is what the *same* token usage would have cost on the
-most expensive priced provider in that model's list. So `baselineUsd − costUsd`
-is the dollar figure to put on a dashboard — "ai-lcr saved you $X." As of 0.3.0
-this is filled for **text**, not just media.
+`CallRecord.baselineUsd` is what the *same* usage would have cost without
+routing, and `baselineKind` (0.6+) says exactly which baseline that is — so a
+dashboard can qualify the savings number instead of trusting it blindly:
+
+- **`"last-leg"`** (text): the **last priced provider** in the chain — your
+  always-on, list-price fallback. Deliberately *not* the most expensive leg:
+  prompt caching can make a sticker-cheaper provider cost more on a cache-heavy
+  call, and a max-of-chain baseline would fabricate "savings" on calls the
+  fallback itself served.
+- **`"official"`** (media): the model maker's **first-party API price** for the
+  call's actual usage — an 8-second clip is baselined at 8 seconds of the
+  official rate. `officialUsd` carries the same figure.
+- **`"priciest-route"`** (media with no official price known): the most
+  expensive route you configured — honest about cross-provider spread, but
+  self-referential, not a market price.
 
 ```ts
 onCall: (rec) => {
   if (rec.baselineUsd !== undefined) {
     metrics.add("ai_spend_usd", rec.costUsd);
-    metrics.add("ai_saved_usd", rec.baselineUsd - rec.costUsd);
+    // clamp per call: one mispriced row must not eat the others' savings
+    metrics.add("ai_saved_usd", Math.max(0, rec.baselineUsd - rec.costUsd));
   }
 },
 ```
 
-It's set whenever at least one provider in the list carries a `cost` — so **price
-your providers** (the `cost` field) even if you don't use `autoSort`, or there's
-nothing to compare against.
+For text it's set whenever at least one provider in the list carries a `cost` —
+so **price your providers** (the `cost` field) even if you don't use `autoSort`,
+or there's nothing to compare against.
+
+## Price-table drift: `estCostUsd` (0.6+)
+
+`CallRecord.estCostUsd` is what your configured price table **predicted** the
+call would cost, on the same usage. When a provider reports its own bill
+(`costUsd` came from the API, not an estimate), `costUsd − estCostUsd` is
+**price-table drift** — a stale or mis-entered registry price. A ~100× ratio is
+almost always a USD-vs-cents unit slip. The router also raises `onError` when a
+reported bill is ≥25× off the prediction. Cheapest-first routing is only as good
+as its price table; watch this number.
+
+Media records additionally carry `modality` (`"image" | "video"`) and the typed
+`usage` behind the bill (`{ seconds?, outputs?, megapixels? }`), so per-unit
+economics — $/second of video, $/image — are derivable downstream.
 
 ## Responsiveness: time to first token
 
@@ -150,3 +176,15 @@ const lcr = createLCR({
 function returns. Pass `dispatch: after` (Next.js `after` from `next/server`, or
 any `waitUntil`-style fn) so the record actually ships. On a long-lived server
 you can omit it.
+
+## The companion dashboard
+
+[`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard) is a
+**self-hostable** Next.js + Postgres collector built for exactly these records —
+point `createHttpSink` at its `/api/ingest` and you get saved-vs-spent over time
+(qualified by `baselineKind`, clamped per call), per-provider failover health,
+media $/unit economics, and a **price-drift panel** that surfaces any
+model@provider route whose reported bills disagree with your price table by
+>±20%. One-click Vercel deploy, any Postgres, metadata only (no prompts or
+outputs stored). The ingest contract is plain `CallRecord` JSON, so any other
+log drain works too.

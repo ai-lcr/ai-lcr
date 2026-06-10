@@ -185,13 +185,28 @@ interface CallRecord {
   outputTokens: number;
   cachedInputTokens?: number; // prompt-cache hits the winner read (when reported)
   costUsd: number;            // winner cost, cache-discount applied (see `cacheRead`)
-  baselineUsd?: number;       // same usage on the priciest priced leg → savings = baselineUsd − costUsd
+  baselineUsd?: number;       // what the savings baseline would have charged for the SAME usage → savings = baselineUsd − costUsd
+  baselineKind?: "last-leg" | "official" | "priciest-route"; // how that baseline was derived (see below)
+  cachedSavingUsd?: number;   // the provider's own prompt-cache discount — real money, but NOT a routing saving; never fold it into baselineUsd − costUsd
   requestId?: string;         // your correlation id (see below) — roll multi-step tool loops into one request
   usageMissing?: boolean;     // winner served but reported 0/0 tokens → costUsd is 0 but unknown, not free
+  emptyCompletion?: boolean;  // clean response that generated NOTHING — prompt billed, zero output
+
+  // Media calls (createMediaLCR) additionally carry:
+  modality?: "image" | "video";
+  usage?: { seconds?: number; outputs?: number; megapixels?: number }; // the actual usage the bill was based on
+  officialUsd?: number;       // the model maker's first-party price for this call's usage
+  estCostUsd?: number;        // what the configured price table PREDICTED — on provider-reported rows, costUsd − estCostUsd is price-table drift
 }
 ```
 
-**Savings, not just spend.** Whenever at least one provider in a chain carries a `cost`, `baselineUsd` is what the same call would have cost on the most expensive priced leg (typically your safety-net fallback). `baselineUsd − costUsd` is the money routing saved on that call — the number a cost dashboard exists to show.
+**Savings, not just spend.** `baselineUsd` is what the same call would have cost without routing, and `baselineKind` says exactly what that means so a dashboard can qualify the number instead of trusting it blindly:
+
+- **`"last-leg"`** (text): the **last priced provider** in the chain — your always-on, list-price fallback. Deliberately *not* the most expensive leg: prompt caching can make a sticker-cheaper provider cost more on a cache-heavy call, and a max-of-chain baseline would fabricate "savings" on calls the fallback itself served.
+- **`"official"`** (media): the model maker's **first-party API price** for the same actual usage — an 8-second clip is baselined at 8 seconds of the official rate, not a reference length.
+- **`"priciest-route"`** (media, no official price known): the most expensive route you configured. Honest about cross-provider spread, but self-referential — not a market price.
+
+`baselineUsd − costUsd` is the money routing saved on that call — the number a cost dashboard exists to show.
 
 **Responsiveness, not just total time.** On streaming calls (`streamText`, `streamObject`, streaming agents), `ttftMs` is the **time to first token** — measured from the winning provider's attempt start to its first content delta. It's the metric most LLM dashboards lead with, because it's what a user feels as "how fast did it start replying". Total `latencyMs` covers the whole stream including any failover; `ttftMs` isolates the serving model's responsiveness. It's `undefined` for `generateText`/`generateObject` (no streaming → no "first" token) and for calls that failed before any content. Output throughput (tokens/sec) is then `outputTokens / ((latencyMs − ttftMs) / 1000)`.
 
@@ -226,13 +241,24 @@ const lcr = createLCR({
 });
 ```
 
+### The companion dashboard ([`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard))
+
+A **self-hostable** Next.js + Postgres collector built for exactly these records — point `createHttpSink` at its `/api/ingest` and you get, across every project you tag:
+
+- **saved vs. spent** over time, with the savings qualified by `baselineKind` and clamped per call (one mispriced row can't eat the rest);
+- **failover health** per provider — who actually failed, who caught it, what leaked to users;
+- **media economics** — image/video calls split out with per-unit cost ($/second of video, $/image);
+- a **price-drift panel** — when a provider's reported bill disagrees with your configured price table by >±20%, it surfaces the route (a ~100× ratio is the classic USD-vs-cents slip). Cheapest-first routing is only as good as its price table; this is the smoke alarm.
+
+One-click Vercel deploy (any Postgres: Neon, Supabase, RDS, local); records carry metadata only — no prompts, no outputs. The ingest contract is just the `CallRecord` JSON, so any other drain works too.
+
 ## Supported providers
 
 Any OpenAI-compatible endpoint works — and so does any AI SDK provider package, including a model vendor's own official API.
 
 - **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
 - **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo (generations + `*-edit` reference-image endpoints) + Runware + fal. Video: fal (async queue) and Kunavo (async `POST /v1/videos` + poll, sync fallback) — both verified live
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo (generations + `*-edit` reference-image endpoints) + Runware + fal. Video: fal (async queue), Kunavo (async `POST /v1/videos` + poll, sync fallback), and Runware (async `videoInference` + `getResponse` poll) — all three on the async `submit`/`poll` path
 
 ## Text model pricing
 
@@ -347,6 +373,37 @@ Design choices worth knowing:
 - **Telemetry lands once, at the terminal poll** — one `onCall` `CallRecord` with the full failover chain, threaded across both processes (not at `submit`).
 - An adapter advertises async by implementing `submit` + `checkStatus`; image-only adapters omit them and are skipped by the async router. The bundled Kunavo, fal, and Runware adapters all implement the async path (Kunavo/Runware async is video-only; fal covers both).
 
+### Writing your own adapter
+
+A `MediaAdapter` is small — `run` for sync, optional `submit`/`checkStatus` for async — and the one contract that matters is **how you report what was produced**:
+
+```ts
+interface MediaAdapter {
+  provider: string;
+  run(req: { externalId: string; input: Record<string, unknown> }): Promise<MediaGenerateResult>;
+  submit?(req: { externalId: string; input; metadata? }): Promise<{ requestId: string }>;
+  checkStatus?(req: { externalId: string; requestId: string }): Promise<MediaStatusResult>;
+}
+
+// On a settled result, report:
+{
+  outputs: [{ url, type: "image" | "video" }],
+  costCents?: number,   // the provider's OWN bill, in US cents — convert if the API returns dollars (×100)!
+  usage?: {             // typed actual usage — what the bill (or estimate) is based on
+    seconds?: number,   //   video length actually produced (per-second SKUs bill this)
+    outputs?: number,   //   output count — images or clips (per-image / per-call SKUs bill this)
+    megapixels?: number //   total output MP (per-megapixel SKUs bill this)
+  }
+}
+```
+
+Rules that keep billing honest:
+
+- **Report dimensions in `usage`, never as a bare count.** Seconds and output count are separate, explicitly-named fields, so a per-call price can never be multiplied by a clip's duration (the classic 8× overcharge).
+- **`costCents` is cents.** A provider that returns dollars must be converted in the adapter (see the Runware adapter). If you slip, the router's cost-outlier guard flags any bill ≥25× off the price table via `onError` — but the reported number still stands.
+- **When you report nothing**, the router estimates: per-second SKUs read `usage.seconds`, then the input's `duration` (numbers or `"8s"`-style strings), then the 5-second reference as a last resort; per-image/per-call SKUs bill the output count.
+- **Throw errors with an HTTP `status` property** (see `FalMediaError`/`KunavoMediaError`) so the router can classify them for failover.
+
 ## Vetting a provider (capability + cost probe)
 
 A discount is worthless if the provider quietly breaks the wire protocol. `ai-lcr` ships a zero-dependency check (`scripts/check-provider.sh`, just `bash` + `curl` + `python3`) that vets the things that actually cost you money or corrupt output, **per model**:
@@ -409,8 +466,10 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 - [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
 - [ ] Provider-quirk middleware (transparently patch known per-provider request quirks, e.g. Kunavo's ignored `max_tokens`)
 - [ ] Feed probe results into routing automatically (auto-exclude a model from a provider that fails its probe)
-- [x] Image & video model routing (`createMediaLCR`) — image via Kunavo (incl. `*-edit`) + Runware + fal; **video live via fal and Kunavo** (both verified)
-- [ ] Normalized cross-provider video price comparison + verified Runware video adapter
+- [x] Image & video model routing (`createMediaLCR`) — image via Kunavo (incl. `*-edit`) + Runware + fal; video async (`submit`/`poll`) via fal, Kunavo, and Runware
+- [x] Settle-time billing on actual usage (0.6) — typed `usage`, duration-aware savings baseline, `estCostUsd` price-drift signal, cost-outlier guard
+- [x] Self-hosted dashboard ([`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard)) — savings, failover health, media $/unit, price-drift panel
+- [ ] Normalized cross-provider video price comparison in the bundled table
 
 ## Affiliate disclosure
 
