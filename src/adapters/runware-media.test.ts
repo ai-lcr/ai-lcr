@@ -131,6 +131,7 @@ describe("createRunwareMediaAdapter — async video submit/checkStatus", () => {
     expect(r).toEqual({
       status: "done",
       outputs: [{ url: "https://im.runware.ai/clip.mp4", type: "video" }],
+      usage: { outputs: 1 },
       costCents: 50, // $0.50 → 50¢
     });
   });

@@ -167,6 +167,7 @@ describe("createFalMediaAdapter — async submit/checkStatus", () => {
       status: "done",
       outputs: [{ url: "https://fal.media/clip.mp4", type: "video" }],
       units: 1,
+      usage: { outputs: 1 },
     });
   });
 

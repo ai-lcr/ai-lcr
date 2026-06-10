@@ -29,6 +29,10 @@ const EXPECTED_EXPORTS = [
   "normalizedCents",
   "referenceMegapixels",
   "DEFAULT_REFERENCE",
+  // settle-time billing (actual usage, not the reference)
+  "billableUnits",
+  "priceCents",
+  "durationFromInput",
   "MEDIA_PRICING",
   "OFFICIAL_PRICES",
   "createKunavoMediaAdapter",

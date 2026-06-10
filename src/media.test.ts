@@ -7,6 +7,9 @@ import {
   comparePrices,
   createMediaLCR,
   DEFAULT_REFERENCE,
+  billableUnits,
+  priceCents,
+  durationFromInput,
   type MediaModelDef,
   type MediaRegistry,
   type MediaAdapter,
@@ -638,3 +641,216 @@ function okAdapterSyncOnly(provider: string): MediaAdapter {
     run: vi.fn(async () => ({ outputs: [{ url: `https://x/${provider}.mp4`, type: "video" as const }] })),
   };
 }
+
+// ── Settle-time billing v2: actual usage, not the reference ──────────────────
+describe("billableUnits / priceCents / durationFromInput", () => {
+  it("per-second pricing bills usage.seconds, then input.duration, then the reference", () => {
+    const pricing = { unit: "second" as const, cents: 40 };
+    expect(priceCents(pricing, { usage: { seconds: 8 } })).toBe(320);
+    expect(priceCents(pricing, { input: { duration: 8 } })).toBe(320);
+    expect(priceCents(pricing, { input: { duration: "8s" } })).toBe(320); // Veo-style string
+    expect(priceCents(pricing, {})).toBe(40 * DEFAULT_REFERENCE.videoSeconds); // assumed
+    expect(billableUnits("second", {}).assumed).toBe(true);
+    expect(billableUnits("second", { usage: { seconds: 8 } }).assumed).toBe(false);
+  });
+
+  it("per-call pricing bills output count and NEVER seconds — the 8× bug class", () => {
+    const flat = { unit: "call" as const, cents: 16 };
+    // An adapter reporting an 8-second clip must still bill ONE call.
+    expect(priceCents(flat, { usage: { seconds: 8, outputs: 1 } })).toBe(16);
+    expect(priceCents(flat, { usage: { seconds: 8 }, outputCount: 1 })).toBe(16);
+    // Legacy bare `units` is honored as a count for per-image SKUs.
+    expect(priceCents({ unit: "image", cents: 2 }, { units: 3 })).toBe(6);
+  });
+
+  it("per-megapixel pricing bills usage.megapixels, else the reference image", () => {
+    const mp = { unit: "megapixel" as const, cents: 10 };
+    expect(priceCents(mp, { usage: { megapixels: 4.2 } })).toBe(42);
+    expect(priceCents(mp, {})).toBeCloseTo(10 * referenceMegapixels(DEFAULT_REFERENCE), 6);
+  });
+
+  it("durationFromInput parses numbers and numeric-ish strings only", () => {
+    expect(durationFromInput({ duration: 5 })).toBe(5);
+    expect(durationFromInput({ duration: "4s" })).toBe(4);
+    expect(durationFromInput({ duration: "7.5" })).toBe(7.5);
+    expect(durationFromInput({ duration: "long" })).toBeUndefined();
+    expect(durationFromInput({ duration: -1 })).toBeUndefined();
+    expect(durationFromInput({})).toBeUndefined();
+    expect(durationFromInput(undefined)).toBeUndefined();
+  });
+});
+
+describe("createMediaLCR settle-time billing (v2)", () => {
+  const doneWith = (extra: Partial<MediaStatusResult> = {}): MediaStatusResult => ({
+    status: "done",
+    outputs: [{ url: "https://x/out.mp4", type: "video" }],
+    ...extra,
+  });
+
+  function asyncAdapter(provider: string, statuses: MediaStatusResult[]): MediaAdapter {
+    let i = 0;
+    return {
+      provider,
+      run: vi.fn(async () => ({ outputs: [{ url: `https://x/${provider}.mp4`, type: "video" as const }] })),
+      submit: vi.fn(async () => ({ requestId: `${provider}-req` })),
+      checkStatus: vi.fn(async () => statuses[Math.min(i++, statuses.length - 1)]!),
+    };
+  }
+
+  // Per-second route 40¢/s, official per-second 60¢/s.
+  const perSecondRegistry: MediaRegistry = {
+    "x/vid8": {
+      id: "x/vid8",
+      modality: "video",
+      official: { unit: "second", cents: 60 },
+      routes: [{ provider: "cheap", externalId: "c", pricing: { unit: "second", cents: 40 } }],
+    },
+  };
+
+  it("bills a per-second route by the ACTUAL duration, not the 5s reference", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry: perSecondRegistry,
+      adapters: { cheap: asyncAdapter("cheap", [doneWith({ usage: { outputs: 1, seconds: 8 } })]) },
+      onCall,
+    });
+    const handle = await lcr.submit("x/vid8", { prompt: "a wave", duration: 8 });
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) {
+      expect(r.costCents).toBe(320); // 40¢ × 8s — NOT 40 × 5 (reference)
+      expect(r.usage).toEqual({ outputs: 1, seconds: 8 });
+    }
+  });
+
+  it("baselines an off-reference clip at the official price for the SAME usage", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry: perSecondRegistry,
+      adapters: { cheap: asyncAdapter("cheap", [doneWith({ usage: { outputs: 1, seconds: 8 } })]) },
+      onCall,
+    });
+    const handle = await lcr.submit("x/vid8", { prompt: "a wave", duration: 8 });
+    await lcr.poll(handle);
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.costUsd).toBeCloseTo(3.2, 6); // 40¢ × 8s
+    expect(rec.baselineUsd).toBeCloseTo(4.8, 6); // official 60¢ × 8s — same usage
+    expect(rec.baselineKind).toBe("official");
+    expect(rec.officialUsd).toBeCloseTo(4.8, 6);
+    expect(rec.modality).toBe("video");
+    expect(rec.usage).toEqual({ outputs: 1, seconds: 8 });
+    expect(rec.estCostUsd).toBeCloseTo(3.2, 6); // estimate IS the cost (nothing reported)
+  });
+
+  it("falls back to input.duration when the adapter reports no usage", async () => {
+    const lcr = createMediaLCR({
+      registry: perSecondRegistry,
+      adapters: { cheap: asyncAdapter("cheap", [doneWith()]) },
+    });
+    const handle = await lcr.submit("x/vid8", { prompt: "a wave", duration: 8 });
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.costCents).toBe(320); // duration read from the input
+  });
+
+  it("marks priciest-route baselines so a dashboard can tell them from official prices", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry: {
+        "x/open": {
+          id: "x/open",
+          modality: "video",
+          // no official price → baseline degrades to the priciest route
+          routes: [
+            { provider: "cheap", externalId: "c", pricing: { unit: "call", cents: 30 } },
+            { provider: "pricey", externalId: "p", pricing: { unit: "call", cents: 90 } },
+          ],
+        },
+      },
+      adapters: {
+        cheap: asyncAdapter("cheap", [doneWith({ usage: { outputs: 1 } })]),
+        pricey: asyncAdapter("pricey", [doneWith()]),
+      },
+      officialPrices: {},
+      onCall,
+    });
+    const handle = await lcr.submit("x/open", { prompt: "hi" });
+    await lcr.poll(handle);
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.baselineKind).toBe("priciest-route");
+    expect(rec.baselineUsd).toBeCloseTo(0.9, 6);
+    expect(rec.officialUsd).toBeUndefined();
+  });
+
+  it("flags a wildly off provider-reported cost via onError (USD-vs-cents bug class)", async () => {
+    const onError = vi.fn();
+    const lcr = createMediaLCR({
+      registry: perSecondRegistry,
+      adapters: {
+        // Reports 32000¢ ($320) where the table predicts 320¢ — a 100× unit slip.
+        cheap: asyncAdapter("cheap", [doneWith({ usage: { seconds: 8 }, costCents: 32000 })]),
+      },
+      onError,
+    });
+    const handle = await lcr.submit("x/vid8", { prompt: "a wave", duration: 8 });
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.costCents).toBe(32000); // the reported bill still stands
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/price table predicts/) }),
+      "cheap",
+    );
+  });
+
+  it("sync image records carry modality, usage and estCostUsd", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry: {
+        "x/img": {
+          id: "x/img",
+          modality: "image",
+          routes: [{ provider: "cheap", externalId: "c", pricing: { unit: "image", cents: 2 } }],
+        },
+      },
+      adapters: {
+        cheap: {
+          provider: "cheap",
+          run: async () => ({
+            outputs: [
+              { url: "https://x/1.png", type: "image" },
+              { url: "https://x/2.png", type: "image" },
+            ],
+          }),
+        },
+      },
+      officialPrices: {},
+      onCall,
+    });
+    const result = await lcr("x/img", { prompt: "hi" });
+    expect(result.costCents).toBe(4); // 2¢ × 2 outputs
+    expect(result.usage).toEqual({ outputs: 2 });
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.modality).toBe("image");
+    expect(rec.usage).toEqual({ outputs: 2 });
+    expect(rec.estCostUsd).toBeCloseTo(0.04, 6);
+  });
+
+  it("a pre-0.6 handle (no pricing/baseline) still polls and settles", async () => {
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry: perSecondRegistry,
+      adapters: { cheap: asyncAdapter("cheap", [doneWith()]) },
+      onCall,
+    });
+    const handle = await lcr.submit("x/vid8", { prompt: "hi" });
+    // Simulate a handle serialized by an older version: strip the v2 fields.
+    const legacy = JSON.parse(JSON.stringify(handle));
+    delete legacy.pricing;
+    delete legacy.baseline;
+    const r = await lcr.poll(legacy);
+    expect(r.done).toBe(true);
+    if (r.done) expect(r.costCents).toBe(handle.refCents); // legacy ref-price estimate
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.baselineUsd).toBeCloseTo(legacy.baselineUsd, 6); // submit-time estimate
+  });
+});

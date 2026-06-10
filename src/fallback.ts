@@ -160,6 +160,43 @@ export interface CallRecord {
    */
   baselineUsd?: number;
   /**
+   * How `baselineUsd` was derived, so a dashboard can qualify the savings
+   * number instead of treating every baseline as equally authoritative:
+   *   - "last-leg":        text router — the always-on fallback leg's list price.
+   *   - "official":        media router — the model maker's first-party price.
+   *   - "priciest-route":  media router with no official price — the most
+   *                        expensive configured route (self-referential; honest
+   *                        about cross-provider spread, but not a market price).
+   * Undefined when `baselineUsd` is undefined.
+   */
+  baselineKind?: "last-leg" | "official" | "priciest-route";
+  /**
+   * Media only: "image" | "video". Lets the dashboard split media traffic from
+   * token-billed text (whose records leave this unset) without inferring from
+   * zero token counts.
+   */
+  modality?: "image" | "video";
+  /**
+   * Media only: the actual billable quantity behind `costUsd` — seconds of
+   * video, output count, or megapixels — so per-unit economics ($/second,
+   * $/image) are derivable downstream. Absent when nothing was measured.
+   */
+  usage?: { seconds?: number; outputs?: number; megapixels?: number };
+  /**
+   * Media only: the model maker's official first-party price for THIS call's
+   * usage (USD). Present only when an official price is known; equals
+   * `baselineUsd` when `baselineKind` is "official".
+   */
+  officialUsd?: number;
+  /**
+   * What the configured price table PREDICTED this call would cost (USD), on
+   * the same usage. When the provider reports an actual cost, `costUsd −
+   * estCostUsd` is the price-table drift — the signal that a registry price is
+   * stale or mis-entered. When no provider cost is reported the two are equal
+   * (the estimate IS the cost), so drift is only meaningful on reported rows.
+   */
+  estCostUsd?: number;
+  /**
    * The slice of `costUsd` that prompt-cache reads saved versus paying the full
    * input rate for those same tokens (`cachedTokens × (input − cacheRead)`).
    * Present only when > 0. This is the serving provider's own caching benefit —
@@ -693,6 +730,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
     // reaches here it's because every provider came back empty, so flag the
     // settled record. (input === 0 is the usageMissing case above, not this one.)
     const emptyCompletion = inputTokens > 0 && outputTokens === 0;
+    const baselineUsd = this.baselineUsd(inputTokens, outputTokens, cacheReadTokens);
     this.emitCost({
       model: this.opts.modelName,
       provider: provider.label,
@@ -713,7 +751,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       outputTokens,
       ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
       costUsd,
-      baselineUsd: this.baselineUsd(inputTokens, outputTokens, cacheReadTokens),
+      ...(baselineUsd !== undefined ? { baselineUsd, baselineKind: "last-leg" as const } : {}),
       ...(cachedSavingUsd > 0 ? { cachedSavingUsd } : {}),
       ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
       ...(usageMissing ? { usageMissing: true } : {}),
