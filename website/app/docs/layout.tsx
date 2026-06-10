@@ -61,7 +61,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           { text: "Status", url: "/status" },
           { text: "Prices", url: "/prices" },
         ]}
-        githubUrl="https://github.com/victorzhrn/ai-lcr"
+        githubUrl="https://github.com/ai-lcr/ai-lcr"
         themeSwitch={{ enabled: false }}
       >
         {children}

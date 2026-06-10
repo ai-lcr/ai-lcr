@@ -7,7 +7,7 @@ import Faq from "./components/Faq";
 import { MODEL_COUNT, TEXT_MODEL_COUNT, textSavings } from "@/lib/prices";
 import { statusSummary } from "@/lib/status-summary";
 
-const REPO = "victorzhrn/ai-lcr";
+const REPO = "ai-lcr/ai-lcr";
 const PKG = "ai-lcr";
 const GITHUB_URL = `https://github.com/${REPO}`;
 const NPM_URL = `https://www.npmjs.com/package/${PKG}`;

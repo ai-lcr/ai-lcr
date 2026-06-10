@@ -19,11 +19,11 @@
   "author": "Victor",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/victorzhrn/ai-lcr.git"
+    "url": "git+https://github.com/ai-lcr/ai-lcr.git"
   },
-  "homepage": "https://github.com/victorzhrn/ai-lcr#readme",
+  "homepage": "https://github.com/ai-lcr/ai-lcr#readme",
   "bugs": {
-    "url": "https://github.com/victorzhrn/ai-lcr/issues"
+    "url": "https://github.com/ai-lcr/ai-lcr/issues"
   },
   "type": "module",
   "main": "./dist/index.cjs",

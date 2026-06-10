@@ -3,7 +3,7 @@
 // identical to the homepage. The homepage (app/page.tsx) keeps its own richer
 // nav with the live star count + version; this mirrors its link set and styling.
 
-const REPO = "victorzhrn/ai-lcr";
+const REPO = "ai-lcr/ai-lcr";
 const GITHUB_URL = `https://github.com/${REPO}`;
 const NPM_URL = "https://www.npmjs.com/package/ai-lcr";
 const DOCS_URL = "/docs";
