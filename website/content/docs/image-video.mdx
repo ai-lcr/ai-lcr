@@ -67,9 +67,59 @@ console.log(result.provider, result.outputs[0].url);
 
 `pricing.unit` is one of `"image"` (flat per image), `"megapixel"` (compute —
 scales with resolution), `"second"` (per second of video), or `"call"` (flat
-per clip). The router normalizes all of them to the reference output before
-sorting, so a per-megapixel compute price and a flat per-image fee compete
-fairly.
+per clip).
+
+## Two prices, two jobs: ranking vs. billing (0.6+)
+
+The reference normalization answers ONE question — *which route is cheapest?* —
+by pricing every route for the same imaginary output (a 16:9 1080p image, a
+5-second clip). **Billing is a different question** and is computed from what
+was *actually* produced:
+
+- a per-second SKU bills the **actual clip length** — from the adapter's
+  reported `usage.seconds`, else the input's `duration` (numbers or
+  `"8s"`-style strings), else the 5s reference as a last resort;
+- per-image / per-call SKUs bill the **output count**;
+- per-megapixel SKUs bill measured megapixels.
+
+When the provider reports its own bill (`costCents`), that wins. Each settled
+`CallRecord` also carries `estCostUsd` — what the price table *predicted* — so
+on provider-reported calls, `costUsd − estCostUsd` is **price-table drift** (a
+stale registry price, or the classic USD-vs-cents slip at exactly 100×). A bill
+≥25× off the prediction additionally raises `onError`.
+
+The savings baseline follows the same rule: a model's official first-party
+price is computed for the call's **actual usage** (an 8s clip → 8s of the
+official rate), and `baselineKind` on the record says whether the baseline was
+`"official"` or just the `"priciest-route"` you configured — see
+[Cost tracking](/docs/cost-tracking).
+
+## Writing your own adapter
+
+Adding a provider = implementing `MediaAdapter`: `run` for sync, optional
+`submit`/`checkStatus` for async. The one contract that matters is how a settled
+result reports what was produced:
+
+```ts
+{
+  outputs: [{ url, type: "image" | "video" }],
+  costCents?: number,   // the provider's OWN bill, in US cents — ×100 if its API returns dollars!
+  usage?: {             // typed actual usage — what billing is based on
+    seconds?: number,   //   video length actually produced
+    outputs?: number,   //   output count (images or clips)
+    megapixels?: number //   total output megapixels
+  }
+}
+```
+
+Two rules keep billing honest:
+
+1. **Dimensions are explicitly named — never report a bare count.** `seconds`
+   and `outputs` can't be confused, so a flat per-call price can never be
+   multiplied by a clip's duration (the 8× overcharge the old untyped `units`
+   field invited).
+2. **Throw errors with an HTTP `status` property** (see the bundled
+   `FalMediaError`) so the router can classify them and fail over.
 
 ## Video
 
