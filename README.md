@@ -243,6 +243,10 @@ const lcr = createLCR({
 
 ### The companion dashboard ([`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard))
 
+<p align="center">
+  <img src="assets/dashboard-demo.png" alt="ai-lcr-dashboard (demo data): saved vs spent over time, a price-drift alert, per-project failover health, and per-provider reliability" width="780">
+</p>
+
 A **self-hostable** Next.js + Postgres collector built for exactly these records — point `createHttpSink` at its `/api/ingest` and you get, across every project you tag:
 
 - **saved vs. spent** over time, with the savings qualified by `baselineKind` and clamped per call (one mispriced row can't eat the rest);
