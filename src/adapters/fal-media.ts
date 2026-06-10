@@ -165,7 +165,7 @@ export function createFalMediaAdapter(config: FalMediaConfig): MediaAdapter {
     if (outputs.length === 0) {
       return { status: "error", error: `fal job ${req.requestId} completed with no media URL` };
     }
-    return { status: "done", outputs, units: outputs.length };
+    return { status: "done", outputs, units: outputs.length, usage: { outputs: outputs.length } };
   }
 
   return {
@@ -227,7 +227,7 @@ export function createFalMediaAdapter(config: FalMediaConfig): MediaAdapter {
         throw new Error(`ai-lcr: fal returned no media URL for "${req.externalId}"`);
       }
 
-      return { outputs, units: outputs.length };
+      return { outputs, units: outputs.length, usage: { outputs: outputs.length } };
     },
   };
 }

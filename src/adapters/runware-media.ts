@@ -142,6 +142,7 @@ export function createRunwareMediaAdapter(config: RunwareMediaConfig): MediaAdap
       return {
         outputs,
         units: images.length,
+        usage: { outputs: images.length },
         ...(cents !== undefined ? { costCents: cents } : {}),
       };
     },
@@ -174,6 +175,7 @@ export function createRunwareMediaAdapter(config: RunwareMediaConfig): MediaAdap
         return {
           status: "done",
           outputs: [{ url, type: "video" }],
+          usage: { outputs: 1 },
           ...(cents !== undefined ? { costCents: cents } : {}),
         };
       }

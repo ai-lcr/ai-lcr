@@ -34,11 +34,16 @@ export {
   normalizedCents,
   referenceMegapixels,
   DEFAULT_REFERENCE,
+  billableUnits,
+  priceCents,
+  durationFromInput,
 } from "./media";
 export type {
   MediaModality,
   MediaUnit,
   MediaPricing,
+  MediaUsage,
+  BillableContext,
   MediaRoute,
   MediaModelDef,
   MediaRegistry,

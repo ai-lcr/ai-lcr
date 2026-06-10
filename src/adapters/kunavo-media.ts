@@ -162,15 +162,21 @@ export function createKunavoMediaAdapter(config: KunavoMediaConfig): MediaAdapte
       if (urls.length === 0) {
         return { status: "error", error: `Kunavo video job ${req.requestId} completed with no URL` };
       }
-      // NB: do NOT report `units` from `output.duration_seconds`. The router's
-      // cost estimate is `refCents × units`, where refCents is already
-      // normalized to ONE reference clip and `units` means OUTPUT COUNT (the
-      // convention fal/runware follow). Veo routes are priced per "call" (flat
-      // per clip), so seconds-as-units would multiply a flat price by the clip
-      // length — an 8× overcharge for an 8s clip. One completed job = one clip.
+      // Typed usage: seconds and output count are SEPARATE dimensions, so the
+      // router prices per-call SKUs by clip count and per-second SKUs by the
+      // actual duration — reporting `duration_seconds` is safe now (the old
+      // bare `units` contract couldn't tell them apart and a seconds value
+      // would have multiplied a flat per-call price by the clip length).
+      const durationSeconds = (body.output as { duration_seconds?: unknown } | undefined)
+        ?.duration_seconds;
+      const seconds =
+        typeof durationSeconds === "number" && Number.isFinite(durationSeconds) && durationSeconds > 0
+          ? durationSeconds
+          : undefined;
       return {
         status: "done",
         outputs: urls.map((url) => ({ url, type: "video" as const })),
+        usage: { outputs: urls.length, ...(seconds !== undefined ? { seconds } : {}) },
       };
     }
     if (status === "failed" || status === "error") {

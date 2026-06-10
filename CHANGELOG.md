@@ -4,6 +4,50 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-06-10
+
+Media billing contract v2: **rank by the reference, bill by actual usage.**
+The 0.5 media router used one number for both jobs — the price normalized to a
+reference output (1080p image / 5-second clip) ranked routes *and* estimated
+costs, multiplied by an untyped `units` count. That mispriced off-reference
+outputs (an 8s clip billed as 5s) and made the baseline duration-blind, and the
+bare `units` invited a seconds-as-count 8× overcharge. 0.6 separates the two.
+
+### Added
+
+- **Typed usage (`MediaUsage`).** Adapter results (`MediaGenerateResult`,
+  `MediaStatusResult`) carry `usage: { seconds?, outputs?, megapixels? }` —
+  explicitly named dimensions that cannot be confused. The bundled adapters
+  report it (Kunavo video now safely reports the real `duration_seconds`).
+  The legacy bare `units` field is still honored as an output count.
+- **Settle-time billing.** Cost estimates price the route's actual unit on
+  actual usage: per-second SKUs bill `usage.seconds` → `input.duration`
+  (numbers or `"8s"`-style strings) → the reference (last resort); per-image /
+  per-call SKUs bill output count; per-megapixel SKUs bill measured megapixels.
+  New public helpers: `billableUnits`, `priceCents`, `durationFromInput`.
+- **Usage-aware savings baseline.** `baselineUsd` is now priced at settle time
+  against the same usage as the cost — an 8-second clip is baselined at 8
+  seconds of the official rate, not the 5-second reference. Off-reference calls
+  can no longer produce negative or understated savings.
+- **`CallRecord` provenance fields** (all optional, backward compatible):
+  `modality` ("image" | "video"), `usage`, `baselineKind`
+  ("official" | "priciest-route" | "last-leg" — the text router now stamps
+  "last-leg"), `officialUsd` (the official price for this call's usage), and
+  `estCostUsd` (the price-table prediction; `costUsd − estCostUsd` on
+  provider-reported rows is price-table drift).
+- **Cost-outlier guard.** A provider-reported cost ≥25× off the table
+  prediction (the classic USD-vs-cents slip is exactly 100×) raises `onError`
+  with both numbers; the reported bill still stands.
+- `MediaRunResult` and the terminal `MediaPollResult` expose the `usage` that
+  backed the bill.
+
+### Changed
+
+- `MediaJobHandle` now carries the serving route's `pricing` and the resolved
+  savings `baseline` so settle-time billing works across processes. Handles
+  serialized by 0.5.x still poll fine: they settle with the legacy
+  reference-price estimate and the submit-time baseline.
+
 ## [0.5.6] — 2026-06-07
 
 All additions are optional and backward compatible. The sync `createMediaLCR`

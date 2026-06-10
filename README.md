@@ -293,7 +293,9 @@ USD per second, as of 2026-05 — verify current rates. Video billing differs by
 
 ## Image & video routing (`createMediaLCR`)
 
-Image and video are a separate, self-contained side of `ai-lcr` (file outputs, mixed pricing units, async jobs) — see [`src/media.ts`](src/media.ts). You give it a registry (each model's provider routes + per-unit price) and a set of adapters; it routes cheapest-first, fails over, and reports real/normalized cost through the same `onCall` sink as text.
+Image and video are a separate, self-contained side of `ai-lcr` (file outputs, mixed pricing units, async jobs) — see [`src/media.ts`](src/media.ts). You give it a registry (each model's provider routes + per-unit price) and a set of adapters; it routes cheapest-first, fails over, and reports real cost through the same `onCall` sink as text.
+
+Two prices, two jobs: routes are **ranked** by their price normalized to one reference output (a 1080p image / a 5-second clip) so mixed units are comparable, but each settled call is **billed** on its actual usage — an 8-second clip on a per-second SKU costs 8 × the per-second rate, and its savings baseline is the official price for those same 8 seconds. Adapters report typed usage (`usage: { seconds, outputs, megapixels }`); when a provider returns its own bill, that wins, and a bill wildly off the price table (the classic USD-vs-cents slip is exactly 100×) raises `onError` so the table gets fixed.
 
 ```ts
 import { createMediaLCR, createKunavoMediaAdapter, createFalMediaAdapter } from 'ai-lcr'

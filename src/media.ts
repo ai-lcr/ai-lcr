@@ -109,6 +109,93 @@ export function normalizedCents(
   }
 }
 
+// ── Settle-time billing: actual usage, not the reference ──────
+// `normalizedCents` above answers "what would ONE reference output cost?" —
+// that is a RANKING question (which route is cheapest?). Billing is a different
+// question: "what did THIS generation cost?", and must be priced from what was
+// actually produced (8 seconds of video, 3 images, 4.2 megapixels). Conflating
+// the two was the v0.5 design flaw: a reference-normalized price multiplied by
+// a bare `units` count both mispriced off-reference outputs and invited the
+// seconds-as-units 8× overcharge. These helpers price actual usage.
+
+/**
+ * Parse a duration in seconds out of a canonical media input. Accepts a number
+ * or a numeric-ish string (Veo-style `"8s"`, `"8"`). Returns undefined when the
+ * input carries no usable duration.
+ */
+export function durationFromInput(
+  input: Record<string, unknown> | undefined,
+): number | undefined {
+  const raw = input?.["duration"];
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
+  if (typeof raw === "string") {
+    const m = /^(\d+(?:\.\d+)?)\s*s?$/i.exec(raw.trim());
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return undefined;
+}
+
+/** What `billableUnits` can draw on to resolve the actual billed quantity. */
+export interface BillableContext {
+  /** Typed usage the adapter measured on the settled result. Highest priority. */
+  usage?: MediaUsage;
+  /** Legacy bare count from older adapters — OUTPUT COUNT only. */
+  units?: number;
+  /** Settled output count (`outputs.length`), when available. */
+  outputCount?: number;
+  /** The canonical request input — `duration` is read for per-second pricing. */
+  input?: Record<string, unknown>;
+  /** Reference spec, the last-resort assumption when nothing was measured. */
+  reference?: ReferenceSpec;
+}
+
+/**
+ * Resolve the actual billable quantity for a pricing unit, with provenance:
+ * `assumed: true` means nothing was measured and the reference spec filled in
+ * (so the resulting cost is a guess of last resort, not a measurement).
+ *
+ * Resolution order per unit:
+ *   - "second":     usage.seconds → input.duration → reference.videoSeconds (assumed)
+ *   - "megapixel":  usage.megapixels → reference image MP (assumed)
+ *   - "image"/"call": usage.outputs → outputCount → legacy units → 1 (assumed)
+ */
+export function billableUnits(
+  unit: MediaUnit,
+  ctx: BillableContext,
+): { value: number; assumed: boolean } {
+  const ref = ctx.reference ?? DEFAULT_REFERENCE;
+  const positive = (n: number | undefined): number | undefined =>
+    typeof n === "number" && Number.isFinite(n) && n > 0 ? n : undefined;
+  switch (unit) {
+    case "second": {
+      const measured = positive(ctx.usage?.seconds) ?? durationFromInput(ctx.input);
+      return measured !== undefined
+        ? { value: measured, assumed: false }
+        : { value: ref.videoSeconds, assumed: true };
+    }
+    case "megapixel": {
+      const measured = positive(ctx.usage?.megapixels);
+      return measured !== undefined
+        ? { value: measured, assumed: false }
+        : { value: referenceMegapixels(ref), assumed: true };
+    }
+    case "image":
+    case "call": {
+      const measured =
+        positive(ctx.usage?.outputs) ?? positive(ctx.outputCount) ?? positive(ctx.units);
+      return measured !== undefined ? { value: measured, assumed: false } : { value: 1, assumed: true };
+    }
+  }
+}
+
+/** Price a settled generation on `pricing`, from its actual usage (cents). */
+export function priceCents(pricing: MediaPricing, ctx: BillableContext): number {
+  return pricing.cents * billableUnits(pricing.unit, ctx).value;
+}
+
 // ── Cheapest-first ranking (the LCR core) ─────────────────────
 export interface RankedRoute extends MediaRoute {
   /** Normalized cost (cents per reference output) used for ordering. */
@@ -176,11 +263,32 @@ export interface MediaOutput {
   type: MediaModality;
 }
 
+/**
+ * Actual measured usage for one settled generation — the typed billing
+ * quantities. Adapters report whichever dimensions they can observe:
+ *   - `seconds`:    video length actually produced (per-second pricing bills this)
+ *   - `outputs`:    output count — images or clips (per-image / per-call pricing)
+ *   - `megapixels`: total output megapixels (per-megapixel pricing)
+ * Dimensions are EXPLICITLY named so a seconds value can never be mistaken for
+ * an output count (the bug class the old bare `units` number invited: a flat
+ * per-call price × 8 "units" of an 8-second clip = an 8× overcharge).
+ */
+export interface MediaUsage {
+  seconds?: number;
+  outputs?: number;
+  megapixels?: number;
+}
+
 export interface MediaGenerateResult {
   outputs: MediaOutput[];
   /** Provider-reported actual cost in cents, when the API returns it. */
   costCents?: number;
-  /** Units actually billed (images, or seconds of video) — for cost fallback. */
+  /** Typed actual usage (seconds / outputs / megapixels) — drives cost estimation. */
+  usage?: MediaUsage;
+  /**
+   * @deprecated Legacy bare count, meaning OUTPUT COUNT only (never seconds).
+   * Prefer `usage: { outputs }`. Still honored for backward compatibility.
+   */
   units?: number;
 }
 
@@ -221,7 +329,12 @@ export interface MediaStatusResult {
   outputs?: MediaOutput[];
   /** Provider-reported actual cost in cents, when the API returns it (`done`). */
   costCents?: number;
-  /** Units billed (e.g. seconds of video) — cost fallback when `costCents` is absent. */
+  /** Typed actual usage (seconds / outputs / megapixels) — drives cost estimation. */
+  usage?: MediaUsage;
+  /**
+   * @deprecated Legacy bare count, meaning OUTPUT COUNT only (never seconds).
+   * Prefer `usage: { outputs }` (or `usage: { seconds }` for per-second SKUs).
+   */
   units?: number;
   /** Human-readable reason on `error`. */
   error?: string;
@@ -282,6 +395,8 @@ export interface MediaRunResult {
   provider: string;
   costCents: number;
   estimated: boolean;
+  /** Actual usage behind `costCents` (seconds / outputs / megapixels), when known. */
+  usage?: MediaUsage;
 }
 
 export interface MediaSubmitOptions {
@@ -312,8 +427,21 @@ export interface MediaJobHandle {
   externalId: string;
   /** Provider-native job id from `submit`. */
   requestId: string;
-  /** Normalized cost (cents/ref output) of the serving route — used to estimate cost. */
+  /** Normalized cost (cents/ref output) of the serving route — ranking metadata. */
   refCents: number;
+  /**
+   * The serving route's pricing — settle-time billing prices ACTUAL usage on
+   * this (`priceCents`), not the reference estimate. Optional only so handles
+   * serialized by pre-0.6 versions still poll; those fall back to `refCents`.
+   */
+  pricing?: MediaPricing;
+  /**
+   * Savings baseline carried across processes: the official first-party price
+   * when known, else the priciest configured route. Priced against the SAME
+   * actual usage as the cost at settle time. Absent on pre-0.6 handles (those
+   * settle with the submit-time `baselineUsd` estimate below).
+   */
+  baseline?: { pricing: MediaPricing; kind: "official" | "priciest-route" };
   /** Not-yet-tried routes, cheapest-first, for poll-time re-submit failover. */
   fallbacks: { provider: string; externalId: string; refCents: number }[];
   /** Original canonical input, retained so a failover can re-submit elsewhere. */
@@ -348,6 +476,8 @@ export type MediaPollResult =
       provider: string;
       costCents: number;
       estimated: boolean;
+      /** Actual usage behind `costCents` (seconds / outputs / megapixels), when known. */
+      usage?: MediaUsage;
     };
 
 /**
@@ -415,43 +545,128 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     }
   };
 
+  /** The savings baseline a model resolved to, carried to settle time. */
+  type Baseline = { pricing: MediaPricing; kind: "official" | "priciest-route" };
+
   // Resolve a model to its cheapest-first routes + savings baseline. Shared by
   // the sync and async entry points so routing/baseline stay identical.
-  function resolve(modelId: string): { ranked: RankedRoute[]; baselineUsd: number } {
+  //
+  // Baseline = what this output costs going DIRECT to the model maker (its
+  // first-party list price) → savings = baselineUsd - costUsd, same shape as
+  // text. That's the honest "what you'd pay without ai-lcr" number. When no
+  // official price is known (open-weight models with no first-party API), fall
+  // back to the priciest configured route — self-referential, so the record's
+  // `baselineKind` says which one a row got. The baseline PRICING (not a
+  // pre-computed number) is what's resolved here: the USD figure is priced at
+  // settle time against the same actual usage as the cost, so an 8-second clip
+  // is baselined at 8 seconds of the official rate, not the 5s reference.
+  function resolve(modelId: string): {
+    def: MediaModelDef;
+    ranked: RankedRoute[];
+    baseline?: Baseline;
+  } {
     const def = registry[modelId];
     if (!def) {
       throw new Error(`ai-lcr: unknown media model "${modelId}" — add it to the registry`);
     }
     const ranked = rankRoutes(def, reference);
-    // Baseline = what this output costs going DIRECT to the model maker (its
-    // first-party list price), normalized to the reference output → savings =
-    // baselineUsd - costUsd, same shape as text. That's the honest "what you'd
-    // pay without ai-lcr" number. When no official price is known (open-weight
-    // models with no first-party API), fall back to the priciest configured
-    // route, preserving the cross-provider savings story.
     const official = def.official ?? officialPrices[modelId];
-    const baselineUsd =
+    const baseline: Baseline | undefined =
       official !== undefined
-        ? normalizedCents(official, reference) / 100
+        ? { pricing: official, kind: "official" }
         : ranked.length > 0
-          ? Math.max(...ranked.map((r) => r.refCents)) / 100
-          : 0;
-    return { ranked, baselineUsd };
+          ? { pricing: ranked[ranked.length - 1]!.pricing, kind: "priciest-route" }
+          : undefined;
+    return { def, ranked, baseline };
   }
 
-  // cost = provider-reported when present, else the normalized ref-price estimate.
-  const costFor = (refCents: number, result: { costCents?: number; units?: number }) =>
-    result.costCents === undefined ? refCents * (result.units ?? 1) : result.costCents;
+  /** Submit-time reference estimate of the baseline — used only for records
+   *  that settle with no usage to price (failures) and pre-0.6 handles. */
+  const refBaselineUsd = (baseline: Baseline | undefined): number =>
+    baseline ? normalizedCents(baseline.pricing, reference) / 100 : 0;
+
+  /** Everything a settled success knows about its own economics. */
+  interface Settled {
+    costCents: number;
+    /** Price-table prediction for the same usage — drift signal vs. a reported cost. */
+    estCents: number;
+    estimated: boolean;
+    usage?: MediaUsage;
+    /** Billing context, reused to price the baseline on the SAME usage. */
+    ctx: BillableContext;
+  }
+
+  // Settle the cost of one finished generation: provider-reported actual when
+  // present, else the route's price on actual usage (seconds / outputs / MP).
+  // The reference-normalized price is NOT used for billing — it only ranks
+  // routes — except for pre-0.6 handles serialized without `pricing`, which
+  // keep the legacy refCents × output-count estimate.
+  function settle(
+    pricing: MediaPricing | undefined,
+    refCents: number,
+    result: { costCents?: number; usage?: MediaUsage; units?: number; outputs?: MediaOutput[] },
+    input: Record<string, unknown> | undefined,
+  ): Settled {
+    const ctx: BillableContext = {
+      ...(result.usage ? { usage: result.usage } : {}),
+      ...(result.units !== undefined ? { units: result.units } : {}),
+      ...(result.outputs ? { outputCount: result.outputs.length } : {}),
+      ...(input ? { input } : {}),
+      reference,
+    };
+    const estCents = pricing
+      ? priceCents(pricing, ctx)
+      : refCents * billableUnits("call", ctx).value;
+    const estimated = result.costCents === undefined;
+    const costCents = result.costCents ?? estCents;
+    // Echo the usage that backed the bill, filling output count from the
+    // outputs themselves and seconds from the input when measured.
+    const usage: MediaUsage = { ...(result.usage ?? {}) };
+    if (usage.outputs === undefined && (result.outputs?.length ?? 0) > 0) {
+      usage.outputs = result.outputs!.length;
+    }
+    if (usage.seconds === undefined && pricing?.unit === "second") {
+      const s = billableUnits("second", ctx);
+      if (!s.assumed) usage.seconds = s.value;
+    }
+    return {
+      costCents,
+      estCents,
+      estimated,
+      ...(Object.keys(usage).length > 0 ? { usage } : {}),
+      ctx,
+    };
+  }
+
+  // A provider-reported cost wildly off the table prediction almost always
+  // means a units/currency bug (forgetting USD→cents is exactly 100×) or a
+  // badly stale registry price. The reported number still stands — it's the
+  // provider's bill — but tell the observer so the table gets fixed.
+  const DRIFT_RATIO = 25;
+  const warnDrift = (modelId: string, provider: string, s: Settled): void => {
+    if (s.estimated || s.estCents <= 0 || s.costCents <= 0) return;
+    const ratio = s.costCents / s.estCents;
+    if (ratio >= DRIFT_RATIO || ratio <= 1 / DRIFT_RATIO) {
+      safeError(
+        new Error(
+          `ai-lcr: ${provider} reported ${s.costCents}¢ for "${modelId}" but the price table predicts ${s.estCents}¢ (${ratio.toFixed(1)}×) — check the route's pricing units (USD vs cents) or refresh the registry price`,
+        ),
+        provider,
+      );
+    }
+  };
 
   // One CallRecord for a request that settled in failure / exhaustion. Shared by
   // both paths — the sync loop, a submit that no provider accepts, and a poll
-  // that exhausts its fallbacks.
+  // that exhausts its fallbacks. Failures have no usage to price, so the
+  // baseline is the submit-time reference estimate.
   const emitFail = (
     modelId: string,
     attempts: CallRecord["attempts"],
     baselineUsd: number,
     startedAt: number,
-  ): void =>
+  ): void => {
+    const modality = registry[modelId]?.modality;
     safeCall({
       id: newMediaCallId(),
       model: modelId,
@@ -464,37 +679,54 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
       outputTokens: 0,
       costUsd: 0,
       baselineUsd,
+      ...(modality ? { modality } : {}),
     });
+  };
 
   // One CallRecord for a request that settled successfully on `provider`.
-  const emitOk = (
-    modelId: string,
-    provider: string,
-    attempts: CallRecord["attempts"],
-    costCents: number,
-    baselineUsd: number,
-    startedAt: number,
-  ): void =>
+  const emitOk = (args: {
+    modelId: string;
+    modality: MediaModality;
+    provider: string;
+    attempts: CallRecord["attempts"];
+    settled: Settled;
+    baseline: Baseline | undefined;
+    /** Pre-0.6 handles only: the submit-time baseline estimate to fall back to. */
+    legacyBaselineUsd?: number;
+    startedAt: number;
+  }): void => {
+    const { settled, baseline } = args;
+    // Price the baseline on the SAME actual usage as the cost — an 8s clip is
+    // baselined at 8s of the official rate, not the 5s reference.
+    const baselineUsd = baseline
+      ? priceCents(baseline.pricing, settled.ctx) / 100
+      : (args.legacyBaselineUsd ?? 0);
     safeCall({
       id: newMediaCallId(),
-      model: modelId,
-      attempts,
-      winner: provider,
+      model: args.modelId,
+      attempts: args.attempts,
+      winner: args.provider,
       ok: true,
-      failedOver: attempts.length > 1,
-      latencyMs: Date.now() - startedAt,
+      failedOver: args.attempts.length > 1,
+      latencyMs: Date.now() - args.startedAt,
       inputTokens: 0,
       outputTokens: 0,
-      costUsd: costCents / 100,
+      costUsd: settled.costCents / 100,
       baselineUsd,
+      ...(baseline ? { baselineKind: baseline.kind } : {}),
+      ...(baseline?.kind === "official" ? { officialUsd: baselineUsd } : {}),
+      modality: args.modality,
+      ...(settled.usage ? { usage: settled.usage } : {}),
+      estCostUsd: settled.estCents / 100,
     });
+  };
 
   // ── Sync path (unchanged behavior) ──────────────────────────
   const generate = async function generate(
     modelId: string,
     input: Record<string, unknown>,
   ): Promise<MediaRunResult> {
-    const { ranked, baselineUsd } = resolve(modelId);
+    const { def, ranked, baseline } = resolve(modelId);
     const startedAt = Date.now();
     const attempts: CallRecord["attempts"] = [];
     let lastErr: unknown;
@@ -505,12 +737,31 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
       const attemptStart = Date.now();
       try {
         const result = await adapter.run({ externalId: route.externalId, input });
-        const estimated = result.costCents === undefined;
-        const costCents = costFor(route.refCents, result);
+        const settled = settle(route.pricing, route.refCents, result, input);
         attempts.push({ provider: route.provider, ok: true, latencyMs: Date.now() - attemptStart });
-        safeCost({ modelId, provider: route.provider, costCents, estimated });
-        emitOk(modelId, route.provider, attempts, costCents, baselineUsd, startedAt);
-        return { outputs: result.outputs, provider: route.provider, costCents, estimated };
+        warnDrift(modelId, route.provider, settled);
+        safeCost({
+          modelId,
+          provider: route.provider,
+          costCents: settled.costCents,
+          estimated: settled.estimated,
+        });
+        emitOk({
+          modelId,
+          modality: def.modality,
+          provider: route.provider,
+          attempts,
+          settled,
+          baseline,
+          startedAt,
+        });
+        return {
+          outputs: result.outputs,
+          provider: route.provider,
+          costCents: settled.costCents,
+          estimated: settled.estimated,
+          ...(settled.usage ? { usage: settled.usage } : {}),
+        };
       } catch (err) {
         lastErr = err;
         attempts.push({
@@ -521,12 +772,12 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         });
         safeError(err as Error, route.provider);
         if (!isRetryableError(err)) {
-          emitFail(modelId, attempts, baselineUsd, startedAt); // caller's fault → don't waste fallbacks
+          emitFail(modelId, attempts, refBaselineUsd(baseline), startedAt); // caller's fault → don't waste fallbacks
           throw err;
         }
       }
     }
-    emitFail(modelId, attempts, baselineUsd, startedAt);
+    emitFail(modelId, attempts, refBaselineUsd(baseline), startedAt);
     throw lastErr instanceof Error
       ? lastErr
       : new Error(`ai-lcr: no provider could serve media model "${modelId}"`);
@@ -550,7 +801,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     routes: RankedRoute[],
     input: Record<string, unknown>,
     metadata: Record<string, unknown> | undefined,
-    baselineUsd: number,
+    baseline: Baseline | undefined,
     startedAt: number,
     attempts: CallRecord["attempts"],
   ): Promise<MediaJobHandle> {
@@ -568,12 +819,14 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
           externalId: route.externalId,
           requestId,
           refCents: route.refCents,
+          pricing: route.pricing,
+          ...(baseline ? { baseline } : {}),
           fallbacks: routes
             .slice(i + 1)
             .map((r) => ({ provider: r.provider, externalId: r.externalId, refCents: r.refCents })),
           input,
           ...(metadata ? { metadata } : {}),
-          baselineUsd,
+          baselineUsd: refBaselineUsd(baseline),
           startedAt,
           attemptStart,
           attempts,
@@ -590,7 +843,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         if (!isRetryableError(err)) break; // caller's fault → stop trying
       }
     }
-    emitFail(modelId, attempts, baselineUsd, startedAt);
+    emitFail(modelId, attempts, refBaselineUsd(baseline), startedAt);
     throw lastErr instanceof Error
       ? lastErr
       : new Error(`ai-lcr: no async provider could submit media model "${modelId}"`);
@@ -601,14 +854,14 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     input: Record<string, unknown>,
     options?: MediaSubmitOptions,
   ): Promise<MediaJobHandle> {
-    const { ranked, baselineUsd } = resolve(modelId);
+    const { ranked, baseline } = resolve(modelId);
     const usable = ranked.filter((r) => typeof adapters[r.provider]?.submit === "function");
     if (usable.length === 0) {
       throw new Error(
         `ai-lcr: no provider for media model "${modelId}" supports async submit (need an adapter with submit/checkStatus)`,
       );
     }
-    return submitFrom(modelId, usable, input, options?.metadata, baselineUsd, Date.now(), []);
+    return submitFrom(modelId, usable, input, options?.metadata, baseline, Date.now(), []);
   };
 
   generate.poll = async function poll(handle: MediaJobHandle): Promise<MediaPollResult> {
@@ -624,6 +877,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     // through so the eventual settled record shows the whole chain. Returns a
     // fresh handle to keep polling; emits a fail record + throws when exhausted.
     const failover = async (attempts: CallRecord["attempts"]): Promise<MediaPollResult> => {
+      const { baseline } = resolve(handle.modelId);
       const next = asyncRanked(handle.modelId).filter((r) =>
         handle.fallbacks.some((f) => f.provider === r.provider && f.externalId === r.externalId),
       );
@@ -632,7 +886,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         next,
         handle.input,
         handle.metadata,
-        handle.baselineUsd,
+        handle.baseline ?? baseline,
         handle.startedAt,
         attempts,
       );
@@ -687,15 +941,37 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
           true,
         );
       }
-      const estimated = status.costCents === undefined;
-      const costCents = costFor(handle.refCents, status);
+      const settled = settle(handle.pricing, handle.refCents, { ...status, outputs }, handle.input);
       const attempts: CallRecord["attempts"] = [
         ...handle.attempts,
         { provider: handle.provider, ok: true, latencyMs: Date.now() - handle.attemptStart },
       ];
-      safeCost({ modelId: handle.modelId, provider: handle.provider, costCents, estimated });
-      emitOk(handle.modelId, handle.provider, attempts, costCents, handle.baselineUsd, handle.startedAt);
-      return { done: true, status: "done", outputs, provider: handle.provider, costCents, estimated };
+      warnDrift(handle.modelId, handle.provider, settled);
+      safeCost({
+        modelId: handle.modelId,
+        provider: handle.provider,
+        costCents: settled.costCents,
+        estimated: settled.estimated,
+      });
+      emitOk({
+        modelId: handle.modelId,
+        modality: registry[handle.modelId]?.modality ?? outputs[0]!.type,
+        provider: handle.provider,
+        attempts,
+        settled,
+        baseline: handle.baseline,
+        legacyBaselineUsd: handle.baselineUsd,
+        startedAt: handle.startedAt,
+      });
+      return {
+        done: true,
+        status: "done",
+        outputs,
+        provider: handle.provider,
+        costCents: settled.costCents,
+        estimated: settled.estimated,
+        ...(settled.usage ? { usage: settled.usage } : {}),
+      };
     }
 
     // status === "error" — a provider's job failed; always worth a fallback.
