@@ -144,6 +144,42 @@ DeepInfra 只承载开源权重——没有第一方 Claude / GPT / Gemini。那
 2. **失败时向下穿透。** 遇到任何 provider 失败——限流、5xx、超时、**额度耗尽**（402 / 欠费 / 余额不足），以及 **400** 这类 client 错误——都会前进到下一个 provider，且对流式安全。400 会 failover 是有意为之：在 OpenAI 兼容聚合层里，400 往往是"*这家* provider 不吃这个请求"（不支持的参数、它没上架这个 model、更严格的 schema），而非请求本身坏了——换一家很可能就能服务。若所有 provider 都拒绝，请求仍会失败，并抛出**第一个**（原始）错误，让真正的调用方 bug 保持可调试。唯一永远不 failover 的是调用方主动取消（`AbortSignal`）。想恢复旧的"client 错误立即失败"行为，给 `createLCR` 传 `shouldRetry: isRetryableError`。
 3. **恢复。** 在一段空闲窗口（`resetIntervalMs`，默认 60s）之后，自动回到最便宜的 provider。
 
+## 缓存
+
+LLM 世界里有两种完全不同的"缓存"，ai-lcr 两种都做——都默认关闭，都只是一个配置开关，**不需要你跑任何服务**。
+
+### 整次调用都省掉（`cache`）—— 响应缓存
+
+当一个请求和之前回答过的一模一样时，直接重放已存的响应、**完全不调用任何 provider**：零延迟、`costUsd: 0`。这正是 Vercel AI Gateway 明显没做的那一层。
+
+```ts
+const lcr = createLCR({
+  models: { /* … */ },
+  cache: true, // 精确匹配响应缓存（默认进程内内存）
+});
+```
+
+存储可插拔，且 ai-lcr 为此**零依赖**：
+
+- **`cache: true`** 用进程内内存。在长驻 server 上是真缓存；在单次 serverless 调用内（比如 agent 循环里重复的子调用）也有用——但它**不会跨 serverless 请求存活**，因为不同函数实例之间不共享内存。
+- **想在 serverless 上跨请求命中**，自带一个由共享层（Upstash Redis、Vercel KV）支撑的 store：`cache: myStore`。ai-lcr 自己不跑任何服务——共享层是你的。自定义 store 就是 `{ get, set }`（见 `CacheStore`）；想要带上限的内置实现，用导出的 `createMemoryCacheStore({ maxEntries })`。
+- **`cache: { store?, ttlMs? }`** 可设置过期时间。
+
+命中会落一条 `CallRecord`：`cacheHit: true`、`costUsd: 0`，并把省下的钱单独记在 `cacheHitSavingUsd` 一行——这是**缓存**省的钱，和路由省的钱（`baselineUsd − costUsd`）分开，绝不混在一起。空回复和无 usage 的结果永不缓存。一个要点：缓存会让相同请求返回相同响应——对幂等 / `temperature: 0` 的调用正好，对采样型调用则是行为改变。
+
+### 让这次调用更便宜（`promptCache`）—— provider 提示缓存
+
+另一套机制：模型照样跑，但**提示的静态开头**（你的 system prompt）在重复时按 provider 的缓存读价（约 0.1× input）计费。Anthropic 需要显式 `cache_control` 标记；OpenAI / Gemini / DeepSeek 自动缓存前缀。`promptCache: true` 帮你在最后一条 system 消息上插入这个标记：
+
+```ts
+const lcr = createLCR({
+  models: { /* … */ },
+  promptCache: true,          // 5 分钟窗口；想要更长用 { ttl: "1h" }
+});
+```
+
+它只写 `anthropic` 这个 provider-options 命名空间，其他 provider 一律忽略——所以在混合链路上也安全。而且只要你在 prompt 里自己设了 `cacheControl`，它就**完全让位**。省下的钱照旧体现在 `CallRecord` 的 `cachedInputTokens` 和 `cachedSavingUsd` 上。
+
 ## 看清每次调用发生了什么（`onCall`）
 
 `onError`/`onCost` 各自独立触发、互不关联，事后很难还原一次 failover 的全貌。`onCall` 给你**每个请求一条记录**——完整的尝试链、最终服务者、每跳失败的原因、延迟和成本；`formatCallRecord` 把它变成一行可扫读的日志：

@@ -151,6 +151,14 @@ function TagIcon() {
   );
 }
 
+function BoltIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default async function Home() {
   const [stars, version, status] = await Promise.all([getStars(), getVersion(), statusSummary()]);
   const displayVersion = version ?? FALLBACK_VERSION;
@@ -345,6 +353,7 @@ export default async function Home() {
             { icon: <ShieldIcon />, accent: "var(--green)", title: "Quarantines bad providers", desc: "A circuit breaker most fallback libraries skip: one that keeps failing is benched, not re-probed on every call — then auto-recovered." },
             { icon: <TagIcon />, accent: "var(--blue)", title: "Zero-config pricing", desc: "A bundled price table prices native-maker routes with no hand-typed cost — add discount for a flat-rate reseller." },
             { icon: <ReceiptIcon />, accent: "var(--violet)", title: "Real cost tracking", desc: "An onCost callback fires the actual USD per call, so you can see and attribute every dollar." },
+            { icon: <BoltIcon />, accent: "var(--green)", title: "Response cache, no service", desc: "An identical request replays in-process — zero latency, zero cost. In-memory by default, or bring your own Redis/KV." },
           ].map((f, i) => {
             const inner = (
               <>

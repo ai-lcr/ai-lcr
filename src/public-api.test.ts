@@ -14,6 +14,8 @@ const EXPECTED_EXPORTS = [
   // bundled price table (zero-config pricing)
   "MODEL_PRICES",
   "getModelPrice",
+  // response cache (exact-match, pluggable store)
+  "createMemoryCacheStore",
   // observability
   "classifyError",
   "classifyErrorKind",

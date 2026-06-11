@@ -19,6 +19,14 @@ import type {
   LanguageModelV3StreamPart,
   LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
+import {
+  cacheKeyOf,
+  streamFromParts,
+  type ResolvedCache,
+  type CachedCall,
+  type CachedMeta,
+} from "./cache";
+import { withPromptCacheBreakpoint, type ResolvedPromptCache } from "./prompt-cache";
 
 /** USD per 1M tokens. */
 export interface ProviderCost {
@@ -205,6 +213,21 @@ export interface CallRecord {
    */
   cachedSavingUsd?: number;
   /**
+   * True when this request was served from ai-lcr's exact-match RESPONSE cache
+   * — no provider was called at all. Distinct from `cachedInputTokens` /
+   * `cachedSavingUsd`, which are the *provider's* prompt-cache (the model still
+   * ran). On a hit `costUsd` is 0, `winner` is the provider that served the
+   * ORIGINAL (now-cached) call, and `attempts` has a single synthetic entry.
+   */
+  cacheHit?: boolean;
+  /**
+   * On a `cacheHit`, the money the hit avoided — i.e. what the original call
+   * actually cost when it ran. Present only when > 0. Like `cachedSavingUsd`
+   * this is a caching saving, NOT a routing saving, so it lives on its own line
+   * and is never folded into `baselineUsd - costUsd`.
+   */
+  cacheHitSavingUsd?: number;
+  /**
    * Caller-supplied correlation id, read from `providerOptions.lcr.requestId`
    * on the call. Multi-step tool loops emit one record per `doStream`/
    * `doGenerate` step; stamp the same `requestId` on every step to let the
@@ -288,6 +311,10 @@ export interface FallbackOptions {
    * disable (the default — pre-existing behavior). See {@link CooldownOptions}.
    */
   cooldown?: boolean | CooldownOptions;
+  /** Resolved response cache (see ./cache). Undefined = no response caching. */
+  cache?: ResolvedCache;
+  /** Resolved prompt-cache breakpoints (see ./prompt-cache). Undefined = off. */
+  promptCache?: ResolvedPromptCache;
   onError?: (error: Error, provider: string) => void;
   onCost?: (event: CostEvent) => void;
   /** Called once per settled request with the full failover chain. See {@link CallRecord}. */
@@ -550,6 +577,14 @@ interface CallCtx {
    * fallback happened to say. Set once, on the first recorded failure.
    */
   firstError?: unknown;
+  /**
+   * Settle-time summary stamped by `finalizeOk`, so the response-cache wrapper
+   * (which lives outside the stream's failover recursion) can read the winner,
+   * cost, and tokens after the call completes — and know whether the result is
+   * safe to cache (`cacheable` is false for an empty completion / missing
+   * usage, which must never be stored as a good answer).
+   */
+  settled?: { meta: CachedMeta; cacheable: boolean };
 }
 
 /**
@@ -851,6 +886,19 @@ export class LcrFallbackModel implements LanguageModelV3 {
     // settled record. (input === 0 is the usageMissing case above, not this one.)
     const emptyCompletion = inputTokens > 0 && outputTokens === 0;
     const baselineUsd = this.baselineUsd(inputTokens, outputTokens, cacheReadTokens);
+    // Hand the response-cache wrapper everything it needs to store (and replay)
+    // this answer. A blank or usage-less result is recorded but NOT cacheable —
+    // we must never serve a stored empty completion on future hits.
+    ctx.settled = {
+      meta: {
+        winner: provider.label,
+        costUsd,
+        inputTokens,
+        outputTokens,
+        ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
+      },
+      cacheable: !emptyCompletion && !usageMissing,
+    };
     this.emitCost({
       model: this.opts.modelName,
       provider: provider.label,
@@ -899,6 +947,23 @@ export class LcrFallbackModel implements LanguageModelV3 {
   async doGenerate(
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3GenerateResult> {
+    // Response cache: an exact-match hit replays the stored answer and never
+    // touches a provider. Key off the ORIGINAL options (before any prompt-cache
+    // breakpoint), so the key is stable regardless of `promptCache`.
+    const cache = this.opts.cache;
+    const cacheKey = cache ? cacheKeyOf(this.opts.modelName, options) : undefined;
+    if (cache && cacheKey !== undefined) {
+      const hit = await cache.store.get(cacheKey);
+      if (hit && hit.kind === "generate") {
+        this.finalizeCacheHit(this.startCall(options), hit.meta);
+        return hit.result;
+      }
+    }
+    // Forward an optionally cache-marked prompt to providers; the cache key and
+    // requestId above were already read from the untouched `options`.
+    const callOptions = this.opts.promptCache
+      ? withPromptCacheBreakpoint(options, this.opts.promptCache)
+      : options;
     const ctx = this.startCall(options);
     const providers = this.opts.providers;
     // Snapshot the attempt order once (cheapest-first ring, cooling providers to
@@ -911,7 +976,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       const isLast = pos === order.length - 1;
       const attemptStart = Date.now();
       try {
-        const result = await provider.model.doGenerate(options);
+        const result = await provider.model.doGenerate(callOptions);
         // Empty completion: a clean 200 that generated nothing (prompt billed,
         // zero output tokens). Treat it like a retryable failure and move to the
         // next provider — but only while one remains. On the last provider we
@@ -929,6 +994,9 @@ export class LcrFallbackModel implements LanguageModelV3 {
         this.recordProviderSuccess(idx);
         this.settleSticky(idx);
         this.finalizeOk(ctx, provider, attemptStart, result.usage);
+        if (cache && cacheKey !== undefined && ctx.settled?.cacheable) {
+          this.storeCache(cacheKey, { kind: "generate", result, meta: ctx.settled.meta });
+        }
         return result;
       } catch (error) {
         lastError = error;
@@ -948,7 +1016,88 @@ export class LcrFallbackModel implements LanguageModelV3 {
   async doStream(
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3StreamResult> {
-    return this.doStreamWithCtx(options, this.startCall(options), this.routeOrder(this.startIndex()), 0);
+    const cache = this.opts.cache;
+    const cacheKey = cache ? cacheKeyOf(this.opts.modelName, options) : undefined;
+    if (cache && cacheKey !== undefined) {
+      const hit = await cache.store.get(cacheKey);
+      if (hit && hit.kind === "stream") {
+        this.finalizeCacheHit(this.startCall(options), hit.meta);
+        return { stream: streamFromParts(hit.parts) };
+      }
+    }
+    const ctx = this.startCall(options);
+    const callOptions = this.opts.promptCache
+      ? withPromptCacheBreakpoint(options, this.opts.promptCache)
+      : options;
+    const inner = await this.doStreamWithCtx(
+      callOptions,
+      ctx,
+      this.routeOrder(this.startIndex()),
+      0,
+    );
+    if (!cache || cacheKey === undefined) return inner;
+
+    // Collect every part as it streams to the consumer; on a clean finish store
+    // the full sequence for replay. `ctx.settled` is stamped by `finalizeOk`
+    // (which runs before the inner stream closes), so by the time `flush` fires
+    // we know the winner, cost, and whether the result is safe to cache. An
+    // errored stream never reaches `flush`, so failures are never cached.
+    const collected: LanguageModelV3StreamPart[] = [];
+    const self = this;
+    const wrapped = inner.stream.pipeThrough(
+      new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
+        transform(part, controller) {
+          collected.push(part);
+          controller.enqueue(part);
+        },
+        flush() {
+          if (ctx.settled?.cacheable) {
+            self.storeCache(cacheKey, { kind: "stream", parts: collected, meta: ctx.settled.meta });
+          }
+        },
+      }),
+    );
+    return { ...inner, stream: wrapped };
+  }
+
+  /** A response-cache hit: replay a stored answer with no provider call. Settles
+   *  one {@link CallRecord} with `cacheHit`, `costUsd: 0`, and the avoided cost
+   *  on its own `cacheHitSavingUsd` line. */
+  private finalizeCacheHit(ctx: CallCtx, meta: CachedMeta): void {
+    this.emitCall({
+      id: ctx.id,
+      model: this.opts.modelName,
+      attempts: [{ provider: meta.winner, ok: true, latencyMs: Date.now() - ctx.startedAt }],
+      winner: meta.winner,
+      ok: true,
+      failedOver: false,
+      latencyMs: Date.now() - ctx.startedAt,
+      inputTokens: meta.inputTokens,
+      outputTokens: meta.outputTokens,
+      ...(meta.cachedInputTokens ? { cachedInputTokens: meta.cachedInputTokens } : {}),
+      costUsd: 0,
+      cacheHit: true,
+      ...(meta.costUsd > 0 ? { cacheHitSavingUsd: meta.costUsd } : {}),
+      ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
+    });
+  }
+
+  /** Best-effort write to the response cache: a sync throw or a rejected async
+   *  `set` must never break the request. Caching is an optimization, not a
+   *  guarantee. */
+  private storeCache(key: string, value: CachedCall): void {
+    const cache = this.opts.cache;
+    if (!cache) return;
+    try {
+      const r = cache.store.set(key, value, cache.ttlMs);
+      if (r && typeof (r as Promise<void>).catch === "function") {
+        (r as Promise<void>).catch(() => {
+          /* cache write is best-effort */
+        });
+      }
+    } catch {
+      /* cache write is best-effort */
+    }
   }
 
   // The stream's failover recursion re-enters here with the SAME `ctx` and the

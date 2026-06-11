@@ -182,6 +182,42 @@ const lcr = createLCR({
 
 With `cooldown` on, a provider that fails enough times in a window is *skipped* for a cooldown period rather than tried every request — and a single success clears it. Defaults are 3 failures / 60s → 60s cooldown; tune with `cooldown: { maxFailures, windowMs, cooldownMs }`. It only ever **reorders** the attempt list (cooling providers go last), so if *every* provider is cooling a request still tries them all rather than failing outright. Off by default — routing is unchanged unless you opt in.
 
+## Cache
+
+There are two completely different "caches" in LLM land, and ai-lcr does both — each off by default, each a pure config flag with no service to run.
+
+### Skip the call entirely (`cache`) — response cache
+
+When a request is byte-for-byte identical to one already answered, replay the stored response and call **no provider at all**: zero latency, `costUsd: 0`. This is the layer Vercel AI Gateway notably *doesn't* offer.
+
+```ts
+const lcr = createLCR({
+  models: { /* … */ },
+  cache: true, // exact-match response cache (in-memory by default)
+});
+```
+
+Storage is pluggable and ai-lcr ships **zero dependencies** for it:
+
+- **`cache: true`** uses a process-local in-memory store. Real on a long-running server, and useful *within* one serverless invocation (an agent loop repeating a sub-call) — but it does **not** survive across serverless requests, because separate function instances don't share memory.
+- **For cross-request hits on serverless**, bring your own store backed by a shared layer (Upstash Redis, Vercel KV): `cache: myStore`. ai-lcr runs no service of its own — any shared store is yours. A custom store is just `{ get, set }` (see `CacheStore`); `createMemoryCacheStore({ maxEntries })` is exported if you want the bundled one with a cap.
+- **`cache: { store?, ttlMs? }`** sets an entry lifetime.
+
+A hit settles a `CallRecord` with `cacheHit: true`, `costUsd: 0`, and the money it avoided on its own `cacheHitSavingUsd` line — a *caching* saving, kept separate from routing savings (`baselineUsd − costUsd`), never folded in. Empty completions and usage-less results are never cached. One caveat worth stating: caching makes identical requests return identical responses — exactly right for idempotent / `temperature: 0` calls, a behavior change for sampled ones.
+
+### Pay less for the call (`promptCache`) — provider prompt cache
+
+Different mechanism: the model still runs, but the **static head of the prompt** (your system prompt) bills at the provider's cache-read rate (~0.1× input) on repeats. Anthropic needs an explicit `cache_control` marker; OpenAI / Gemini / DeepSeek cache the prefix automatically. `promptCache: true` inserts that marker on the last system message for you:
+
+```ts
+const lcr = createLCR({
+  models: { /* … */ },
+  promptCache: true,          // 5-minute window; { ttl: "1h" } for the longer one
+});
+```
+
+It only writes the `anthropic` provider-options namespace, which every other provider ignores — so it's safe on a mixed chain. And it **steps aside entirely** if you set `cacheControl` yourself anywhere in the prompt. The savings then show up exactly as before: `cachedInputTokens` and `cachedSavingUsd` on the `CallRecord` (see [Cache-aware cost](#see-what-happened-oncall) below).
+
 ## See what happened (`onCall`)
 
 `onError`/`onCost` fire separately and uncorrelated, so a failover is hard to read after the fact. `onCall` gives you **one record per request** — the full chain, the winner, the reason for each failed hop, latency, and cost — and `formatCallRecord` turns it into a one-liner you can scan:
