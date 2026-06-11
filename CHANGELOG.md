@@ -4,7 +4,7 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.7.0] — 2026-06-11
+## [0.6.1] — 2026-06-11
 
 Zero-config pricing for native-maker routes. Until now every priced provider
 needed a hand-typed `cost: { input, output }`; for a vendor's own API that number
