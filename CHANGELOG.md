@@ -4,9 +4,9 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.8.0] — 2026-06-11
+## [0.6.2] — 2026-06-11
 
-> Merge after #23 (0.7.0, bundled price table). This entry assumes that landed first.
+> Merge after #23 (0.6.1, bundled price table). This entry assumes that landed first.
 
 Circuit breaker for persistently-failing providers. Until now the only recovery
 lever was `resetIntervalMs`, which snaps routing back to the cheapest provider on
