@@ -103,6 +103,42 @@ request's attempt list (benched providers move to the back), so if every provide
 is cooling, a request still tries them all rather than failing outright. It's
 **off by default** — unset, no provider is ever skipped and routing is unchanged.
 
+## Caching
+
+Two different "caches", both off by default, both pure config flags — **no
+service to run**.
+
+**`cache` — skip the call entirely.** An exact-match request replays the stored
+response and calls no provider at all: zero latency, `costUsd: 0`. This is the
+layer Vercel AI Gateway doesn't offer; ai-lcr does it in-process.
+
+```ts
+createLCR({ models, cache: true }); // in-memory store, zero dependencies
+```
+
+`cache: true` is process-local memory — real on a long-running server, but it
+does **not** survive across serverless requests (instances don't share memory).
+For cross-request hits there, bring your own shared store: `cache: myStore`
+(any `{ get, set }`, e.g. Upstash Redis / Vercel KV). ai-lcr runs no service of
+its own. Use `cache: { store, ttlMs }` to set a lifetime. A hit settles a
+`CallRecord` with `cacheHit: true` and the avoided cost on `cacheHitSavingUsd`;
+empty results are never cached. Note caching makes identical requests return
+identical responses — ideal for `temperature: 0`, a behavior change for sampled
+calls.
+
+**`promptCache` — pay less for the call.** The model still runs, but the static
+prompt head (your system prompt) bills at the provider's cache-read rate (~0.1×
+input) on repeats. Inserts an Anthropic `cache_control` marker on the last
+system message for you; OpenAI / Gemini / DeepSeek cache the prefix
+automatically and ignore the marker, so it's safe on a mixed chain.
+
+```ts
+createLCR({ models, promptCache: true }); // 5-min window; { ttl: "1h" } for longer
+```
+
+It steps aside if you set `cacheControl` yourself. Savings surface via
+`cachedInputTokens` / `cachedSavingUsd` on the `CallRecord`.
+
 ## Which errors mean what
 
 Every failed attempt is tagged with an `ErrorKind`, surfaced via `onError` and on

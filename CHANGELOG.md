@@ -4,6 +4,41 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] — 2026-06-11
+
+Caching — both kinds, each off by default and each a pure config flag with no
+service to run. The response cache is the layer Vercel AI Gateway notably
+doesn't offer; ai-lcr does it in-process and folds it into its cost truth.
+
+### Added
+
+- **`createLCR({ cache })`** — exact-match **response cache**. An identical
+  request replays the stored response and calls **no provider at all**: zero
+  latency, `costUsd: 0`. Storage is pluggable with **zero added dependencies**:
+  `cache: true` uses a bundled in-memory store, `cache: myStore` brings your own
+  (Redis / Vercel KV — required for cross-request hits on serverless, where
+  memory isn't shared), `cache: { store?, ttlMs? }` sets a TTL. A hit settles a
+  `CallRecord` with `cacheHit: true` and the avoided cost on its own
+  `cacheHitSavingUsd` line (a caching saving, never folded into routing savings).
+  Empty completions and usage-less results are never cached. New exports:
+  `createMemoryCacheStore`, types `CacheStore` / `CacheOptions` / `CachedCall` /
+  `CachedMeta` / `MemoryCacheOptions`.
+- **`createLCR({ promptCache })`** — automatic provider-side **prompt-cache**
+  breakpoint. Inserts an Anthropic `cache_control` marker on the last system
+  message so the static prompt head bills at the cache-read rate (~0.1× input)
+  on repeats; the model still runs. `true` for the 5-minute window,
+  `{ ttl: "1h" }` for the longer one. Only writes the `anthropic` namespace
+  (ignored by other providers, safe on a mixed chain) and steps aside if you set
+  `cacheControl` yourself. Savings surface via the existing `cachedInputTokens` /
+  `cachedSavingUsd`. New exported type `PromptCacheOptions`.
+- `CallRecord` gains **`cacheHit`** and **`cacheHitSavingUsd`** for response-cache
+  hits.
+
+### Compatibility
+
+- Fully backward compatible. Both `cache` and `promptCache` are **off by
+  default** — unset, routing behaves exactly as before.
+
 ## [0.6.2] — 2026-06-11
 
 Circuit breaker for persistently-failing providers. Until now the only recovery

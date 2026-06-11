@@ -22,6 +22,11 @@ export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind, Cool
 export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isAbortError, shouldFailover } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
+import { resolveCache, type CacheStore, type CacheOptions } from "./cache";
+import { resolvePromptCache, type PromptCacheOptions } from "./prompt-cache";
+export { createMemoryCacheStore } from "./cache";
+export type { CacheStore, CachedCall, CachedMeta, CacheOptions, MemoryCacheOptions } from "./cache";
+export type { PromptCacheOptions } from "./prompt-cache";
 import { MODEL_PRICES } from "./text-prices";
 export { MODEL_PRICES } from "./text-prices";
 
@@ -150,6 +155,34 @@ export interface LCRConfig {
    * unchanged routing, no provider is ever skipped). See {@link CooldownOptions}.
    */
   cooldown?: boolean | CooldownOptions;
+  /**
+   * Exact-match RESPONSE cache: when a request is identical to one already
+   * answered, replay the stored response and call no provider at all — zero
+   * latency, `costUsd: 0`, and the avoided cost reported as `cacheHitSavingUsd`
+   * on the {@link CallRecord} (with `cacheHit: true`). Off by default.
+   *
+   * `true` uses a process-local in-memory store; pass a {@link CacheStore} to
+   * bring your own (Redis / Vercel KV — required for cross-request hits on
+   * serverless, where memory isn't shared); pass `{ store?, ttlMs? }` to set a
+   * TTL. ai-lcr runs no service of its own — any shared store is yours.
+   *
+   * Caching makes identical requests return identical responses: ideal for
+   * idempotent / `temperature: 0` calls, a behavior change for sampled ones.
+   * Empty completions and usage-less results are never cached.
+   */
+  cache?: boolean | CacheStore | CacheOptions;
+  /**
+   * Automatic provider-side PROMPT caching: insert a `cache_control` breakpoint
+   * on the last system message so the static prompt head bills at the
+   * cache-read rate (~0.1× input) on repeats. The model still runs — this only
+   * lowers input cost, it does not skip the call (that's `cache`). Only
+   * Anthropic / MiniMax need the marker; OpenAI / Gemini / DeepSeek cache the
+   * prefix automatically and ignore it, so this is safe on a mixed chain.
+   *
+   * `true` for the 5-minute default, `{ ttl: "1h" }` for the longer window.
+   * Off by default; steps aside entirely if you set `cacheControl` yourself.
+   */
+  promptCache?: boolean | PromptCacheOptions;
   /** Called when a provider errors and routing falls through to the next. */
   onError?: (error: Error, provider: string) => void;
   /** Called after each successful call with the serving provider, tokens, and cost. */
@@ -260,12 +293,17 @@ export function createLCR(config: LCRConfig): LCRRouter {
     autoPrice = false,
     resetIntervalMs,
     cooldown,
+    cache,
+    promptCache,
     onError,
     onCost,
     onCall,
     shouldRetry,
     defaultCacheReadRatio,
   } = config;
+
+  const resolvedCache = resolveCache(cache);
+  const resolvedPromptCache = resolvePromptCache(promptCache);
 
   if (defaultCacheReadRatio !== undefined && (defaultCacheReadRatio < 0 || defaultCacheReadRatio > 1)) {
     throw new Error(
@@ -290,7 +328,18 @@ export function createLCR(config: LCRConfig): LCRRouter {
     }
     routed.set(
       name,
-      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, cooldown, onError, onCost, onCall, shouldRetry }),
+      new LcrFallbackModel({
+        modelName: name,
+        providers,
+        resetIntervalMs,
+        cooldown,
+        ...(resolvedCache ? { cache: resolvedCache } : {}),
+        ...(resolvedPromptCache ? { promptCache: resolvedPromptCache } : {}),
+        onError,
+        onCost,
+        onCall,
+        shouldRetry,
+      }),
     );
   }
 
