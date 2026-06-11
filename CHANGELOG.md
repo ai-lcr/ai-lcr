@@ -4,11 +4,42 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] — 2026-06-11
+
+Circuit breaker for persistently-failing providers. Until now the only recovery
+lever was `resetIntervalMs`, which snaps routing back to the cheapest provider on
+a timer — so a provider that's actually down keeps eating one failed attempt
+every window. The breaker remembers the failure and stops sending it traffic.
+
+### Added
+
+- **`createLCR({ cooldown })`.** A provider that fails `maxFailures` times within
+  `windowMs` is *skipped* for `cooldownMs` instead of being re-probed every
+  request; a single success clears its count. `true` enables defaults (3 / 60s →
+  60s); pass `{ maxFailures, windowMs, cooldownMs }` to tune. New exported type
+  `CooldownOptions`.
+- The breaker only **reorders** each request's attempt list (cooling providers go
+  last), so when every provider is cooling a request still tries them all rather
+  than failing outright — it can never turn a recoverable request into a hard
+  failure.
+
+### Changed
+
+- The routing engine now snapshots a per-request **attempt order** once (cheapest
+  ring with cooling providers moved to the back) and threads it through streaming
+  failover, replacing the previous modular index walk. Behavior is identical when
+  `cooldown` is unset.
+
+### Compatibility
+
+- Fully backward compatible. `cooldown` is **off by default** — with it unset no
+  provider is ever skipped and routing behaves exactly as before.
+
 ## [0.6.1] — 2026-06-11
 
 Zero-config pricing for native-maker routes. Until now every priced provider
 needed a hand-typed `cost: { input, output }`; for a vendor's own API that number
-is just the public list price you could look up. 0.7 bundles those.
+is just the public list price you could look up. 0.6.1 bundles those.
 
 ### Added
 

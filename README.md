@@ -171,6 +171,17 @@ Look a price up yourself with `getModelPrice("claude-sonnet-4-6")`. The table is
 2. **Fall through on failure.** On any provider failure — rate limit, 5xx, timeout, a **billing cap** (402 / out-of-credit / quota), *and* a client error like a **400** — it advances to the next provider, streaming-safe. A 400 fails over on purpose: across OpenAI-compatible aggregators a 400 is usually "*this* provider won't take this request" (an unsupported param, a model it hasn't listed, a stricter schema), not a universally-broken request — so the next provider may well serve it. If every provider rejects the request it still fails, surfacing the **original** error so a genuine caller bug stays debuggable. The one failure that never fails over is a deliberate caller cancellation (`AbortSignal`). Pass `shouldRetry: isRetryableError` to `createLCR` to restore the stricter "client errors fail fast" behavior.
 3. **Recover.** After an idle window (`resetIntervalMs`, default 60s) it snaps back to the cheapest provider.
 
+For a provider that's *persistently* down, the timer alone keeps re-probing it — one failed attempt every window. Turn on the **circuit breaker** to stop that:
+
+```ts
+const lcr = createLCR({
+  models: { /* … */ },
+  cooldown: true, // skip a provider that keeps failing, instead of re-probing it
+});
+```
+
+With `cooldown` on, a provider that fails enough times in a window is *skipped* for a cooldown period rather than tried every request — and a single success clears it. Defaults are 3 failures / 60s → 60s cooldown; tune with `cooldown: { maxFailures, windowMs, cooldownMs }`. It only ever **reorders** the attempt list (cooling providers go last), so if *every* provider is cooling a request still tries them all rather than failing outright. Off by default — routing is unchanged unless you opt in.
+
 ## See what happened (`onCall`)
 
 `onError`/`onCost` fire separately and uncorrelated, so a failover is hard to read after the fact. `onCall` gives you **one record per request** — the full chain, the winner, the reason for each failed hop, latency, and cost — and `formatCallRecord` turns it into a one-liner you can scan:
@@ -490,6 +501,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 ## Roadmap
 
 - [x] Own failover engine — cheapest-first routing + streaming-safe fallback, no external routing dependency
+- [x] Circuit breaker (`cooldown`) — skip a persistently-failing provider instead of re-probing it every window
 - [x] Real per-call cost accounting (`onCost`)
 - [x] One correlated record per request with the full failover chain (`onCall` + `formatCallRecord`)
 - [x] Auto cheapest-first ordering (`autoSort`) from per-provider `cost`
