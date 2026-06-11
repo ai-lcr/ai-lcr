@@ -1,6 +1,6 @@
 ---
 title: How routing works
-description: The mechanics — cheapest-first ordering, health-based fallback that's streaming-safe, automatic recovery to the cheapest provider, and which errors trigger a switch versus an alert.
+description: The mechanics — cheapest-first ordering (with zero-config autoPrice), health-based fallback that's streaming-safe, automatic recovery, a circuit breaker that benches persistently-failing providers, and which errors trigger a switch versus an alert.
 ---
 
 A `createLCR` model wraps an **ordered, cheapest-first list of providers** per
@@ -27,6 +27,34 @@ Set `autoSort: true` and the router sorts each list **cheapest-first by `cost`**
 for you, so you can list providers in any order. Without `autoSort`, you control
 priority by hand — useful when you'd rather rank by reliability than price.
 
+### Skip the hand-typed prices (`autoPrice`)
+
+For a vendor's own API the `cost` numbers are just the public list price. Set
+`autoPrice: true` and the router fills any entry that has no explicit `cost` from
+a **bundled price table** (`MODEL_PRICES`) — first-party rates for the native
+makers (OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral), keyed by the bare
+model id you already pass to the provider. A flat-rate reseller just adds
+`discount`:
+
+```ts
+createLCR({
+  autoPrice: true,
+  autoSort: true,
+  models: {
+    "claude-sonnet": [
+      { model: anthropic("claude-sonnet-4-6"), label: "anthropic" },           // priced from the table
+      { model: kunavo("claude-sonnet-4-6"), label: "kunavo", discount: 0.2 },   // 20% off the list price
+    ],
+  },
+});
+```
+
+It's **off by default**, an explicit `cost` always wins, and unknown models stay
+unpriced — so turning it on never silently re-prices a route you priced yourself.
+Look a price up directly with `getModelPrice("claude-sonnet-4-6")`. The table
+carries native makers only; price open-weights hosts (DeepInfra) and breadth
+aggregators (OpenRouter) explicitly.
+
 ## Health-based fallback (streaming-safe)
 
 The router serves from the first healthy provider. On a **retryable** error
@@ -47,6 +75,33 @@ back when it's healthy again — under load too, not only on the next idle call.
 ```ts
 createLCR({ models, autoSort: true, resetIntervalMs: 30_000 }); // re-probe every 30s
 ```
+
+## Circuit breaker (`cooldown`)
+
+The recovery timer above re-probes the cheapest provider on a schedule. That's
+the right move for a *brief* outage — but for a provider that's **persistently**
+down, the timer keeps re-probing it, so every window pays one wasted failed
+attempt before falling over. This is exactly where most fallback libraries stop:
+they fail over every time, but never stop hitting the dead endpoint.
+
+Turn on `cooldown` and the router does what a phone network does with a bad
+trunk — **benches it**. A provider that fails `maxFailures` times within
+`windowMs` is *skipped entirely* for `cooldownMs`, instead of being tried on
+every request; a single success clears it.
+
+```ts
+createLCR({
+  models,
+  autoSort: true,
+  cooldown: true, // defaults: 3 failures / 60s → 60s benched
+  // or tune: cooldown: { maxFailures: 5, windowMs: 30_000, cooldownMs: 120_000 }
+});
+```
+
+It can only ever make routing **safer**: the breaker only *reorders* each
+request's attempt list (benched providers move to the back), so if every provider
+is cooling, a request still tries them all rather than failing outright. It's
+**off by default** — unset, no provider is ever skipped and routing is unchanged.
 
 ## Which errors mean what
 
