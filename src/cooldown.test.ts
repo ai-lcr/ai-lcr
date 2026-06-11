@@ -70,7 +70,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Small real-time windows keep these tests fast and free of fake-timer hazards.
 // resetIntervalMs: 1 forces each request to snap back to the cheapest provider,
 // so the ONLY reason a provider goes untried is the cooldown skip — not stickiness.
-const COOLDOWN = { maxFailures: 2, windowMs: 1000, cooldownMs: 50 };
+// windowMs is kept well above any plausible inter-request scheduling delay so a
+// loaded CI can't spread two ~10ms-apart failures outside the window (which would
+// stop the breaker from tripping). cooldownMs stays small so recovery is fast.
+const COOLDOWN = { maxFailures: 2, windowMs: 5000, cooldownMs: 50 };
 
 describe("createLCR — circuit breaker (cooldown)", () => {
   it("skips a provider after it trips, routing straight to the backup", async () => {
@@ -196,7 +199,7 @@ describe("createLCR — circuit breaker (cooldown)", () => {
     const lcr = createLCR({
       models: { m: [a.model, b.model] },
       resetIntervalMs: 1,
-      cooldown: { maxFailures: 1, windowMs: 1000, cooldownMs: 1000 }, // trip on first fail
+      cooldown: { maxFailures: 1, windowMs: 5000, cooldownMs: 1000 }, // trip on first fail
     });
 
     // First request trips BOTH (each fails once).

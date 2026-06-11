@@ -22,6 +22,8 @@ export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind, Cool
 export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isAbortError, shouldFailover } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
+import { MODEL_PRICES } from "./text-prices";
+export { MODEL_PRICES } from "./text-prices";
 
 // ── Image & video Least Cost Routing (parallel to the text router above) ──
 // The text router is LanguageModelV3-bound (token-billed). Media (image/video)
@@ -87,7 +89,35 @@ export type ProviderEntry =
       cost?: ProviderCost;
       /** Label used in cost events / logs. Defaults to the model's provider id. */
       label?: string;
+      /**
+       * Fraction off the bundled list price (0–1) — the reseller-discount knob.
+       * Applied ONLY when `autoPrice` fills this entry from {@link MODEL_PRICES}
+       * (i.e. no explicit `cost`): a flat-discount aggregator like Kunavo (−20%)
+       * becomes `{ model: kunavo("gemini-2.5-pro"), discount: 0.2 }` with no
+       * hand-typed price. Scales input, output, and cacheRead alike. Ignored when
+       * `cost` is set, when `autoPrice` is off, or when no bundled price is found.
+       */
+      discount?: number;
     };
+
+/**
+ * Look up a model's bundled official list price by id. Tries the id as given,
+ * then with a leading `provider/` segment stripped (so `anthropic/claude-haiku-4-5`
+ * resolves the same as `claude-haiku-4-5`). Returns undefined for unknown models.
+ * The table ({@link MODEL_PRICES}) carries native-maker first-party rates only —
+ * see `scripts/gen-text-prices.mjs`.
+ */
+export function getModelPrice(modelId: string): ProviderCost | undefined {
+  if (!modelId) return undefined;
+  const direct = MODEL_PRICES[modelId];
+  if (direct) return direct;
+  const slash = modelId.indexOf("/");
+  if (slash !== -1) {
+    const bare = MODEL_PRICES[modelId.slice(slash + 1)];
+    if (bare) return bare;
+  }
+  return undefined;
+}
 
 export interface LCRConfig {
   /**
@@ -97,6 +127,16 @@ export interface LCRConfig {
   models: Record<string, ProviderEntry[]>;
   /** Sort each model's providers cheapest-first by `cost` before routing. */
   autoSort?: boolean;
+  /**
+   * Fill any provider entry that has no explicit `cost` from the bundled price
+   * table ({@link MODEL_PRICES}), looked up by the entry's `model.modelId`. A
+   * native-vendor route then needs zero hand-typed pricing; a flat-discount
+   * aggregator just adds `discount` (see {@link ProviderEntry}). Off by default —
+   * unpriced entries stay unpriced (the pre-existing behavior), so turning it on
+   * never silently re-prices a model you priced yourself (explicit `cost` always
+   * wins). Pairs naturally with `autoSort` and `onCost`/`onCall`.
+   */
+  autoPrice?: boolean;
   /** Idle window after which routing snaps back to the cheapest provider. Default 60s. */
   resetIntervalMs?: number;
   /**
@@ -152,7 +192,11 @@ function isLanguageModel(entry: ProviderEntry): entry is LanguageModelV3 {
   return typeof (entry as LanguageModelV3).doGenerate === "function";
 }
 
-function normalize(entry: ProviderEntry): RoutedProvider {
+/** A normalized provider plus the config-time-only `discount`, dropped before
+ *  the entry reaches the routing engine. */
+type NormalizedEntry = RoutedProvider & { discount?: number };
+
+function normalize(entry: ProviderEntry): NormalizedEntry {
   if (isLanguageModel(entry)) {
     return { model: entry, label: entry.provider };
   }
@@ -160,7 +204,33 @@ function normalize(entry: ProviderEntry): RoutedProvider {
     model: entry.model,
     label: entry.label ?? entry.model.provider,
     cost: entry.cost,
+    discount: entry.discount,
   };
+}
+
+/** Scale every priced field by `(1 - discount)` — a flat reseller discount
+ *  applies to cached reads as well as input/output. */
+function applyDiscount(cost: ProviderCost, discount: number): ProviderCost {
+  const f = 1 - discount;
+  return {
+    input: cost.input * f,
+    output: cost.output * f,
+    ...(cost.cacheRead !== undefined ? { cacheRead: cost.cacheRead * f } : {}),
+  };
+}
+
+/**
+ * When `autoPrice` is on and an entry left `cost` unset, fill it from the bundled
+ * table by `model.modelId`, applying `discount` if given. Explicit `cost` and
+ * unknown models pass through untouched (cost stays as-is / undefined). Always
+ * strips `discount` so the routing engine never sees it.
+ */
+function withAutoPrice(p: NormalizedEntry, autoPrice: boolean): RoutedProvider {
+  const { discount, ...rest } = p;
+  if (!autoPrice || rest.cost !== undefined) return rest;
+  const base = getModelPrice(rest.model.modelId);
+  if (!base) return rest;
+  return { ...rest, cost: discount !== undefined ? applyDiscount(base, discount) : base };
 }
 
 function priceKey(p: RoutedProvider): number {
@@ -187,6 +257,7 @@ export function createLCR(config: LCRConfig): LCRRouter {
   const {
     models,
     autoSort = false,
+    autoPrice = false,
     resetIntervalMs,
     cooldown,
     onError,
@@ -204,7 +275,16 @@ export function createLCR(config: LCRConfig): LCRRouter {
 
   const routed = new Map<string, LcrFallbackModel>();
   for (const [name, entries] of Object.entries(models)) {
-    let providers = entries.map(normalize).map((p) => withDefaultCacheRead(p, defaultCacheReadRatio));
+    for (const entry of entries) {
+      const d = (entry as { discount?: number }).discount;
+      if (d !== undefined && (d < 0 || d >= 1)) {
+        throw new Error(`ai-lcr: discount must be in [0, 1) for model "${name}", got ${d}`);
+      }
+    }
+    let providers = entries
+      .map(normalize)
+      .map((p) => withAutoPrice(p, autoPrice))
+      .map((p) => withDefaultCacheRead(p, defaultCacheReadRatio));
     if (autoSort) {
       providers = [...providers].sort((a, b) => priceKey(a) - priceKey(b));
     }

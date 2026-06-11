@@ -6,8 +6,6 @@ All notable changes to `ai-lcr` are documented here. The format follows
 
 ## [0.6.2] — 2026-06-11
 
-> Merge after #23 (0.6.1, bundled price table). This entry assumes that landed first.
-
 Circuit breaker for persistently-failing providers. Until now the only recovery
 lever was `resetIntervalMs`, which snaps routing back to the cheapest provider on
 a timer — so a provider that's actually down keeps eating one failed attempt
@@ -36,6 +34,37 @@ every window. The breaker remembers the failure and stops sending it traffic.
 
 - Fully backward compatible. `cooldown` is **off by default** — with it unset no
   provider is ever skipped and routing behaves exactly as before.
+
+## [0.6.1] — 2026-06-11
+
+Zero-config pricing for native-maker routes. Until now every priced provider
+needed a hand-typed `cost: { input, output }`; for a vendor's own API that number
+is just the public list price you could look up. 0.6.1 bundles those.
+
+### Added
+
+- **Bundled price table (`MODEL_PRICES`).** Official first-party token prices for
+  the native makers ai-lcr documents (openai · anthropic · gemini · deepseek ·
+  xai · mistral), keyed by the bare model id you pass to that vendor's AI SDK
+  provider — USD per 1M tokens, with `cacheRead` where the maker prices it.
+  Generated from [LiteLLM's price map](https://github.com/BerriAI/litellm) (MIT)
+  via `scripts/gen-text-prices.mjs`; the generated file is committed.
+- **`getModelPrice(modelId)`.** Look up a bundled price directly; resolves a bare
+  id or one with a leading `provider/` segment stripped.
+- **`createLCR({ autoPrice: true })`.** Fills any provider entry that has no
+  explicit `cost` from the table, by `model.modelId`. A native-vendor route then
+  needs zero hand-typed pricing and `autoSort` can order it.
+- **`discount` on a provider entry.** The flat-reseller knob: `{ model:
+  kunavo("…"), discount: 0.2 }` prices a −20% aggregator off the bundled list
+  price (scaling input/output/cacheRead) with no hand-typed number. Applies only
+  when `autoPrice` fills the entry; out-of-range values throw.
+
+### Compatibility
+
+- Fully backward compatible. `autoPrice` is **off by default** — unpriced entries
+  stay unpriced and an explicit `cost` always wins, so no existing config changes
+  behavior. The table covers native makers only; open-weights hosts (DeepInfra)
+  and breadth aggregators (OpenRouter) are still priced explicitly.
 
 ## [0.6.0] — 2026-06-10
 
