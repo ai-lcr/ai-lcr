@@ -133,6 +133,24 @@ function ReceiptIcon() {
   );
 }
 
+function ShieldIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <path d="M12 3 20 6v6c0 4.5-3.2 7.6-8 9-4.8-1.4-8-4.5-8-9V6l8-3Z" strokeLinejoin="round" />
+      <path d="m9 12 2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <path d="M3.5 12.5 11 5h7v7l-7.5 7.5a1.5 1.5 0 0 1-2.1 0l-4.9-4.9a1.5 1.5 0 0 1 0-2.1Z" strokeLinejoin="round" />
+      <circle cx="15" cy="9" r="1.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export default async function Home() {
   const [stars, version, status] = await Promise.all([getStars(), getVersion(), statusSummary()]);
   const displayVersion = version ?? FALLBACK_VERSION;
@@ -324,6 +342,8 @@ export default async function Home() {
             { icon: <KeyIcon />, accent: "var(--green)", title: "Zero markup, your keys", desc: "Routes straight to each vendor's own API with your own keys — no proxy, no per-token fee, no lock-in." },
             { icon: <LayersIcon />, accent: "var(--blue)", title: `${TEXT_MODEL_COUNT + MODEL_COUNT} models priced`, desc: "Text, image & video routes compared per model. See the cheapest provider for each →", href: "/prices" },
             { icon: <FailoverIcon />, accent: "var(--amber)", title: "Automatic failover", desc: "When a provider errors — even mid-stream — traffic reroutes to the next cheapest healthy one." },
+            { icon: <ShieldIcon />, accent: "var(--green)", title: "Quarantines bad providers", desc: "A circuit breaker most fallback libraries skip: one that keeps failing is benched, not re-probed on every call — then auto-recovered." },
+            { icon: <TagIcon />, accent: "var(--blue)", title: "Zero-config pricing", desc: "A bundled price table prices native-maker routes with no hand-typed cost — add discount for a flat-rate reseller." },
             { icon: <ReceiptIcon />, accent: "var(--violet)", title: "Real cost tracking", desc: "An onCost callback fires the actual USD per call, so you can see and attribute every dollar." },
           ].map((f, i) => {
             const inner = (

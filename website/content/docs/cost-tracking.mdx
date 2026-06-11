@@ -57,7 +57,9 @@ onCall: (rec) => {
 
 For text it's set whenever at least one provider in the list carries a `cost` —
 so **price your providers** (the `cost` field) even if you don't use `autoSort`,
-or there's nothing to compare against.
+or there's nothing to compare against. Don't want to hand-type prices? Set
+`autoPrice: true` and native-maker routes are priced from the bundled
+`MODEL_PRICES` table automatically (see [How routing works](/docs/routing#skip-the-hand-typed-prices-autoprice)).
 
 ## Price-table drift: `estCostUsd` (0.6+)
 
