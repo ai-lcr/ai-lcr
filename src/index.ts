@@ -15,9 +15,10 @@ import {
   type CallRecord,
   type ProviderCost,
   type RoutedProvider,
+  type CooldownOptions,
 } from "./fallback";
 
-export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind } from "./fallback";
+export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind, CooldownOptions } from "./fallback";
 export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isAbortError, shouldFailover } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
@@ -98,6 +99,17 @@ export interface LCRConfig {
   autoSort?: boolean;
   /** Idle window after which routing snaps back to the cheapest provider. Default 60s. */
   resetIntervalMs?: number;
+  /**
+   * Circuit breaker: stop sending traffic to a provider that keeps failing,
+   * instead of re-probing it on every request. A provider that fails enough
+   * times in a window is *skipped* for a cooldown period (one success clears it).
+   * This is sharper than `resetIntervalMs` alone, which blindly re-tries the
+   * cheapest provider on a timer — a provider that's down then eats a failed
+   * attempt every window. `true` enables sensible defaults (3 failures / 60s →
+   * 60s cooldown); pass an object to tune; omit to disable (the default —
+   * unchanged routing, no provider is ever skipped). See {@link CooldownOptions}.
+   */
+  cooldown?: boolean | CooldownOptions;
   /** Called when a provider errors and routing falls through to the next. */
   onError?: (error: Error, provider: string) => void;
   /** Called after each successful call with the serving provider, tokens, and cost. */
@@ -176,6 +188,7 @@ export function createLCR(config: LCRConfig): LCRRouter {
     models,
     autoSort = false,
     resetIntervalMs,
+    cooldown,
     onError,
     onCost,
     onCall,
@@ -197,7 +210,7 @@ export function createLCR(config: LCRConfig): LCRRouter {
     }
     routed.set(
       name,
-      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, onError, onCost, onCall, shouldRetry }),
+      new LcrFallbackModel({ modelName: name, providers, resetIntervalMs, cooldown, onError, onCost, onCall, shouldRetry }),
     );
   }
 

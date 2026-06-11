@@ -235,10 +235,59 @@ export interface CallRecord {
   emptyCompletion?: boolean;
 }
 
+/**
+ * Circuit-breaker tuning for {@link FallbackOptions.cooldown}. A provider that
+ * fails `maxFailures` times within `windowMs` is *skipped* for `cooldownMs` —
+ * not just stepped past per request. Without it, the only recovery lever is the
+ * `resetIntervalMs` snap-back, which blindly re-probes the cheapest provider on
+ * a timer: a provider that's down keeps eating one failed attempt every window.
+ * The breaker remembers the failure and stops sending traffic to it until it's
+ * had time to recover. A single success clears its failure count.
+ */
+export interface CooldownOptions {
+  /** Failures within `windowMs` that trip the breaker for a provider. Default 3. */
+  maxFailures?: number;
+  /** Sliding window over which failures are counted, ms. Default 60_000. */
+  windowMs?: number;
+  /** How long a tripped provider is skipped before it's re-tried, ms. Default 60_000. */
+  cooldownMs?: number;
+}
+
+interface ResolvedCooldown {
+  maxFailures: number;
+  windowMs: number;
+  cooldownMs: number;
+}
+
+const COOLDOWN_DEFAULTS: ResolvedCooldown = {
+  maxFailures: 3,
+  windowMs: 60_000,
+  cooldownMs: 60_000,
+};
+
+/** Normalize the public `cooldown` option to a resolved config, or `undefined`
+ *  when disabled (the default) — in which case routing behaves exactly as before
+ *  (no provider is ever skipped, only stepped past per request). */
+function resolveCooldown(opt: boolean | CooldownOptions | undefined): ResolvedCooldown | undefined {
+  if (!opt) return undefined;
+  if (opt === true) return { ...COOLDOWN_DEFAULTS };
+  return {
+    maxFailures: opt.maxFailures ?? COOLDOWN_DEFAULTS.maxFailures,
+    windowMs: opt.windowMs ?? COOLDOWN_DEFAULTS.windowMs,
+    cooldownMs: opt.cooldownMs ?? COOLDOWN_DEFAULTS.cooldownMs,
+  };
+}
+
 export interface FallbackOptions {
   modelName: string;
   providers: RoutedProvider[];
   resetIntervalMs?: number;
+  /**
+   * Circuit breaker: skip a provider that keeps failing instead of re-probing it
+   * every request. `true` for sensible defaults, an object to tune, omitted to
+   * disable (the default — pre-existing behavior). See {@link CooldownOptions}.
+   */
+  cooldown?: boolean | CooldownOptions;
   onError?: (error: Error, provider: string) => void;
   onCost?: (event: CostEvent) => void;
   /** Called once per settled request with the full failover chain. See {@link CallRecord}. */
@@ -569,10 +618,12 @@ export class LcrFallbackModel implements LanguageModelV3 {
 
   // Cross-request *hint* for where the next request starts: after a failover we
   // remember the provider that worked so we don't re-probe a dead cheap one on
-  // every call. This is the ONLY shared mutable state — and crucially it is read
-  // once per request (snapshotted into a local cursor) and written once on
-  // settle, never used as a per-request loop bound. The within-request iteration
-  // is fully local, so concurrent requests can't corrupt each other's routing.
+  // every call. Shared mutable state, but read once per request (snapshotted into
+  // a local cursor) and written once on settle, never used as a per-request loop
+  // bound. The within-request iteration is fully local, so concurrent requests
+  // can't corrupt each other's routing. The cooldown state below shares the same
+  // discipline: it's a cross-request hint that only ever *reorders* the local
+  // attempt list, never bounds it.
   private sticky = 0;
   // When `sticky` was last advanced (a failover). The re-probe timer measures
   // from THIS, not from the last call — so it fires under sustained traffic too,
@@ -580,11 +631,77 @@ export class LcrFallbackModel implements LanguageModelV3 {
   private lastFailoverAt = Date.now();
   private readonly resetIntervalMs: number;
 
+  // Circuit breaker (undefined = disabled). Per-provider, parallel to `providers`:
+  // `failures[i]` is the timestamps of recent failures within the window, and
+  // `cooldownUntil[i]` is the time before which provider i is skipped. Both are
+  // cross-request hints — like `sticky`, eventually consistent under concurrency
+  // and never used to bound a request's local iteration.
+  private readonly cooldown: ResolvedCooldown | undefined;
+  private readonly failures: number[][];
+  private readonly cooldownUntil: number[];
+
   constructor(private readonly opts: FallbackOptions) {
     if (opts.providers.length === 0) {
       throw new Error(`ai-lcr: model "${opts.modelName}" has no providers`);
     }
     this.resetIntervalMs = opts.resetIntervalMs ?? 60_000;
+    this.cooldown = resolveCooldown(opts.cooldown);
+    this.failures = opts.providers.map(() => []);
+    this.cooldownUntil = opts.providers.map(() => 0);
+  }
+
+  /** Is provider `idx` currently cooling down (skipped)? Always false when the
+   *  breaker is disabled, so callers need no extra guard. */
+  private isCooling(idx: number, now: number): boolean {
+    return this.cooldown !== undefined && this.cooldownUntil[idx]! > now;
+  }
+
+  /** Record a failed attempt on provider `idx`; trip its breaker once failures
+   *  within the window reach `maxFailures`. No-op when the breaker is disabled. */
+  private recordProviderFailure(idx: number): void {
+    const cd = this.cooldown;
+    if (cd === undefined) return;
+    const now = Date.now();
+    const recent = this.failures[idx]!.filter((t) => now - t < cd.windowMs);
+    recent.push(now);
+    if (recent.length >= cd.maxFailures) {
+      this.cooldownUntil[idx] = now + cd.cooldownMs;
+      this.failures[idx] = []; // reset the counter once tripped
+    } else {
+      this.failures[idx] = recent;
+    }
+  }
+
+  /** A success on provider `idx` clears its failure history and any cooldown —
+   *  the breaker is about *sustained* failure, so one good call resets it. */
+  private recordProviderSuccess(idx: number): void {
+    if (this.cooldown === undefined) return;
+    if (this.failures[idx]!.length > 0) this.failures[idx] = [];
+    if (this.cooldownUntil[idx]! !== 0) this.cooldownUntil[idx] = 0;
+  }
+
+  /**
+   * The order of provider indices to try this request: the cheapest-first ring
+   * starting at `start`, but with currently-cooling providers moved to the BACK
+   * (last-resort, soonest-to-expire first) so the breaker skips them without ever
+   * dropping a provider — if every provider is cooling we still try them all
+   * rather than fail the request outright. With the breaker disabled this is just
+   * the plain ring, identical to the previous modular iteration. Computed once
+   * per request and threaded through any stream failover, so it's a stable local
+   * snapshot (concurrent requests can't reshuffle a request mid-flight).
+   */
+  private routeOrder(start: number): number[] {
+    const n = this.opts.providers.length;
+    const ring: number[] = [];
+    for (let k = 0; k < n; k++) ring.push((start + k) % n);
+    if (this.cooldown === undefined) return ring;
+    const now = Date.now();
+    const live = ring.filter((i) => !this.isCooling(i, now));
+    if (live.length === 0 || live.length === n) return ring;
+    const cooling = ring
+      .filter((i) => this.isCooling(i, now))
+      .sort((a, b) => this.cooldownUntil[a]! - this.cooldownUntil[b]!);
+    return [...live, ...cooling];
   }
 
   private get current(): RoutedProvider {
@@ -668,9 +785,11 @@ export class LcrFallbackModel implements LanguageModelV3 {
     };
   }
 
-  /** Record a failed attempt onto the call's chain (no event yet). */
+  /** Record a failed attempt onto the call's chain (no event yet) and count it
+   *  toward provider `idx`'s circuit breaker. */
   private recordFail(
     ctx: CallCtx,
+    idx: number,
     provider: RoutedProvider,
     attemptStart: number,
     error: unknown,
@@ -683,6 +802,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       errorClass: classifyError(error),
       kind: classifyErrorKind(error),
     });
+    this.recordProviderFailure(idx);
   }
 
   /**
@@ -781,14 +901,14 @@ export class LcrFallbackModel implements LanguageModelV3 {
   ): Promise<LanguageModelV3GenerateResult> {
     const ctx = this.startCall(options);
     const providers = this.opts.providers;
-    const n = providers.length;
-    const start = this.startIndex();
+    // Snapshot the attempt order once (cheapest-first ring, cooling providers to
+    // the back). Termination is the local position in `order`, never shared state.
+    const order = this.routeOrder(this.startIndex());
     let lastError: unknown;
-    // Local cursor + counter: each request walks every provider once, starting
-    // from `start`. Termination is the local `tried` count, never shared state.
-    for (let tried = 0; tried < n; tried++) {
-      const idx = (start + tried) % n;
+    for (let pos = 0; pos < order.length; pos++) {
+      const idx = order[pos]!;
       const provider = providers[idx]!;
+      const isLast = pos === order.length - 1;
       const attemptStart = Date.now();
       try {
         const result = await provider.model.doGenerate(options);
@@ -799,25 +919,26 @@ export class LcrFallbackModel implements LanguageModelV3 {
         // escalating a blank into a hard request failure with nowhere to turn.
         const out = result.usage?.outputTokens?.total ?? 0;
         const inp = result.usage?.inputTokens?.total ?? 0;
-        if (inp > 0 && out === 0 && tried < n - 1) {
+        if (inp > 0 && out === 0 && !isLast) {
           const emptyErr = new EmptyCompletionError(provider.label);
           lastError = emptyErr;
           this.emitError(emptyErr, provider.label);
-          this.recordFail(ctx, provider, attemptStart, emptyErr);
+          this.recordFail(ctx, idx, provider, attemptStart, emptyErr);
           continue;
         }
+        this.recordProviderSuccess(idx);
         this.settleSticky(idx);
         this.finalizeOk(ctx, provider, attemptStart, result.usage);
         return result;
       } catch (error) {
         lastError = error;
         if (!this.shouldRetry(error)) {
-          this.recordFail(ctx, provider, attemptStart, error);
+          this.recordFail(ctx, idx, provider, attemptStart, error);
           this.finalizeFail(ctx);
           throw error;
         }
         this.emitError(error, provider.label);
-        this.recordFail(ctx, provider, attemptStart, error);
+        this.recordFail(ctx, idx, provider, attemptStart, error);
       }
     }
     this.finalizeFail(ctx);
@@ -827,33 +948,34 @@ export class LcrFallbackModel implements LanguageModelV3 {
   async doStream(
     options: LanguageModelV3CallOptions,
   ): Promise<LanguageModelV3StreamResult> {
-    return this.doStreamWithCtx(options, this.startCall(options), this.startIndex(), 0);
+    return this.doStreamWithCtx(options, this.startCall(options), this.routeOrder(this.startIndex()), 0);
   }
 
-  // The stream's failover recursion re-enters here with the SAME `ctx` and a
-  // threaded-through local cursor (`idx`/`tried`), so a mid-stream switch keeps
-  // appending to one CallRecord and bounds itself on the local `tried` count —
-  // never on shared instance state. `finalizeOk`/`finalizeFail` fire exactly
-  // once per outer request.
+  // The stream's failover recursion re-enters here with the SAME `ctx` and the
+  // SAME `order` snapshot, advancing only the local position `pos`, so a
+  // mid-stream switch keeps appending to one CallRecord and bounds itself on the
+  // local position — never on shared instance state. `finalizeOk`/`finalizeFail`
+  // fire exactly once per outer request.
   private async doStreamWithCtx(
     options: LanguageModelV3CallOptions,
     ctx: CallCtx,
-    startIdx: number,
-    alreadyTried: number,
+    order: number[],
+    pos: number,
   ): Promise<LanguageModelV3StreamResult> {
     const self = this;
     const providers = this.opts.providers;
-    const n = providers.length;
+    const n = order.length;
 
     // Phase 1: obtain a stream that starts without throwing, switching on a
-    // pre-stream error (e.g. a 401/429 before the first chunk). `tried` counts
-    // failed providers so far (including any from a prior recursion level).
+    // pre-stream error (e.g. a 401/429 before the first chunk). `p` walks the
+    // pre-snapshotted attempt order from `pos` onward.
     let result: LanguageModelV3StreamResult;
     let serving: RoutedProvider;
     let servingStart: number;
-    let idx = startIdx;
-    let tried = alreadyTried;
+    let p = pos;
+    let idx = order[p]!;
     for (;;) {
+      idx = order[p]!;
       serving = providers[idx]!;
       servingStart = Date.now();
       try {
@@ -861,25 +983,24 @@ export class LcrFallbackModel implements LanguageModelV3 {
         break;
       } catch (error) {
         if (!this.shouldRetry(error)) {
-          this.recordFail(ctx, serving, servingStart, error);
+          this.recordFail(ctx, idx, serving, servingStart, error);
           this.finalizeFail(ctx);
           throw error;
         }
         this.emitError(error, serving.label);
-        this.recordFail(ctx, serving, servingStart, error);
-        tried++;
-        if (tried >= n) {
+        this.recordFail(ctx, idx, serving, servingStart, error);
+        p++;
+        if (p >= n) {
           this.finalizeFail(ctx);
           throw ctx.firstError ?? error;
         }
-        idx = (idx + 1) % n;
       }
     }
 
     const servingProvider = serving;
     const servingAttemptStart = servingStart;
     const servingIdx = idx;
-    const triedBeforeServing = tried;
+    const servingPos = p;
     let usage: LanguageModelV3GenerateResult["usage"] | undefined;
     // "Has the consumer seen real content yet?" — gates failover. Deliberately
     // tracks *content* (see CONTENT_PART_TYPES), not "any chunk": stream-start,
@@ -918,7 +1039,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
               // rather than turn a blank into a hard stream error.
               const out = value.usage?.outputTokens?.total ?? 0;
               const inp = value.usage?.inputTokens?.total ?? 0;
-              if (inp > 0 && out === 0 && !contentStreamed && triedBeforeServing + 1 < n) {
+              if (inp > 0 && out === 0 && !contentStreamed && servingPos + 1 < n) {
                 throw new EmptyCompletionError(servingProvider.label);
               }
             }
@@ -928,30 +1049,26 @@ export class LcrFallbackModel implements LanguageModelV3 {
             controller.enqueue(value);
             if (CONTENT_PART_TYPES.has(value.type)) contentStreamed = true;
           }
+          self.recordProviderSuccess(servingIdx);
           self.settleSticky(servingIdx);
           self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage, ttftMs);
           controller.close();
         } catch (error) {
           self.emitError(error, servingProvider.label);
-          self.recordFail(ctx, servingProvider, servingAttemptStart, error);
+          self.recordFail(ctx, servingIdx, servingProvider, servingAttemptStart, error);
           if (!contentStreamed) {
-            // This serving provider is now also a failure → bump the count and
-            // bail if every provider has been tried.
-            const nextTried = triedBeforeServing + 1;
-            if (nextTried >= n) {
+            // This serving provider is now also a failure → advance the position
+            // and bail if every provider in the order has been tried.
+            const nextPos = servingPos + 1;
+            if (nextPos >= n) {
               self.finalizeFail(ctx);
               controller.error(ctx.firstError ?? error);
               return;
             }
-            // Re-enter on the next provider with the SAME ctx and threaded
-            // cursor, so its attempts and final event belong to one CallRecord.
+            // Re-enter on the next provider with the SAME ctx and order snapshot,
+            // so its attempts and final event belong to one CallRecord.
             try {
-              const next = await self.doStreamWithCtx(
-                options,
-                ctx,
-                (servingIdx + 1) % n,
-                nextTried,
-              );
+              const next = await self.doStreamWithCtx(options, ctx, order, nextPos);
               const nextReader = next.stream.getReader();
               try {
                 for (;;) {
