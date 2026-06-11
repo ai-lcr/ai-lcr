@@ -138,6 +138,33 @@ const lcr = createLCR({
 
 DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. For those closed models, route through OpenRouter or a discount gateway instead.
 
+## Zero-config pricing (`autoPrice`)
+
+Typing `cost: { input, output }` for every provider is the tedious part. `autoPrice: true` fills any entry that has no explicit `cost` from a **bundled price table** (`MODEL_PRICES`) — official first-party rates for the native makers (OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral), keyed by the bare model id you already pass to the provider:
+
+```ts
+const lcr = createLCR({
+  autoPrice: true,   // fill missing costs from the bundled table
+  autoSort: true,    // then order cheapest-first using those prices
+  models: {
+    "claude-sonnet": [
+      // Native API — price comes from the table, nothing to type.
+      { model: anthropic("claude-sonnet-4-6"), label: "anthropic" },
+      // Flat-discount aggregator — `discount` applies on top of the list price.
+      { model: kunavo("claude-sonnet-4-6"), label: "kunavo", discount: 0.2 }, // 20% off list
+    ],
+  },
+});
+```
+
+Three rules keep it predictable:
+
+- **Off by default.** Unpriced entries stay unpriced (the pre-existing behavior), so turning `autoPrice` on never silently re-prices a model — and an **explicit `cost` always wins** over the table.
+- **`discount` is the reseller knob.** A flat-% aggregator (Kunavo −20%) becomes `discount: 0.2` instead of a hand-typed number; it scales input, output, and `cacheRead` alike, and only applies when the table fills the entry. Variable-discount providers (TokenMart) still want explicit per-model `cost`.
+- **Native makers only.** The table carries first-party list prices — the cheapest, most-featureful "go direct" route. Open-weights hosts (DeepInfra) and breadth aggregators (OpenRouter) aren't in it; price those explicitly.
+
+Look a price up yourself with `getModelPrice("claude-sonnet-4-6")`. The table is generated from [LiteLLM's price map](https://github.com/BerriAI/litellm) (MIT) — refresh with `node scripts/gen-text-prices.mjs`.
+
 ## How it routes
 
 1. **Cheapest first.** Providers are tried in order — list them cheapest-first, or set `autoSort: true` to order them by `cost` automatically.
@@ -467,7 +494,7 @@ Two OpenAI-compatible providers, same probe, same day. Cells cover both families
 - [x] One correlated record per request with the full failover chain (`onCall` + `formatCallRecord`)
 - [x] Auto cheapest-first ordering (`autoSort`) from per-provider `cost`
 - [x] Offline capability + cost check (`scripts/check-provider.sh`) → per-model trust matrix
-- [ ] Bundled price table for zero-config pricing (drop the manual `cost` numbers)
+- [x] Bundled price table for zero-config pricing (`autoPrice` + `MODEL_PRICES`) — drop the manual `cost` numbers for native-maker routes
 - [ ] Provider-quirk middleware (transparently patch known per-provider request quirks, e.g. Kunavo's ignored `max_tokens`)
 - [ ] Feed probe results into routing automatically (auto-exclude a model from a provider that fails its probe)
 - [x] Image & video model routing (`createMediaLCR`) — image via Kunavo (incl. `*-edit`) + Runware + fal; video async (`submit`/`poll`) via fal, Kunavo, and Runware
