@@ -22,6 +22,8 @@ export type { CostEvent, CallRecord, RouteAttempt, ProviderCost, ErrorKind, Cool
 export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isAbortError, shouldFailover } from "./fallback";
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
+export { createEnvSink } from "./env-sink";
+export { DEFAULT_PROVIDERS, type ProviderConfig, type DefaultProviderId } from "./providers";
 import { resolveCache, type CacheStore, type CacheOptions } from "./cache";
 import { resolvePromptCache, type PromptCacheOptions } from "./prompt-cache";
 export { createMemoryCacheStore } from "./cache";
@@ -82,14 +84,26 @@ export { createRunwareMediaAdapter } from "./adapters/runware-media";
 export { createFalMediaAdapter } from "./adapters/fal-media";
 
 /**
+ * Any object with the `doGenerate` + `doStream` shape — accepts LanguageModelV3
+ * from any version of `@ai-sdk/provider` so consumers don't need a cast when
+ * their transitive `@ai-sdk/provider` version differs from ai-lcr's.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyLanguageModel = { doGenerate: (...args: any[]) => any; doStream: (...args: any[]) => any; provider: string; modelId: string };
+
+/**
  * A provider for a model: either a bare AI SDK model (e.g.
  * `createOpenAICompatible(...)("id")`), or that model wrapped with price/label
  * metadata to unlock cost accounting and cheapest-first auto-sorting.
+ *
+ * `model` accepts any AI SDK language model — both LanguageModelV3 and
+ * compatible shapes from other `@ai-sdk/provider` versions — so consumers
+ * never need an `as` cast at the boundary.
  */
 export type ProviderEntry =
-  | LanguageModelV3
+  | AnyLanguageModel
   | {
-      model: LanguageModelV3;
+      model: AnyLanguageModel;
       /** USD per 1M tokens. Enables `onCost` and `autoSort`. */
       cost?: ProviderCost;
       /** Label used in cost events / logs. Defaults to the model's provider id. */
@@ -221,8 +235,8 @@ export interface LCRConfig {
 /** Resolve a logical model name to a routed model. */
 export type LCRRouter = (modelName: string) => LanguageModelV3;
 
-function isLanguageModel(entry: ProviderEntry): entry is LanguageModelV3 {
-  return typeof (entry as LanguageModelV3).doGenerate === "function";
+function isLanguageModel(entry: ProviderEntry): entry is AnyLanguageModel {
+  return typeof (entry as AnyLanguageModel).doGenerate === "function";
 }
 
 /** A normalized provider plus the config-time-only `discount`, dropped before
@@ -231,10 +245,10 @@ type NormalizedEntry = RoutedProvider & { discount?: number };
 
 function normalize(entry: ProviderEntry): NormalizedEntry {
   if (isLanguageModel(entry)) {
-    return { model: entry, label: entry.provider };
+    return { model: entry as unknown as LanguageModelV3, label: entry.provider };
   }
   return {
-    model: entry.model,
+    model: entry.model as unknown as LanguageModelV3,
     label: entry.label ?? entry.model.provider,
     cost: entry.cost,
     discount: entry.discount,
