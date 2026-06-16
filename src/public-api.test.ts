@@ -21,6 +21,9 @@ const EXPECTED_EXPORTS = [
   "classifyErrorKind",
   "formatCallRecord",
   "createHttpSink",
+  "createEnvSink",
+  // shared provider configs
+  "DEFAULT_PROVIDERS",
   // error predicates (failover policy / custom shouldRetry building blocks)
   "isRetryableError",
   "isNetworkError",

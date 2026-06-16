@@ -4,6 +4,23 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.4] — 2026-06-16
+
+DX improvements that eliminate per-project boilerplate for consumers.
+
+### Added
+
+- **`DEFAULT_PROVIDERS`** — canonical URL + env-var-name for common providers
+  (openrouter, deepinfra, tokenmart, deepseek, kunavo, runware, fal). Import
+  instead of redeclaring in every app; a URL change propagates on `npm update`.
+- **`createEnvSink(dispatch)`** — reads `LCR_INGEST_URL` / `LCR_PROJECT` /
+  `LCR_INGEST_KEY` from env and returns a ready-to-use `onCall` handler (or
+  `undefined` when unset). Replaces the identical 30-line `sink.ts` every
+  consumer was copy-pasting. Pass `after` from `next/server` as `dispatch`.
+- **`AnyLanguageModel`** — duck-typed model interface on `ProviderEntry` so
+  consumers no longer need `as` casts when their `@ai-sdk/provider` version
+  differs from ai-lcr's. Runtime behavior unchanged.
+
 ## [0.6.3] — 2026-06-11
 
 Caching — both kinds, each off by default and each a pure config flag with no
