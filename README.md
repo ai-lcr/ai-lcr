@@ -96,7 +96,7 @@ const lcr = createLCR({
 });
 ```
 
-The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. They all return `LanguageModelV3`, so you can mix a native vendor API with aggregators in one model's list. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad. **Official-first + aggregator-fallback** is the natural LCR shape.
+The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. `ProviderEntry` accepts `AnyLanguageModel` — a duck-typed interface (`doGenerate` + `doStream` + `provider` + `modelId`) that any AI SDK model satisfies regardless of spec version (V2 or V3), so you never need `as`-casts at the integration boundary. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad. **Official-first + aggregator-fallback** is the natural LCR shape.
 
 ## Cheapest route for open-weights models (DeepInfra)
 
@@ -137,6 +137,47 @@ const lcr = createLCR({
 ```
 
 DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. For those closed models, route through OpenRouter or a discount gateway instead.
+
+## Skip the boilerplate (`DEFAULT_PROVIDERS`)
+
+Every project that routes through OpenRouter, DeepInfra, TokenMart, DeepSeek, etc. redeclares the same `baseURL` + `apiKeyEnv` pair. `DEFAULT_PROVIDERS` is a bundled dictionary — import what you need instead of copy-pasting URLs:
+
+```ts
+import { DEFAULT_PROVIDERS } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+// Pick the providers you use — type-safe, no hardcoded URLs.
+const deepinfra = createOpenAICompatible({
+  name: "deepinfra",
+  baseURL: DEFAULT_PROVIDERS.deepinfra.baseURL,
+  apiKey: process.env[DEFAULT_PROVIDERS.deepinfra.apiKeyEnv],
+});
+```
+
+Available providers:
+
+| Key | Base URL | Env var |
+|---|---|---|
+| `openrouter` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| `deepinfra` | `https://api.deepinfra.com/v1/openai` | `DEEPINFRA_API_KEY` |
+| `tokenmart` | `https://model.service-inference.ai/v1` | `INFERENCE_API_KEY` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| `kunavo` | `https://api.kunavo.com/v1` | `KUNAVO_API_KEY` |
+| `runware` | `https://api.runware.ai/v1` | `RUNWARE_API_KEY` |
+| `fal` | `https://queue.fal.run` | `FAL_KEY` |
+
+A common pattern is to subset `DEFAULT_PROVIDERS` into a project-local type for compile-time safety:
+
+```ts
+import { DEFAULT_PROVIDERS } from "ai-lcr";
+
+type ProviderId = "deepinfra" | "openrouter";
+
+export const PROVIDERS = {
+  deepinfra: DEFAULT_PROVIDERS.deepinfra,
+  openrouter: DEFAULT_PROVIDERS.openrouter,
+} satisfies Record<ProviderId, { baseURL: string; apiKeyEnv: string }>;
+```
 
 ## Zero-config pricing (`autoPrice`)
 
@@ -314,6 +355,26 @@ const lcr = createLCR({
   }),
 });
 ```
+
+### Convention-based sink (`createEnvSink`)
+
+If your app uses the standard env vars (`LCR_INGEST_URL`, `LCR_PROJECT`, `LCR_INGEST_KEY`), you don't need to wire `createHttpSink` at all — `createEnvSink` reads them for you and returns a ready-to-use `onCall` handler (or `undefined` when `LCR_INGEST_URL` is unset, so local dev stays quiet):
+
+```ts
+import { createEnvSink } from "ai-lcr";
+import { after } from "next/server";
+
+export const lcrCallSink = createEnvSink(after);
+// → use as `onCall: lcrCallSink` in createLCR
+```
+
+The only required argument is `dispatch` — a framework-specific fire-and-forget runner (Next.js: `after`, Cloudflare: `ctx.waitUntil`, plain servers: `(fn) => fn()`). Env vars:
+
+| Var | Required | Description |
+|---|---|---|
+| `LCR_INGEST_URL` | yes (no URL → sink is `undefined`) | Dashboard origin, e.g. `https://lcr.ideamarketfit.com` |
+| `LCR_PROJECT` | no | Project tag merged into each payload; falls back to `SITE_KEY` |
+| `LCR_INGEST_KEY` | no | Bearer token (only if the dashboard sets `INGEST_KEY`) |
 
 ### The companion dashboard ([`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard))
 

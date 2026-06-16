@@ -96,7 +96,7 @@ const lcr = createLCR({
 });
 ```
 
-同样的模式适用于任何厂商的原生 SDK provider——`@ai-sdk/anthropic`、`@ai-sdk/google`、`@ai-sdk/openai`、`@ai-sdk/xai` 等等。它们都返回 `LanguageModelV3`，所以你可以在一个模型的列表里把厂商原生 API 和聚合器混着用。原生 API 覆盖窄（只有该厂商自己的模型）但特性全；聚合器覆盖广。**官方优先 + 聚合器兜底** 正是 LCR 最自然的形态。
+同样的模式适用于任何厂商的原生 SDK provider——`@ai-sdk/anthropic`、`@ai-sdk/google`、`@ai-sdk/openai`、`@ai-sdk/xai` 等等。`ProviderEntry` 接受 `AnyLanguageModel`——一个鸭子类型接口（`doGenerate` + `doStream` + `provider` + `modelId`），任何 AI SDK model 无论 V2 还是 V3 spec 都满足，集成边界无需 `as` 强转。原生 API 覆盖窄（只有该厂商自己的模型）但特性全；聚合器覆盖广。**官方优先 + 聚合器兜底** 正是 LCR 最自然的形态。
 
 ## 开源权重模型的最便宜路由（DeepInfra）
 
@@ -137,6 +137,47 @@ const lcr = createLCR({
 ```
 
 DeepInfra 只承载开源权重——没有第一方 Claude / GPT / Gemini。那些闭源模型请走 OpenRouter 或折扣中转。
+
+## 省掉样板代码（`DEFAULT_PROVIDERS`）
+
+每个路由 OpenRouter、DeepInfra、TokenMart、DeepSeek 等的项目都要重复声明相同的 `baseURL` + `apiKeyEnv`。`DEFAULT_PROVIDERS` 是一份内置字典——import 你需要的那几个就行，不用再复制粘贴 URL：
+
+```ts
+import { DEFAULT_PROVIDERS } from "ai-lcr";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+// 按需取——类型安全，无硬编码 URL。
+const deepinfra = createOpenAICompatible({
+  name: "deepinfra",
+  baseURL: DEFAULT_PROVIDERS.deepinfra.baseURL,
+  apiKey: process.env[DEFAULT_PROVIDERS.deepinfra.apiKeyEnv],
+});
+```
+
+可用 provider：
+
+| Key | Base URL | Env 变量 |
+|---|---|---|
+| `openrouter` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| `deepinfra` | `https://api.deepinfra.com/v1/openai` | `DEEPINFRA_API_KEY` |
+| `tokenmart` | `https://model.service-inference.ai/v1` | `INFERENCE_API_KEY` |
+| `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| `kunavo` | `https://api.kunavo.com/v1` | `KUNAVO_API_KEY` |
+| `runware` | `https://api.runware.ai/v1` | `RUNWARE_API_KEY` |
+| `fal` | `https://queue.fal.run` | `FAL_KEY` |
+
+常见用法是取 `DEFAULT_PROVIDERS` 的子集，并声明一个项目级类型保证编译安全：
+
+```ts
+import { DEFAULT_PROVIDERS } from "ai-lcr";
+
+type ProviderId = "deepinfra" | "openrouter";
+
+export const PROVIDERS = {
+  deepinfra: DEFAULT_PROVIDERS.deepinfra,
+  openrouter: DEFAULT_PROVIDERS.openrouter,
+} satisfies Record<ProviderId, { baseURL: string; apiKeyEnv: string }>;
+```
 
 ## 它如何路由
 
@@ -221,7 +262,17 @@ interface CallRecord {
 
 **节约怎么算才诚实：** `baselineKind` 说明 `baselineUsd` 是哪种基线——文本是**链尾兜底 provider 的列表价**（`"last-leg"`，故意不取最贵的一条：prompt 缓存可能让标价更便宜的那家在缓存重的调用上反而更贵，取最大值会凭空造出"节约"）；媒体是**模型厂商官方第一方价**（`"official"`，按实际秒数算），查不到官方价时退化为你配置里最贵的路由（`"priciest-route"`，自我参照，仅说明跨 provider 价差）。
 
-**送进收集器：** `createHttpSink` 把每条记录 POST 到任意 endpoint（serverless 上传 Next.js 的 `after` 作 `dispatch` 防止被掐断）。配套的自托管 dashboard [`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard)（Next.js + Postgres，Vercel 一键部署）专为这些记录而建：花费 vs 节约趋势、各 provider failover 健康度、媒体 $/秒 与 $/张、以及**价格漂移面板**——某条 model@provider 路由的实报账单与价格表偏差超过 ±20% 时点名示警（约 100× 基本就是美元当美分的笔误）。只存元数据，不存 prompt 和输出。
+**送进收集器：** `createHttpSink` 把每条记录 POST 到任意 endpoint（serverless 上传 Next.js 的 `after` 作 `dispatch` 防止被掐断）。如果你用标准环境变量（`LCR_INGEST_URL`、`LCR_PROJECT`、`LCR_INGEST_KEY`），`createEnvSink` 全部替你读好——三行搞定：
+
+```ts
+import { createEnvSink } from "ai-lcr";
+import { after } from "next/server";
+export const lcrCallSink = createEnvSink(after);
+```
+
+`LCR_INGEST_URL` 不设 → sink 是 `undefined`，本地开发自动静默。唯一必传参数是 `dispatch`——框架相关的 fire-and-forget runner（Next.js: `after`；Cloudflare: `ctx.waitUntil`；长驻服务: `(fn) => fn()`）。
+
+配套的自托管 dashboard [`ai-lcr-dashboard`](https://github.com/ai-lcr/ai-lcr-dashboard)（Next.js + Postgres，Vercel 一键部署）专为这些记录而建：花费 vs 节约趋势、各 provider failover 健康度、媒体 $/秒 与 $/张、以及**价格漂移面板**——某条 model@provider 路由的实报账单与价格表偏差超过 ±20% 时点名示警（约 100× 基本就是美元当美分的笔误）。只存元数据，不存 prompt 和输出。
 
 ## 支持的 provider
 
