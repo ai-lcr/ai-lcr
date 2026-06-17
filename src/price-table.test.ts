@@ -45,6 +45,15 @@ describe("MODEL_PRICES (bundled table)", () => {
     expect(MODEL_PRICES["claude-haiku-4-5"]).toBeDefined();
     expect(MODEL_PRICES["deepseek-chat"]).toBeDefined();
   });
+
+  it("includes the open-weights makers (Qwen · Kimi · MiniMax · GLM)", () => {
+    // The generator's ALLOW set must keep covering the open-weights labs the
+    // README names alongside DeepSeek — guard against a refresh that drops them.
+    expect(MODEL_PRICES["qwen-plus"]).toBeDefined(); // Qwen (Alibaba / dashscope)
+    expect(MODEL_PRICES["kimi-k2.5"]).toBeDefined(); // Kimi (Moonshot)
+    expect(MODEL_PRICES["MiniMax-M2"]).toBeDefined(); // MiniMax
+    expect(MODEL_PRICES["glm-4.6"]).toBeDefined(); // GLM (Z.ai)
+  });
 });
 
 describe("getModelPrice", () => {
