@@ -4,6 +4,31 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.5] — 2026-06-16
+
+Bundled price table now covers the open-weights labs, not just the Western
+proprietary makers — so `autoPrice` resolves Qwen, Kimi, MiniMax, and GLM routes
+out of the box (previously they needed a hand-typed `cost`).
+
+### Added
+
+- **`MODEL_PRICES` now includes the open-weights makers** — Qwen (Alibaba /
+  `dashscope`), Kimi (Moonshot), MiniMax, and GLM (Z.ai), alongside the existing
+  DeepSeek. 55 new first-party list prices (229 → 284 entries), keyed by each
+  maker's own bare model id (`qwen-plus`, `kimi-k2.5`, `MiniMax-M2`, `glm-4.6`,
+  …). The generator's `ALLOW` set gained `dashscope` / `moonshot` / `minimax` /
+  `zai`; no existing price changed.
+
+### Notes
+
+- These are **first-party** list rates (the maker's own API). A dedicated
+  inference *host* (DeepInfra, …) is often cheaper and uses HF-style ids
+  (`Qwen/Qwen3-…`) that won't match these bare keys — for an aggregator route,
+  keep passing an explicit `cost` or `discount`. The bundled rate is the
+  `autoPrice` baseline for the maker's own provider and a reference for the rest.
+- Aggregators (deepinfra, together, fireworks, groq, openrouter) remain
+  deliberately excluded from the table — their prices drift per-model.
+
 ## [0.6.4] — 2026-06-16
 
 DX improvements that eliminate per-project boilerplate for consumers.

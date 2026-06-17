@@ -32,9 +32,9 @@ priority by hand — useful when you'd rather rank by reliability than price.
 For a vendor's own API the `cost` numbers are just the public list price. Set
 `autoPrice: true` and the router fills any entry that has no explicit `cost` from
 a **bundled price table** (`MODEL_PRICES`) — first-party rates for the native
-makers (OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral), keyed by the bare
-model id you already pass to the provider. A flat-rate reseller just adds
-`discount`:
+makers (OpenAI, Anthropic, Google, xAI, Mistral, plus the open-weights labs
+DeepSeek, Qwen, Kimi, MiniMax, GLM), keyed by the bare model id you already pass
+to the provider. A flat-rate reseller just adds `discount`:
 
 ```ts
 createLCR({

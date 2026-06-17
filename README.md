@@ -181,7 +181,7 @@ export const PROVIDERS = {
 
 ## Zero-config pricing (`autoPrice`)
 
-Typing `cost: { input, output }` for every provider is the tedious part. `autoPrice: true` fills any entry that has no explicit `cost` from a **bundled price table** (`MODEL_PRICES`) — official first-party rates for the native makers (OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral), keyed by the bare model id you already pass to the provider:
+Typing `cost: { input, output }` for every provider is the tedious part. `autoPrice: true` fills any entry that has no explicit `cost` from a **bundled price table** (`MODEL_PRICES`) — official first-party rates for the native makers (OpenAI, Anthropic, Google, xAI, Mistral, plus the open-weights labs DeepSeek, Qwen, Kimi, MiniMax, GLM), keyed by the bare model id you already pass to the provider:
 
 ```ts
 const lcr = createLCR({
@@ -202,7 +202,7 @@ Three rules keep it predictable:
 
 - **Off by default.** Unpriced entries stay unpriced (the pre-existing behavior), so turning `autoPrice` on never silently re-prices a model — and an **explicit `cost` always wins** over the table.
 - **`discount` is the reseller knob.** A flat-% aggregator (Kunavo −20%) becomes `discount: 0.2` instead of a hand-typed number; it scales input, output, and `cacheRead` alike, and only applies when the table fills the entry. Variable-discount providers (TokenMart) still want explicit per-model `cost`.
-- **Native makers only.** The table carries first-party list prices — the cheapest, most-featureful "go direct" route. Open-weights hosts (DeepInfra) and breadth aggregators (OpenRouter) aren't in it; price those explicitly.
+- **Native makers only.** The table carries first-party list prices, keyed by each maker's own bare id (`qwen-plus`, `glm-4.6`, `kimi-k2.5`, `MiniMax-M2`). It's the autoPrice baseline when you route through that maker's own API. Open-weights *hosts* (DeepInfra uses HF-style ids like `Qwen/Qwen3-…`) and breadth aggregators (OpenRouter) aren't keyed here — price those with explicit `cost` or `discount`.
 
 Look a price up yourself with `getModelPrice("claude-sonnet-4-6")`. The table is generated from [LiteLLM's price map](https://github.com/BerriAI/litellm) (MIT) — refresh with `node scripts/gen-text-prices.mjs`.
 
