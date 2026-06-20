@@ -4,6 +4,44 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-06-20
+
+The text router now records the **provider-reported actual cost** when a provider
+returns one, instead of always estimating from the price table. The table becomes
+the routing input and the drift baseline (`estCostUsd`); the recorded `costUsd` is
+the real bill wherever the provider gives it.
+
+### Why
+
+A static price table can only encode one price per model, but an aggregator
+(OpenRouter) routes a single model across many sub-providers whose prices differ
+several-fold, picking one per call — so `tokens × table` is structurally unable to
+match the bill for multi-provider models (measured: `deepseek-v4-pro` reconciled at
+~57% of the real cost, while single-provider models like Gemini/Claude/GPT matched
+at 100%). The provider's own number already accounts for which sub-provider served,
+every token kind (cache read/write, reasoning), and fees — none of which a flat
+table can track.
+
+### Added
+
+- **`costUsd` prefers the provider-reported actual cost** (text path). Read from
+  OpenRouter's `providerMetadata.openrouter.usage` —
+  `costDetails.upstreamInferenceCost` (the real upstream / BYOK model spend) when
+  present, otherwise `cost` (the credit charge) — and from an OpenAI-compatible
+  provider's `estimated_cost` on the raw usage body. Requires the caller to enable
+  usage accounting on the provider (e.g. OpenRouter `usage: { include: true }`);
+  without it, behavior is unchanged.
+- **`estCostUsd` is now set on text records** (previously media-only) — the
+  price-table prediction for the same usage. `costUsd − estCostUsd` is the
+  price-table drift signal, so a dashboard's drift panel now works for text too.
+
+### Changed
+
+- When no provider cost is reported, `costUsd` still equals the price-table
+  estimate (and `estCostUsd` equals it, so no drift is flagged) — a pure fallback,
+  fully backward-compatible. The streaming path reads the reported cost from the
+  `finish` chunk's `providerMetadata`.
+
 ## [0.6.5] — 2026-06-16
 
 Bundled price table now covers the open-weights labs, not just the Western
