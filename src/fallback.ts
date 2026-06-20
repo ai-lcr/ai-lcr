@@ -622,6 +622,53 @@ function cacheSavingForUsage(cost: ProviderCost, inputTokens: number, cacheReadT
   return (cached / 1e6) * (cost.input - cost.cacheRead);
 }
 
+/**
+ * Provider-reported ACTUAL cost (USD) for a settled text call, when the provider
+ * hands one back — so we record the bill instead of estimating it. Preferred over
+ * the price table whenever present; the table stays the fallback and the drift
+ * baseline (`estCostUsd`).
+ *
+ * Why it matters: on a multi-provider aggregator a single model is served across
+ * many sub-providers at prices that differ several-fold, so a static price table
+ * can only encode ONE price while the real bill is whichever sub-provider served
+ * THIS call — knowable only after the fact. The reported number already folds in
+ * sub-provider selection, every token kind (cache read/write, reasoning), and any
+ * fees; the table cannot.
+ *
+ * Sources:
+ *  - OpenRouter (`@openrouter/ai-sdk-provider`): `providerMetadata.openrouter.usage`.
+ *    Prefer `costDetails.upstreamInferenceCost` (the real upstream model spend on a
+ *    BYOK / pass-through route) over `cost` (the OpenRouter credit charge) — on a
+ *    BYOK route `cost` is only the platform fee or 0 while upstream is the real
+ *    model cost; on a normal route the two coincide. Requires the caller to enable
+ *    usage accounting (`usage: { include: true }`); without it neither field is
+ *    present and we fall back to the table.
+ *  - OpenAI-compatible providers (e.g. DeepInfra): `estimated_cost` on the raw
+ *    usage body, when the SDK surfaces it.
+ * Returns undefined when nothing is reported → the caller uses the table estimate.
+ */
+function reportedCost(
+  providerMetadata: LanguageModelV3GenerateResult["providerMetadata"] | undefined,
+  usage: LanguageModelV3GenerateResult["usage"] | undefined,
+): number | undefined {
+  const orUsage = (
+    providerMetadata?.openrouter as unknown as
+      | { usage?: { cost?: unknown; costDetails?: { upstreamInferenceCost?: unknown } } }
+      | undefined
+  )?.usage;
+  if (orUsage) {
+    const upstream = orUsage.costDetails?.upstreamInferenceCost;
+    if (typeof upstream === "number" && upstream > 0) return upstream;
+    if (typeof orUsage.cost === "number") return orUsage.cost;
+  }
+  const raw = (usage as unknown as { raw?: Record<string, unknown> } | undefined)?.raw;
+  if (raw) {
+    const est = raw["estimated_cost"] ?? raw["cost"];
+    if (typeof est === "number") return est;
+  }
+  return undefined;
+}
+
 /** Read a caller-supplied correlation id from `providerOptions.lcr.requestId`. */
 function requestIdFrom(options: LanguageModelV3CallOptions): string | undefined {
   const raw = options.providerOptions?.lcr?.requestId;
@@ -866,14 +913,21 @@ export class LcrFallbackModel implements LanguageModelV3 {
     attemptStart: number,
     usage: LanguageModelV3GenerateResult["usage"] | undefined,
     ttftMs?: number,
+    providerMetadata?: LanguageModelV3GenerateResult["providerMetadata"],
   ): void {
     ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
     const inputTokens = usage?.inputTokens?.total ?? 0;
     const outputTokens = usage?.outputTokens?.total ?? 0;
     const cacheReadTokens = usage?.inputTokens?.cacheRead ?? 0;
-    const costUsd = provider.cost
+    // What our price table PREDICTS this call cost — the routing/estimate number.
+    const estCostUsd = provider.cost
       ? costForUsage(provider.cost, inputTokens, outputTokens, cacheReadTokens)
-      : 0;
+      : undefined;
+    // What the provider actually BILLED, when it tells us. Prefer it over the
+    // estimate (a static table can't track which sub-provider served, all token
+    // kinds, or fees on a multi-provider aggregator); fall back to the estimate
+    // when the provider reports nothing. `costUsd − estCostUsd` is the drift signal.
+    const costUsd = reportedCost(providerMetadata, usage) ?? estCostUsd ?? 0;
     const cachedSavingUsd = provider.cost
       ? cacheSavingForUsage(provider.cost, inputTokens, cacheReadTokens)
       : 0;
@@ -919,6 +973,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
       outputTokens,
       ...(cacheReadTokens > 0 ? { cachedInputTokens: cacheReadTokens } : {}),
       costUsd,
+      ...(estCostUsd !== undefined ? { estCostUsd } : {}),
       ...(baselineUsd !== undefined ? { baselineUsd, baselineKind: "last-leg" as const } : {}),
       ...(cachedSavingUsd > 0 ? { cachedSavingUsd } : {}),
       ...(ctx.requestId ? { requestId: ctx.requestId } : {}),
@@ -993,7 +1048,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
         }
         this.recordProviderSuccess(idx);
         this.settleSticky(idx);
-        this.finalizeOk(ctx, provider, attemptStart, result.usage);
+        this.finalizeOk(ctx, provider, attemptStart, result.usage, undefined, result.providerMetadata);
         if (cache && cacheKey !== undefined && ctx.settled?.cacheable) {
           this.storeCache(cacheKey, { kind: "generate", result, meta: ctx.settled.meta });
         }
@@ -1151,6 +1206,9 @@ export class LcrFallbackModel implements LanguageModelV3 {
     const servingIdx = idx;
     const servingPos = p;
     let usage: LanguageModelV3GenerateResult["usage"] | undefined;
+    // Captured from the `finish` chunk alongside `usage`; carries the provider's
+    // reported actual cost (e.g. OpenRouter's `openrouter.usage.cost`) for settle.
+    let finishProviderMetadata: LanguageModelV3GenerateResult["providerMetadata"];
     // "Has the consumer seen real content yet?" — gates failover. Deliberately
     // tracks *content* (see CONTENT_PART_TYPES), not "any chunk": stream-start,
     // response-metadata and finish reveal nothing, so a switch after only those
@@ -1180,6 +1238,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
             if (done) break;
             if (value.type === "finish") {
               usage = value.usage;
+              finishProviderMetadata = value.providerMetadata;
               // Empty completion mid-stream: a clean finish that generated
               // nothing (prompt billed, zero output) with no content emitted.
               // Throw to route into the same failover machinery as a pre-stream
@@ -1200,7 +1259,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
           }
           self.recordProviderSuccess(servingIdx);
           self.settleSticky(servingIdx);
-          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage, ttftMs);
+          self.finalizeOk(ctx, servingProvider, servingAttemptStart, usage, ttftMs, finishProviderMetadata);
           controller.close();
         } catch (error) {
           self.emitError(error, servingProvider.label);
