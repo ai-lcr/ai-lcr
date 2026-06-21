@@ -37,6 +37,8 @@ const EXPECTED_EXPORTS = [
   "normalizedCents",
   "referenceMegapixels",
   "DEFAULT_REFERENCE",
+  // async-job SLA default (timeout → failover deadline)
+  "DEFAULT_VIDEO_DEADLINE_MS",
   // settle-time billing (actual usage, not the reference)
   "billableUnits",
   "priceCents",

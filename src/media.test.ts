@@ -7,6 +7,7 @@ import {
   comparePrices,
   createMediaLCR,
   DEFAULT_REFERENCE,
+  DEFAULT_VIDEO_DEADLINE_MS,
   billableUnits,
   priceCents,
   durationFromInput,
@@ -852,5 +853,254 @@ describe("createMediaLCR settle-time billing (v2)", () => {
     if (r.done) expect(r.costCents).toBe(handle.refCents); // legacy ref-price estimate
     const rec = onCall.mock.calls[0]![0];
     expect(rec.baselineUsd).toBeCloseTo(legacy.baselineUsd, 6); // submit-time estimate
+  });
+});
+
+// ── Timeout → failover: a provider that ACCEPTS a job then HANGS ─────────────
+// (queued/running past its deadline) is a silent black hole — no failover, no
+// record — unless the router owns the SLA. These tests drive an injectable
+// clock past the deadline deterministically (no real waits).
+describe("createMediaLCR async deadline (timeout → failover)", () => {
+  // cheap per-call 30¢, pricey per-second 40¢×5s=200¢; official 300¢.
+  const registry: MediaRegistry = {
+    "x/vid": {
+      id: "x/vid",
+      modality: "video",
+      official: { unit: "call", cents: 300 },
+      routes: [
+        { provider: "cheap", externalId: "c-vid", pricing: { unit: "call", cents: 30 } },
+        { provider: "pricey", externalId: "p-vid", pricing: { unit: "second", cents: 40 } },
+      ],
+    },
+  };
+
+  /** An async adapter that walks `statuses` on each checkStatus call. A
+   *  perpetually-`running` adapter is just `[{ status: "running" }]` — it never
+   *  advances to done, modeling the hung provider. */
+  function asyncAdapter(
+    provider: string,
+    statuses: MediaStatusResult[],
+  ): MediaAdapter & { submitCount: () => number } {
+    let i = 0;
+    let submits = 0;
+    return {
+      provider,
+      run: vi.fn(async () => ({ outputs: [{ url: `https://x/${provider}.mp4`, type: "video" as const }] })),
+      submit: vi.fn(async () => {
+        submits++;
+        return { requestId: `${provider}-req-${submits}` };
+      }),
+      checkStatus: vi.fn(async () => statuses[Math.min(i++, statuses.length - 1)]!),
+      submitCount: () => submits,
+    };
+  }
+
+  const done = (): MediaStatusResult => ({
+    status: "done",
+    outputs: [{ url: "https://x/out.mp4", type: "video" }],
+  });
+
+  it("fails over to the next provider when a job stays running past its deadline", async () => {
+    // Mutable clock: advancing it past the deadline makes the next poll time out.
+    let clock = 1_000_000;
+    const onCall = vi.fn();
+    const onError = vi.fn();
+    // cheap never finishes — always "running"; pricey completes when it gets the job.
+    const cheap = asyncAdapter("cheap", [{ status: "running" }]);
+    const pricey = asyncAdapter("pricey", [done()]);
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap, pricey },
+      onCall,
+      onError,
+      now: () => clock,
+    });
+
+    const handle = await lcr.submit("x/vid", { prompt: "hi" }, { deadlineMs: 1000 });
+    expect(handle.provider).toBe("cheap");
+    expect(handle.deadlineAt).toBe(1_001_000); // captured as an absolute instant
+
+    // Within the deadline: still pending, same handle, no failover.
+    clock = 1_000_500;
+    let r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    if (!r.done) {
+      expect(r.status).toBe("running");
+      expect(r.failedOver).toBeUndefined();
+    }
+
+    // Past the deadline: the hung leg is treated as a provider failure → re-submit.
+    clock = 1_002_000;
+    r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    let next = handle;
+    if (!r.done) {
+      expect(r.failedOver).toBe(true);
+      expect(r.handle.provider).toBe("pricey");
+      // The new leg inherits the SAME deadline instant — a hung provider can't
+      // reset the request's clock by failing over.
+      expect(r.handle.deadlineAt).toBe(1_001_000);
+      next = r.handle;
+    }
+    expect(pricey.submitCount()).toBe(1);
+    expect(onCall).not.toHaveBeenCalled(); // not terminal yet
+    // The timeout was surfaced to onError so the dashboard sees the hung leg.
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/timeout/) }),
+      "cheap",
+    );
+
+    // pricey finishes → terminal success record, with the timed-out leg recorded.
+    const fin = await lcr.poll(next);
+    expect(fin.done).toBe(true);
+    if (fin.done) expect(fin.provider).toBe("pricey");
+    expect(onCall).toHaveBeenCalledOnce();
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec.ok).toBe(true);
+    expect(rec.winner).toBe("pricey");
+    expect(rec.failedOver).toBe(true);
+    expect(rec.attempts.map((a: { provider: string; ok: boolean }) => [a.provider, a.ok])).toEqual([
+      ["cheap", false],
+      ["pricey", true],
+    ]);
+    expect(rec.attempts[0].errorClass).toBe("timeout");
+  });
+
+  it("emits a terminal fail CallRecord + throws when timeout exhausts every provider", async () => {
+    let clock = 0;
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: asyncAdapter("cheap", [{ status: "running" }]), // both hang forever
+        pricey: asyncAdapter("pricey", [{ status: "running" }]),
+      },
+      onCall,
+      now: () => clock,
+    });
+
+    const handle = await lcr.submit("x/vid", { prompt: "hi" }, { deadlineMs: 1000 });
+    // cheap times out → re-submit pricey (carries the same deadline forward).
+    clock = 2000;
+    const r1 = await lcr.poll(handle);
+    expect(r1.done).toBe(false);
+    expect((r1 as { failedOver?: boolean }).failedOver).toBe(true);
+    expect(onCall).not.toHaveBeenCalled();
+
+    // pricey ALSO past the deadline (instant carried forward) and no fallbacks
+    // left → terminal: settle a fail record and throw.
+    clock = 3000;
+    await expect(lcr.poll((r1 as { handle: typeof handle }).handle)).rejects.toThrow(/timeout/);
+    const rec = onCall.mock.calls.at(-1)![0];
+    expect(rec.ok).toBe(false);
+    expect(rec.winner).toBeUndefined();
+    expect(rec.failedOver).toBe(true);
+    expect(rec.modality).toBe("video"); // dashboard can render the failed media row
+    expect(rec.attempts.map((a: { provider: string; ok: boolean }) => [a.provider, a.ok])).toEqual([
+      ["cheap", false],
+      ["pricey", false],
+    ]);
+    expect(rec.attempts.every((a: { errorClass?: string }) => a.errorClass === "timeout")).toBe(true);
+  });
+
+  it("does not time out while still within the deadline (happy success path unchanged)", async () => {
+    let clock = 500;
+    const onCall = vi.fn();
+    const lcr = createMediaLCR({
+      registry,
+      adapters: {
+        cheap: asyncAdapter("cheap", [{ status: "queued" }, { status: "running" }, done()]),
+        pricey: asyncAdapter("pricey", [done()]),
+      },
+      onCall,
+      now: () => clock,
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" }, { deadlineMs: 10_000 });
+    clock = 1000;
+    let r = await lcr.poll(handle); // queued
+    expect(r.done).toBe(false);
+    clock = 2000;
+    r = await lcr.poll(handle); // running
+    expect(r.done).toBe(false);
+    clock = 3000; // still < deadline (10_000)
+    r = await lcr.poll(handle); // done
+    expect(r.done).toBe(true);
+    if (r.done) {
+      expect(r.provider).toBe("cheap"); // never failed over
+      expect(r.costCents).toBe(30);
+    }
+    expect(onCall).toHaveBeenCalledOnce();
+    const rec = onCall.mock.calls[0]![0];
+    expect(rec).toMatchObject({ winner: "cheap", ok: true, failedOver: false });
+  });
+
+  it("defaults the deadline to DEFAULT_VIDEO_DEADLINE_MS (12 min) when unset", async () => {
+    let clock = 0;
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [{ status: "running" }]), pricey: asyncAdapter("pricey", [done()]) },
+      now: () => clock,
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" }); // no deadlineMs
+    expect(DEFAULT_VIDEO_DEADLINE_MS).toBe(12 * 60 * 1000);
+    expect(handle.deadlineAt).toBe(DEFAULT_VIDEO_DEADLINE_MS);
+
+    // Just before the default deadline: no timeout.
+    clock = DEFAULT_VIDEO_DEADLINE_MS - 1;
+    let r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    expect((r as { failedOver?: boolean }).failedOver).toBeUndefined();
+
+    // At the default deadline: fail over.
+    clock = DEFAULT_VIDEO_DEADLINE_MS;
+    r = await lcr.poll(handle);
+    expect(r.done).toBe(false);
+    expect((r as { failedOver?: boolean }).failedOver).toBe(true);
+  });
+
+  it("honors a config-level defaultDeadlineMs override", async () => {
+    let clock = 0;
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [{ status: "running" }]), pricey: asyncAdapter("pricey", [done()]) },
+      defaultDeadlineMs: 5000,
+      now: () => clock,
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" });
+    expect(handle.deadlineAt).toBe(5000); // config default, not the 12-min built-in
+    clock = 5000;
+    const r = await lcr.poll(handle);
+    expect((r as { failedOver?: boolean }).failedOver).toBe(true);
+  });
+
+  it("a per-job deadlineMs of 0 disables the SLA (never times out)", async () => {
+    let clock = 0;
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [{ status: "running" }]) },
+      now: () => clock,
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" }, { deadlineMs: 0 });
+    expect(handle.deadlineAt).toBeUndefined(); // opted out — no deadline on the handle
+    clock = 10 ** 12; // arbitrarily far in the future
+    const r = await lcr.poll(handle);
+    expect(r.done).toBe(false); // still running, no failover — never times out
+    expect((r as { failedOver?: boolean }).failedOver).toBeUndefined();
+  });
+
+  it("a pre-0.8 handle (no deadlineAt) never times out", async () => {
+    let clock = 0;
+    const lcr = createMediaLCR({
+      registry,
+      adapters: { cheap: asyncAdapter("cheap", [{ status: "running" }]) },
+      now: () => clock,
+    });
+    const handle = await lcr.submit("x/vid", { prompt: "hi" }, { deadlineMs: 1000 });
+    // Simulate a handle serialized by an older version: strip the deadline field.
+    const legacy = JSON.parse(JSON.stringify(handle));
+    delete legacy.deadlineAt;
+    clock = 10 ** 9; // way past any deadline
+    const r = await lcr.poll(legacy);
+    expect(r.done).toBe(false); // no deadlineAt → old behavior, polls forever
   });
 });

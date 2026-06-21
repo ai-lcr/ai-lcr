@@ -44,6 +44,7 @@ export {
   normalizedCents,
   referenceMegapixels,
   DEFAULT_REFERENCE,
+  DEFAULT_VIDEO_DEADLINE_MS,
   billableUnits,
   priceCents,
   durationFromInput,

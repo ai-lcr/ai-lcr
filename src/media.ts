@@ -388,7 +388,32 @@ export interface MediaLCRConfig {
    * throws. Media records carry no token counts (inputTokens/outputTokens = 0).
    */
   onCall?: (record: CallRecord) => void;
+  /**
+   * Default SLA for an async job, in ms: how long a submitted job may stay
+   * `queued`/`running` before `poll` declares it timed out and fails over to the
+   * next provider (see {@link MediaSubmitOptions.deadlineMs} for a per-job
+   * override). Defaults to {@link DEFAULT_VIDEO_DEADLINE_MS} (12 min) — long
+   * enough for a slow video render, short enough that a hung provider is caught
+   * instead of polling forever. Set per consumer to match its own product SLA.
+   */
+  defaultDeadlineMs?: number;
+  /**
+   * Injectable clock (epoch ms), defaulting to `Date.now`. The deadline math and
+   * every latency stamp read THIS, so a test can drive a job past its deadline
+   * deterministically without real waits. Production never sets it.
+   */
+  now?: () => number;
 }
+
+/**
+ * Default async-job SLA: 12 minutes. A submitted job that stays
+ * `queued`/`running` longer than this is treated by `poll` as a provider failure
+ * and fails over to the next provider. Exposed (not buried) so the deadline is
+ * an explicit product knob, overridable per consumer via
+ * {@link MediaLCRConfig.defaultDeadlineMs} and per job via
+ * {@link MediaSubmitOptions.deadlineMs}.
+ */
+export const DEFAULT_VIDEO_DEADLINE_MS = 12 * 60 * 1000;
 
 export interface MediaRunResult {
   outputs: MediaOutput[];
@@ -402,6 +427,16 @@ export interface MediaRunResult {
 export interface MediaSubmitOptions {
   /** Opaque caller metadata forwarded to the provider's `submit`. */
   metadata?: Record<string, unknown>;
+  /**
+   * Per-job SLA in ms: how long this job may stay `queued`/`running` before
+   * `poll` declares it timed out and fails over to the next provider. Overrides
+   * {@link MediaLCRConfig.defaultDeadlineMs} (which defaults to
+   * {@link DEFAULT_VIDEO_DEADLINE_MS}, 12 min) for this submit only. The deadline
+   * is captured at submit time as an absolute instant on the handle and carried
+   * forward unchanged across a failover, so the whole request — not each leg —
+   * is bounded by it.
+   */
+  deadlineMs?: number;
 }
 
 /**
@@ -456,6 +491,15 @@ export interface MediaJobHandle {
   attemptStart: number;
   /** Failed attempts so far, threaded across processes for the final CallRecord. */
   attempts: CallRecord["attempts"];
+  /**
+   * Epoch ms the WHOLE request must finish by — the SLA captured at the first
+   * submit ({@link MediaSubmitOptions.deadlineMs} or the config default). When a
+   * `poll` finds the job still `queued`/`running` at/after this instant, the leg
+   * is treated as a provider failure and fails over to the next provider (with
+   * this same deadline carried forward, so a hung provider can't reset the clock).
+   * Absent on pre-0.8 handles — those never time out (the old behavior).
+   */
+  deadlineAt?: number;
 }
 
 /** Outcome of one `poll` call. `done:false` ⇒ keep polling `handle`. */
@@ -518,6 +562,8 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     onError,
     onCost,
     onCall,
+    defaultDeadlineMs = DEFAULT_VIDEO_DEADLINE_MS,
+    now = Date.now,
   } = config;
 
   // Observer callbacks are caller-supplied logging hooks: a throw from one must
@@ -674,7 +720,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
       winner: undefined,
       ok: false,
       failedOver: attempts.length > 1,
-      latencyMs: Date.now() - startedAt,
+      latencyMs: now() - startedAt,
       inputTokens: 0,
       outputTokens: 0,
       costUsd: 0,
@@ -708,7 +754,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
       winner: args.provider,
       ok: true,
       failedOver: args.attempts.length > 1,
-      latencyMs: Date.now() - args.startedAt,
+      latencyMs: now() - args.startedAt,
       inputTokens: 0,
       outputTokens: 0,
       costUsd: settled.costCents / 100,
@@ -727,18 +773,18 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     input: Record<string, unknown>,
   ): Promise<MediaRunResult> {
     const { def, ranked, baseline } = resolve(modelId);
-    const startedAt = Date.now();
+    const startedAt = now();
     const attempts: CallRecord["attempts"] = [];
     let lastErr: unknown;
 
     for (const route of ranked) {
       const adapter = adapters[route.provider];
       if (!adapter) continue; // no adapter wired for this provider → skip to next
-      const attemptStart = Date.now();
+      const attemptStart = now();
       try {
         const result = await adapter.run({ externalId: route.externalId, input });
         const settled = settle(route.pricing, route.refCents, result, input);
-        attempts.push({ provider: route.provider, ok: true, latencyMs: Date.now() - attemptStart });
+        attempts.push({ provider: route.provider, ok: true, latencyMs: now() - attemptStart });
         warnDrift(modelId, route.provider, settled);
         safeCost({
           modelId,
@@ -767,7 +813,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         attempts.push({
           provider: route.provider,
           ok: false,
-          latencyMs: Date.now() - attemptStart,
+          latencyMs: now() - attemptStart,
           errorClass: classifyError(err),
         });
         safeError(err as Error, route.provider);
@@ -804,13 +850,14 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     baseline: Baseline | undefined,
     startedAt: number,
     attempts: CallRecord["attempts"],
+    deadlineAt: number | undefined,
   ): Promise<MediaJobHandle> {
     let lastErr: unknown;
     for (let i = 0; i < routes.length; i++) {
       const route = routes[i]!;
       const adapter = adapters[route.provider];
       if (!adapter?.submit) continue;
-      const attemptStart = Date.now();
+      const attemptStart = now();
       try {
         const { requestId } = await adapter.submit({ externalId: route.externalId, input, metadata });
         return {
@@ -830,13 +877,16 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
           startedAt,
           attemptStart,
           attempts,
+          // Carry the SLA forward unchanged across a re-submit, so a hung
+          // provider can't reset the request's clock by failing over.
+          ...(deadlineAt !== undefined ? { deadlineAt } : {}),
         };
       } catch (err) {
         lastErr = err;
         attempts.push({
           provider: route.provider,
           ok: false,
-          latencyMs: Date.now() - attemptStart,
+          latencyMs: now() - attemptStart,
           errorClass: classifyError(err),
         });
         safeError(err as Error, route.provider);
@@ -861,7 +911,13 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         `ai-lcr: no provider for media model "${modelId}" supports async submit (need an adapter with submit/checkStatus)`,
       );
     }
-    return submitFrom(modelId, usable, input, options?.metadata, baseline, Date.now(), []);
+    // Capture the SLA as an ABSOLUTE instant now, so it survives the JSON
+    // round-trip to the poll worker and bounds the whole request (not each leg).
+    const startedAt = now();
+    const deadlineMs = options?.deadlineMs ?? defaultDeadlineMs;
+    const deadlineAt =
+      typeof deadlineMs === "number" && deadlineMs > 0 ? startedAt + deadlineMs : undefined;
+    return submitFrom(modelId, usable, input, options?.metadata, baseline, startedAt, [], deadlineAt);
   };
 
   generate.poll = async function poll(handle: MediaJobHandle): Promise<MediaPollResult> {
@@ -889,6 +945,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         handle.baseline ?? baseline,
         handle.startedAt,
         attempts,
+        handle.deadlineAt, // same SLA instant — the new leg inherits the clock
       );
       return { done: false, status: "queued", handle: newHandle, failedOver: true };
     };
@@ -906,7 +963,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
         {
           provider: handle.provider,
           ok: false,
-          latencyMs: Date.now() - handle.attemptStart,
+          latencyMs: now() - handle.attemptStart,
           errorClass: classifyError(err),
         },
       ];
@@ -928,6 +985,24 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     }
 
     if (status.status === "queued" || status.status === "running") {
+      // SLA enforcement: a provider that ACCEPTS a job and then hangs —
+      // `queued`/`running` forever — is the silent black hole this router exists
+      // to close. Past the deadline, treat the still-unfinished leg as a PROVIDER
+      // FAILURE and run the SAME failover path a job error would (re-submit to the
+      // next provider, carrying the deadline forward; settle a fail record + throw
+      // when none remain). A timeout is always worth another provider.
+      if (handle.deadlineAt !== undefined && now() >= handle.deadlineAt) {
+        const elapsedMs = now() - handle.startedAt;
+        // "timeout" wording so {@link classifyError} tags the attempt's
+        // `errorClass` as "timeout" (a RETRYABLE_PATTERN) — the dashboard sees a
+        // distinct hung-provider class, not a generic "network"/"error".
+        return onLegFailure(
+          new Error(
+            `ai-lcr: ${handle.provider} job ${handle.requestId} hit its timeout — still "${status.status}" after ${elapsedMs}ms (deadline ${handle.deadlineAt - handle.startedAt}ms)`,
+          ),
+          true,
+        );
+      }
       return { done: false, status: status.status, handle };
     }
 
@@ -944,7 +1019,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
       const settled = settle(handle.pricing, handle.refCents, { ...status, outputs }, handle.input);
       const attempts: CallRecord["attempts"] = [
         ...handle.attempts,
-        { provider: handle.provider, ok: true, latencyMs: Date.now() - handle.attemptStart },
+        { provider: handle.provider, ok: true, latencyMs: now() - handle.attemptStart },
       ];
       warnDrift(handle.modelId, handle.provider, settled);
       safeCost({
