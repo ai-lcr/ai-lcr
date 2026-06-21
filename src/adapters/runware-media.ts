@@ -152,6 +152,14 @@ export function createRunwareMediaAdapter(config: RunwareMediaConfig): MediaAdap
     // (a `getResponse` poll). Image generation stays on the synchronous `run()`.
     async submit(req: MediaSubmitRequest): Promise<MediaSubmitResult> {
       const taskUUID = crypto.randomUUID();
+      // Push completion: when the caller supplies a webhook URL, Runware also
+      // POSTs the finished task to it (the caller still polls as a fallback).
+      // Fixed fields (incl. webhookURL) come AFTER ...req.input so input can't
+      // clobber them.
+      const webhookUrl =
+        typeof req.metadata?.["webhookUrl"] === "string"
+          ? (req.metadata["webhookUrl"] as string)
+          : undefined;
       await postTask({
         outputType: "URL",
         includeCost: true,
@@ -160,6 +168,7 @@ export function createRunwareMediaAdapter(config: RunwareMediaConfig): MediaAdap
         taskUUID,
         model: req.externalId,
         deliveryMethod: "async",
+        ...(webhookUrl ? { webhookURL: webhookUrl } : {}),
       });
       return { requestId: taskUUID };
     },

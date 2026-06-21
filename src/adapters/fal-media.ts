@@ -118,7 +118,16 @@ export function createFalMediaAdapter(config: FalMediaConfig): MediaAdapter {
 
   /** Async submit: POST queue.fal.run/{model} → { request_id }. */
   async function submit(req: MediaSubmitRequest): Promise<MediaSubmitResult> {
-    const submitRes = await fetchImpl(`${baseUrl}/${req.externalId}`, {
+    // Push completion: fal POSTs the finished job to the `fal_webhook` query URL
+    // when supplied (the caller still polls as a fallback).
+    const webhookUrl =
+      typeof req.metadata?.["webhookUrl"] === "string"
+        ? (req.metadata["webhookUrl"] as string)
+        : undefined;
+    const submitUrl = webhookUrl
+      ? `${baseUrl}/${req.externalId}?fal_webhook=${encodeURIComponent(webhookUrl)}`
+      : `${baseUrl}/${req.externalId}`;
+    const submitRes = await fetchImpl(submitUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(req.input),

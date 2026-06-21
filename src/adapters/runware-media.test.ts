@@ -119,6 +119,28 @@ describe("createRunwareMediaAdapter — async video submit/checkStatus", () => {
     expect(calls[0]!.body.taskUUID).toBe(r.requestId); // requestId IS the taskUUID
   });
 
+  it("submit forwards metadata.webhookUrl as the task's webhookURL", async () => {
+    const { impl, calls } = videoStub([]);
+    const adapter = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    await adapter.submit!({
+      externalId: "runware:200@1",
+      input: { positivePrompt: "a wave" },
+      metadata: { webhookUrl: "https://app.example/api/webhooks/runware?secret=s" },
+    });
+
+    expect(calls[0]!.body.webhookURL).toBe("https://app.example/api/webhooks/runware?secret=s");
+  });
+
+  it("submit omits webhookURL when no webhook metadata is supplied", async () => {
+    const { impl, calls } = videoStub([]);
+    const adapter = createRunwareMediaAdapter({ apiKey: "k", fetchImpl: impl });
+
+    await adapter.submit!({ externalId: "runware:200@1", input: { positivePrompt: "a wave" } });
+
+    expect(calls[0]!.body).not.toHaveProperty("webhookURL");
+  });
+
   it("checkStatus polls via getResponse and maps success → done with cost", async () => {
     const { impl, calls } = videoStub([
       { taskUUID: "t1", status: "success", videoURL: "https://im.runware.ai/clip.mp4", cost: 0.5 },

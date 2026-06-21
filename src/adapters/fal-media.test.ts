@@ -77,6 +77,24 @@ describe("createFalMediaAdapter", () => {
     expect(result.costCents).toBeUndefined(); // left to the router's estimate
   });
 
+  it("submit appends metadata.webhookUrl as the ?fal_webhook query param", async () => {
+    const { impl, calls } = falStub({});
+    const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
+
+    await adapter.submit!({
+      externalId: "fal-ai/flux/schnell",
+      input: { prompt: "a fox" },
+      metadata: { webhookUrl: "https://app.example/api/webhooks/fal?secret=s" },
+    });
+
+    const submit = calls.find((c) => c.method === "POST")!;
+    expect(submit.url).toBe(
+      "https://queue.fal.run/fal-ai/flux/schnell?fal_webhook=" +
+        encodeURIComponent("https://app.example/api/webhooks/fal?secret=s"),
+    );
+    expect(submit.body).toEqual({ prompt: "a fox" }); // webhook rides the URL, not the body
+  });
+
   it("extracts a video url from the singular `video` key", async () => {
     const { impl } = falStub({ result: { video: { url: "https://fal.media/clip.mp4" } } });
     const adapter = createFalMediaAdapter({ apiKey: "k", fetchImpl: impl, pollIntervalMs: 0 });
