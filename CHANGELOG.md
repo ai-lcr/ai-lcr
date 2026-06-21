@@ -4,6 +4,21 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] — 2026-06-20
+
+Async media adapters now forward a caller-supplied webhook URL to the provider,
+so async video jobs can complete by **push** instead of poll-only.
+
+### Added
+
+- **`metadata.webhookUrl` is forwarded to the provider on async `submit`.**
+  `runware-media` adds it as the `videoInference` task's `webhookURL`; `fal-media`
+  appends it as the `?fal_webhook=` query param on the submit POST. The webhook is
+  a push path — the caller still polls as a fallback. Fixed task fields stay
+  un-clobberable (placed after the input spread). `metadata` was previously
+  accepted but dropped, so the documented "webhook hint" never reached the
+  provider; now it does.
+
 ## [0.7.0] — 2026-06-20
 
 The text router now records the **provider-reported actual cost** when a provider
