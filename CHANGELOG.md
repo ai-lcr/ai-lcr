@@ -4,6 +4,30 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] — 2026-06-20
+
+Async media jobs now have a **deadline/SLA**: a provider that accepts a job and
+then hangs (`queued`/`running` forever) is failed over to the next provider and
+recorded, instead of polling silently forever.
+
+### Added
+
+- **`MediaSubmitOptions.deadlineMs`** — per-job SLA. When a `poll()` finds the
+  job still `queued`/`running` at/after its deadline, the leg is treated as a
+  provider failure and runs the same failover path a `status:"error"` triggers
+  (re-submit to the next provider, carrying the deadline forward unchanged so a
+  hung provider can't reset the request's clock). Exhausted → a fail CallRecord
+  is settled and the poll throws (message contains "timeout").
+- **`MediaLCRConfig.defaultDeadlineMs`** (defaults to the new exported
+  **`DEFAULT_VIDEO_DEADLINE_MS` = 12 min**) and **`MediaLCRConfig.now`** (injectable
+  clock, defaults to `Date.now`, for deterministic tests).
+- **`MediaJobHandle.deadlineAt`** (absolute epoch ms) — survives the JSON
+  round-trip to a cross-process poll worker. Pre-0.7.2 handles without it keep
+  the old never-time-out behavior.
+- A CallRecord is now emitted on the **timeout** terminal outcome too (not just
+  success/error), with each hung leg carrying `errorClass: "timeout"` — so the
+  dashboard sees timeouts and timeout-driven failovers.
+
 ## [0.7.1] — 2026-06-20
 
 Async media adapters now forward a caller-supplied webhook URL to the provider,
