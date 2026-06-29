@@ -4,6 +4,21 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.2] — 2026-06-29
+
+### Fixed
+
+- **Token usage from V2-spec providers (e.g. `@ai-sdk/anthropic@2.x`) now
+  captured correctly.** ai-lcr calls `doStream`/`doGenerate` directly on
+  underlying models, bypassing the `ai` SDK's V2→V3 shim. Providers that
+  declare `specificationVersion = "v2"` return a flat usage shape
+  (`{ inputTokens: number, outputTokens: number }`) rather than the V3 nested
+  shape (`{ inputTokens: { total }, outputTokens: { total } }`) that ai-lcr
+  previously assumed. The token-extraction path now handles both formats, so
+  Anthropic-native routes — which use `@ai-sdk/anthropic@2.x` (V2 spec) while
+  OpenRouter and openai-compatible providers ship V3 — no longer report 0 tokens
+  and `usageMissing: true`, and their cost is now computed correctly.
+
 ## [0.8.1] — 2026-06-28
 
 Official-provider loading stays compatible with apps pinned to older AI SDK

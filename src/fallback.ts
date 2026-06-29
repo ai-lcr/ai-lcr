@@ -588,6 +588,67 @@ interface CallCtx {
 }
 
 /**
+ * Extract token counts from a usage object in either spec format:
+ *   - V3 (nested): `{ inputTokens: { total, cacheRead }, outputTokens: { total } }`
+ *   - V2 (flat):   `{ inputTokens: number, outputTokens: number }`
+ *
+ * ai-lcr calls doStream/doGenerate directly on the underlying model, bypassing
+ * the `ai` SDK's V2→V3 shim. So when a provider's specificationVersion is "v2"
+ * (e.g. @ai-sdk/anthropic@2.x), the stream/generate result carries flat numbers
+ * rather than nested objects — and `usage.inputTokens.total` would read as
+ * undefined, collapsing every token count to 0. Handle both here.
+ */
+/**
+ * Extract token counts from a usage object in any supported spec format:
+ *   - V1 (flat, legacy): `{ promptTokens: number, completionTokens: number }`
+ *   - V2 (flat):         `{ inputTokens: number, outputTokens: number }`
+ *   - V3 (nested):       `{ inputTokens: { total, cacheRead }, outputTokens: { total } }`
+ *
+ * ai-lcr calls doStream/doGenerate directly on the underlying model, bypassing
+ * the `ai` SDK's spec-version shim. So when a provider's specificationVersion is
+ * "v1" or "v2" (e.g. @ai-sdk/anthropic@1.x = V1, @ai-sdk/anthropic@2.x = V2),
+ * the usage object uses different field shapes from the V3 nested format that
+ * ai-lcr's LanguageModelV3 types describe — and reading `.inputTokens.total`
+ * on a V2 flat number or a V1 `promptTokens` object collapses every count to 0.
+ * Handle all three here so any official SDK provider works regardless of its spec.
+ */
+function extractUsageCounts(usage: LanguageModelV3GenerateResult["usage"] | undefined): {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+} {
+  if (!usage) return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+  const u = usage as unknown as Record<string, unknown>;
+  const it = u["inputTokens"];
+  const ot = u["outputTokens"];
+  // V2: inputTokens and outputTokens are plain numbers
+  if (typeof it === "number") {
+    return { inputTokens: it, outputTokens: typeof ot === "number" ? ot : 0, cacheReadTokens: 0 };
+  }
+  // V3: nested objects with a `total` field
+  if (it && typeof it === "object") {
+    const itObj = it as Record<string, unknown>;
+    const otObj = ot as Record<string, unknown> | undefined;
+    return {
+      inputTokens: typeof itObj["total"] === "number" ? (itObj["total"] as number) : 0,
+      outputTokens: typeof otObj?.["total"] === "number" ? (otObj["total"] as number) : 0,
+      cacheReadTokens: typeof itObj["cacheRead"] === "number" ? (itObj["cacheRead"] as number) : 0,
+    };
+  }
+  // V1: promptTokens / completionTokens (legacy @ai-sdk/anthropic@1.x etc.)
+  const pt = u["promptTokens"];
+  const ct = u["completionTokens"];
+  if (typeof pt === "number" || typeof ct === "number") {
+    return {
+      inputTokens: typeof pt === "number" ? pt : 0,
+      outputTokens: typeof ct === "number" ? ct : 0,
+      cacheReadTokens: 0,
+    };
+  }
+  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+}
+
+/**
  * Cost of one settled call on a given price, honoring prompt-cache reads:
  * cached input tokens bill at `cost.cacheRead` when set (else the full `input`
  * rate — pre-0.3 behavior). Pure; reused for the winner's cost AND the
@@ -916,9 +977,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
     providerMetadata?: LanguageModelV3GenerateResult["providerMetadata"],
   ): void {
     ctx.attempts.push({ provider: provider.label, ok: true, latencyMs: Date.now() - attemptStart });
-    const inputTokens = usage?.inputTokens?.total ?? 0;
-    const outputTokens = usage?.outputTokens?.total ?? 0;
-    const cacheReadTokens = usage?.inputTokens?.cacheRead ?? 0;
+    const { inputTokens, outputTokens, cacheReadTokens } = extractUsageCounts(usage);
     // What our price table PREDICTS this call cost — the routing/estimate number.
     const estCostUsd = provider.cost
       ? costForUsage(provider.cost, inputTokens, outputTokens, cacheReadTokens)
@@ -1037,8 +1096,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
         // next provider — but only while one remains. On the last provider we
         // settle the empty result and let `finalizeOk` flag it, rather than
         // escalating a blank into a hard request failure with nowhere to turn.
-        const out = result.usage?.outputTokens?.total ?? 0;
-        const inp = result.usage?.inputTokens?.total ?? 0;
+        const { inputTokens: inp, outputTokens: out } = extractUsageCounts(result.usage);
         if (inp > 0 && out === 0 && !isLast) {
           const emptyErr = new EmptyCompletionError(provider.label);
           lastError = emptyErr;
@@ -1245,8 +1303,7 @@ export class LcrFallbackModel implements LanguageModelV3 {
               // error — but only while a provider remains. On the last provider
               // we fall through, enqueue finish, and let finalizeOk flag it
               // rather than turn a blank into a hard stream error.
-              const out = value.usage?.outputTokens?.total ?? 0;
-              const inp = value.usage?.inputTokens?.total ?? 0;
+              const { inputTokens: inp, outputTokens: out } = extractUsageCounts(value.usage);
               if (inp > 0 && out === 0 && !contentStreamed && servingPos + 1 < n) {
                 throw new EmptyCompletionError(servingProvider.label);
               }
