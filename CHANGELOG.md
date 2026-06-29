@@ -4,6 +4,43 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] — 2026-06-28
+
+Official-provider loading stays compatible with apps pinned to older AI SDK
+provider package majors.
+
+### Changed
+
+- **Relaxed optional peer ranges for official AI SDK provider packages.**
+  `createOfficialProvider()` only needs each package's `createXxx` factory at
+  runtime, so ai-lcr should not force consumers onto the newest provider major.
+  The optional peers now accept the supported v2+ lines that exist for each
+  package, e.g. `@ai-sdk/anthropic@2.x` through `4.x`. This keeps apps on the
+  AI SDK 6 / provider 2.x line from seeing peer-dependency conflicts when they
+  upgrade ai-lcr.
+
+## [0.8.0] — 2026-06-28
+
+Native official API providers can now be loaded with the same zero-boilerplate
+style as OpenAI-compatible provider configs.
+
+### Added
+
+- **`OFFICIAL_PROVIDERS`** — package/env/factory metadata for official AI SDK
+  providers: Anthropic, OpenAI, Google, xAI, Mistral, DeepSeek, Cohere, Groq,
+  Perplexity, Fireworks, Together.ai, Cerebras, Azure, Google Vertex, and
+  Amazon Bedrock.
+- **`createOfficialProvider(id, options?)`** — dynamically imports the matching
+  official provider package and calls its `createXxx` factory. The packages are
+  optional peer dependencies, so unused vendors do not become runtime
+  requirements.
+
+### Notes
+
+- GLM / Z.ai has no official Vercel `@ai-sdk/glm` or `@ai-sdk/zhipu` package as
+  of this release. Use its OpenAI-compatible endpoint, or a third-party provider
+  package, and pass the resulting model into `createLCR`.
+
 ## [0.7.2] — 2026-06-20
 
 Async media jobs now have a **deadline/SLA**: a provider that accepts a job and
