@@ -24,6 +24,8 @@ const EXPECTED_EXPORTS = [
   "createEnvSink",
   // shared provider configs
   "DEFAULT_PROVIDERS",
+  "OFFICIAL_PROVIDERS",
+  "createOfficialProvider",
   // error predicates (failover policy / custom shouldRetry building blocks)
   "isRetryableError",
   "isNetworkError",

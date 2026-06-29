@@ -25,6 +25,34 @@ Any OpenAI-compatible endpoint works for text — the catalog above is just the
 ones with notes worth calling out. A model vendor's **own official API**
 (`@ai-sdk/openai`, `@ai-sdk/anthropic`, …) is also just another entry in a list.
 
+For official SDKs, `ai-lcr` includes a dynamic native-provider loader so unused
+vendors remain optional:
+
+```ts
+import { createLCR, createOfficialProvider } from "ai-lcr";
+
+const anthropic = await createOfficialProvider("anthropic");
+
+const lcr = createLCR({
+  autoPrice: true,
+  models: {
+    "claude-sonnet": [
+      { model: anthropic("claude-sonnet-4-6"), label: "anthropic" },
+    ],
+  },
+});
+```
+
+Supported native keys: `anthropic`, `openai`, `google`, `xai`, `mistral`,
+`deepseek`, `cohere`, `groq`, `perplexity`, `fireworks`, `togetherai`,
+`cerebras`, `azure`, `google-vertex`, and `amazon-bedrock`. Install only what
+you use, for example `npm i @ai-sdk/anthropic`.
+
+GLM / Z.ai currently does not have an official Vercel `@ai-sdk/glm` or
+`@ai-sdk/zhipu` provider package. Use its OpenAI-compatible endpoint with
+`createOpenAICompatible`, or a third-party provider package, and pass the model
+into `createLCR` the same way.
+
 The last three serve **image and video**. Those aren't OpenAI-compatible text
 endpoints — you wire them with a media adapter (`createFalMediaAdapter`, …) and
 route them through [`createMediaLCR`](/docs/image-video) instead.
