@@ -98,6 +98,29 @@ const lcr = createLCR({
 
 The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. `ProviderEntry` accepts `AnyLanguageModel` — a duck-typed interface (`doGenerate` + `doStream` + `provider` + `modelId`) that any AI SDK model satisfies regardless of spec version (V2 or V3), so you never need `as`-casts at the integration boundary. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad. **Official-first + aggregator-fallback** is the natural LCR shape.
 
+If you prefer the same "no copied env-var names" style as `DEFAULT_PROVIDERS`, use the optional native-provider loader. Install only the official SDKs you route to:
+
+```bash
+npm i @ai-sdk/anthropic
+```
+
+```ts
+import { createLCR, createOfficialProvider } from "ai-lcr";
+
+const anthropic = await createOfficialProvider("anthropic");
+
+const lcr = createLCR({
+  autoPrice: true,
+  models: {
+    "claude-sonnet": [
+      { model: anthropic("claude-sonnet-4-6"), label: "anthropic" },
+    ],
+  },
+});
+```
+
+Supported native keys: `anthropic`, `openai`, `google`, `xai`, `mistral`, `deepseek`, `cohere`, `groq`, `perplexity`, `fireworks`, `togetherai`, `cerebras`, `azure`, `google-vertex`, and `amazon-bedrock`. Their packages are optional peer dependencies, so unused vendors add no runtime requirement.
+
 ## Cheapest route for open-weights models (DeepInfra)
 
 For open-weights models — DeepSeek, Kimi, MiniMax, GLM, Qwen — a dedicated inference host is usually the cheapest route, well under aggregator pricing. [DeepInfra](https://deepinfra.com) is OpenAI-compatible, so it slots in as just another entry. **One gotcha:** its OpenAI endpoint lives at `/v1/openai` (the `/v1/` precedes `openai`), not the usual `/v1`:
@@ -165,6 +188,28 @@ Available providers:
 | `kunavo` | `https://api.kunavo.com/v1` | `KUNAVO_API_KEY` |
 | `runware` | `https://api.runware.ai/v1` | `RUNWARE_API_KEY` |
 | `fal` | `https://queue.fal.run` | `FAL_KEY` |
+
+For native provider packages, `OFFICIAL_PROVIDERS` carries the package/env/factory metadata used by `createOfficialProvider`:
+
+| Key | Package | Env var |
+|---|---|---|
+| `anthropic` | `@ai-sdk/anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `@ai-sdk/openai` | `OPENAI_API_KEY` |
+| `google` | `@ai-sdk/google` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `xai` | `@ai-sdk/xai` | `XAI_API_KEY` |
+| `mistral` | `@ai-sdk/mistral` | `MISTRAL_API_KEY` |
+| `deepseek` | `@ai-sdk/deepseek` | `DEEPSEEK_API_KEY` |
+| `cohere` | `@ai-sdk/cohere` | `COHERE_API_KEY` |
+| `groq` | `@ai-sdk/groq` | `GROQ_API_KEY` |
+| `perplexity` | `@ai-sdk/perplexity` | `PERPLEXITY_API_KEY` |
+| `fireworks` | `@ai-sdk/fireworks` | `FIREWORKS_API_KEY` |
+| `togetherai` | `@ai-sdk/togetherai` | `TOGETHER_API_KEY` |
+| `cerebras` | `@ai-sdk/cerebras` | `CEREBRAS_API_KEY` |
+| `azure` | `@ai-sdk/azure` | `AZURE_API_KEY`, `AZURE_RESOURCE_NAME` |
+| `google-vertex` | `@ai-sdk/google-vertex` | `GOOGLE_VERTEX_API_KEY`, `GOOGLE_VERTEX_PROJECT`, `GOOGLE_VERTEX_LOCATION` |
+| `amazon-bedrock` | `@ai-sdk/amazon-bedrock` | `AWS_BEARER_TOKEN_BEDROCK` or AWS credential env vars |
+
+GLM / Z.ai note: as of 2026-06-28 PT, there is no official Vercel `@ai-sdk/glm` or `@ai-sdk/zhipu` package. Use Z.ai's OpenAI-compatible endpoint with `createOpenAICompatible`, or a third-party provider package, and pass that model into `createLCR` like any other route.
 
 A common pattern is to subset `DEFAULT_PROVIDERS` into a project-local type for compile-time safety:
 

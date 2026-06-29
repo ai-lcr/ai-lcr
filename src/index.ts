@@ -23,7 +23,17 @@ export { classifyError, classifyErrorKind, isRetryableError, isNetworkError, isA
 export { formatCallRecord, type FormatOptions } from "./format";
 export { createHttpSink, type HttpSinkOptions } from "./sink";
 export { createEnvSink } from "./env-sink";
-export { DEFAULT_PROVIDERS, type ProviderConfig, type DefaultProviderId } from "./providers";
+export {
+  DEFAULT_PROVIDERS,
+  OFFICIAL_PROVIDERS,
+  createOfficialProvider,
+  type ProviderConfig,
+  type DefaultProviderId,
+  type OfficialProviderConfig,
+  type OfficialProviderFactory,
+  type OfficialProviderId,
+  type OfficialProviderOptions,
+} from "./providers";
 import { resolveCache, type CacheStore, type CacheOptions } from "./cache";
 import { resolvePromptCache, type PromptCacheOptions } from "./prompt-cache";
 export { createMemoryCacheStore } from "./cache";
