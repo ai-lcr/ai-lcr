@@ -121,6 +121,8 @@ const lcr = createLCR({
 
 Supported native keys: `anthropic`, `openai`, `google`, `xai`, `mistral`, `deepseek`, `cohere`, `groq`, `perplexity`, `fireworks`, `togetherai`, `cerebras`, `azure`, `google-vertex`, and `amazon-bedrock`. Their packages are optional peer dependencies, so unused vendors add no runtime requirement.
 
+`createOfficialProvider` does **not** require you to upgrade your official AI SDK provider packages to the newest major. It uses the `createXxx` factory already exported by the package you have installed, so apps pinned to `@ai-sdk/anthropic@2.x` can keep that version and still pass the resulting model into `createLCR`. If you already construct `createAnthropic({ apiKey })` yourself, that is functionally equivalent; the helper just centralizes package/env/factory lookup.
+
 ## Cheapest route for open-weights models (DeepInfra)
 
 For open-weights models — DeepSeek, Kimi, MiniMax, GLM, Qwen — a dedicated inference host is usually the cheapest route, well under aggregator pricing. [DeepInfra](https://deepinfra.com) is OpenAI-compatible, so it slots in as just another entry. **One gotcha:** its OpenAI endpoint lives at `/v1/openai` (the `/v1/` precedes `openai`), not the usual `/v1`:

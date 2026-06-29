@@ -48,6 +48,12 @@ Supported native keys: `anthropic`, `openai`, `google`, `xai`, `mistral`,
 `cerebras`, `azure`, `google-vertex`, and `amazon-bedrock`. Install only what
 you use, for example `npm i @ai-sdk/anthropic`.
 
+`createOfficialProvider` does not force a provider-package major upgrade. It
+uses the `createXxx` factory exported by the package you already installed, so
+an app pinned to `@ai-sdk/anthropic@2.x` can stay there. If you already call
+`createAnthropic({ apiKey })` yourself, that is functionally equivalent; the
+helper just centralizes package/env/factory lookup.
+
 GLM / Z.ai currently does not have an official Vercel `@ai-sdk/glm` or
 `@ai-sdk/zhipu` provider package. Use its OpenAI-compatible endpoint with
 `createOpenAICompatible`, or a third-party provider package, and pass the model
