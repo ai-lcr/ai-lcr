@@ -423,19 +423,26 @@ describe("onCall — prompt-cache aware cost", () => {
     expect(r.cachedInputTokens).toBe(800);
   });
 
-  it("reads cacheRead tokens off a V2-flat usage shape (@ai-sdk/anthropic@2.x)", async () => {
+  it("reconstructs total inputTokens from a V2-flat usage shape (@ai-sdk/anthropic@2.x)", async () => {
     // @ai-sdk/anthropic@2.x's specificationVersion is "v2": doGenerate returns
-    // flat `{ inputTokens: number, outputTokens: number }` — not V3's nested
-    // `{ inputTokens: { total, cacheRead } }` — with the cache-read count riding
-    // alongside as a sibling `cachedInputTokens` field (mapped from Anthropic's
-    // `cache_read_input_tokens`). Regression test for the bug where this sibling
-    // field was ignored and every Anthropic-native cache hit reported as 0,
-    // zeroing the CACHE column on the dashboard even though the provider was
-    // actually serving cache hits.
+    // flat `{ inputTokens: number, outputTokens: number, cachedInputTokens? }` —
+    // not V3's nested `{ inputTokens: { total, cacheRead } }`. Two distinct bugs
+    // lived here across two releases:
+    //   0.8.2: ignored `cachedInputTokens` entirely — every cache hit read as 0.
+    //   0.8.3: read `cachedInputTokens` but left `inputTokens` untouched. Unlike
+    //     V3's `.total` (which already includes the cached share), V2's flat
+    //     `inputTokens` is Anthropic's raw `input_tokens` — the fresh, NON-cached
+    //     remainder only. On a mostly-cached turn (fresh=200, cached=800) that
+    //     produced inputTokens=200 with cacheReadTokens=800 attached to it: a
+    //     cache ratio of 800/200 = 400%+ on the dashboard, and a cost estimate
+    //     that silently dropped most of the cache-read tokens (`cached =
+    //     min(cacheReadTokens, inputTokens)` clamped 800 down to 200).
+    // inputTokens must reconstruct the true total (fresh + cached) the same way
+    // V3's `.total` already represents it.
     const v2UsageWithCache = {
-      inputTokens: 1000,
+      inputTokens: 200, // Anthropic's raw input_tokens — fresh remainder only
       outputTokens: 100,
-      cachedInputTokens: 800,
+      cachedInputTokens: 800, // cache_read_input_tokens
     } as unknown as LanguageModelV3GenerateResult["usage"];
 
     const records: CallRecord[] = [];
@@ -455,9 +462,13 @@ describe("onCall — prompt-cache aware cost", () => {
     await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
 
     const r = records[0]!;
+    // Total = fresh (200) + cached (800) = 1000, matching what the V3-nested
+    // equivalent test above reports for the same underlying usage.
     expect(r.inputTokens).toBe(1000);
     expect(r.outputTokens).toBe(100);
     expect(r.cachedInputTokens).toBe(800);
+    // A sane ratio: cached tokens can never exceed the total they're a share of.
+    expect(r.cachedInputTokens).toBeLessThanOrEqual(r.inputTokens);
     // Same billing as the V3-nested equivalent above: 200 full @3 + 800 cached
     // @0.3 + 100 output @4.
     expect(r.costUsd).toBeCloseTo(1.24e-3, 12);
