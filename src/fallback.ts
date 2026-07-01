@@ -601,11 +601,18 @@ interface CallCtx {
  * on a V2 flat number or a V1 `promptTokens` object collapses every count to 0.
  * Handle all three here so any official SDK provider works regardless of its spec.
  *
- * V2's cache-read count isn't nested under `inputTokens` like V3 — @ai-sdk/anthropic@2.x
- * reports it as a sibling field, `usage.cachedInputTokens` (mapped from Anthropic's
- * `cache_read_input_tokens`). Missing this collapsed cache-read tracking to 0 for every
- * Anthropic-native call, which zeroed the CACHE column on the dashboard and understated
- * savings even though the provider was actually serving cache hits.
+ * V2's cache-read count isn't nested under `inputTokens` like V3's `.cacheRead` — it
+ * rides alongside as a sibling `usage.cachedInputTokens` (see @ai-sdk/anthropic@2.x,
+ * mapped from Anthropic's `cache_read_input_tokens`). But — unlike V3's `.total`,
+ * which already includes the cached share — V2's flat `inputTokens` is Anthropic's raw
+ * `input_tokens`, which EXCLUDES both `cache_read_input_tokens` and
+ * `cache_creation_input_tokens`: it's only the fresh, non-cached remainder billed at
+ * the full rate. Returning it as-is (as "0.8.3" did) made `inputTokens` the wrong
+ * denominator for every ratio downstream — cacheHitRate (cacheRead / inputTokens) could
+ * read over 100% whenever a turn was mostly cache hits, and `costForUsage`'s
+ * `cached = min(cacheReadTokens, inputTokens)` clamp silently discarded most of the
+ * cache-read count from the cost estimate. Reconstruct the true total the same way V3's
+ * `.total` already represents it: fresh + cached.
  */
 function extractUsageCounts(usage: LanguageModelV3GenerateResult["usage"] | undefined): {
   inputTokens: number;
@@ -617,13 +624,16 @@ function extractUsageCounts(usage: LanguageModelV3GenerateResult["usage"] | unde
   const it = u["inputTokens"];
   const ot = u["outputTokens"];
   // V2: inputTokens and outputTokens are plain numbers; cache-read (if any) rides
-  // alongside them as `cachedInputTokens` (see @ai-sdk/anthropic@2.x).
+  // alongside them as `cachedInputTokens` (see @ai-sdk/anthropic@2.x). `it` itself is
+  // only the fresh remainder — add cacheRead back in so `inputTokens` means the same
+  // "total prompt tokens" thing it does on the V3 branch below.
   if (typeof it === "number") {
     const cachedInputTokens = u["cachedInputTokens"];
+    const cacheReadTokens = typeof cachedInputTokens === "number" ? cachedInputTokens : 0;
     return {
-      inputTokens: it,
+      inputTokens: it + cacheReadTokens,
       outputTokens: typeof ot === "number" ? ot : 0,
-      cacheReadTokens: typeof cachedInputTokens === "number" ? cachedInputTokens : 0,
+      cacheReadTokens,
     };
   }
   // V3: nested objects with a `total` field

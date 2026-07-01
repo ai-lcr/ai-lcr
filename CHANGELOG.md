@@ -4,6 +4,24 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.4] — 2026-07-01
+
+### Fixed
+
+- **`inputTokens` on V2-spec providers (e.g. `@ai-sdk/anthropic@2.x`) now
+  represents the true total, not just the non-cached remainder.** 0.8.3 read
+  V2's `cachedInputTokens` sibling field but left `inputTokens` untouched.
+  Unlike V3's `.total` (which already includes the cached share), V2's flat
+  `inputTokens` is Anthropic's raw `input_tokens` — fresh tokens only,
+  excluding both `cache_read_input_tokens` and `cache_creation_input_tokens`.
+  On a mostly-cached turn this made `cacheReadTokens` larger than
+  `inputTokens`: the dashboard's cache-hit ratio could read over 100% (458%
+  observed in production), and `costForUsage`'s `cached = min(cacheReadTokens,
+  inputTokens)` clamp silently discarded most of the cache-read tokens from
+  the cost estimate, undercounting cost on cache-heavy calls. `inputTokens` on
+  the V2 branch is now reconstructed as fresh + cached, matching what V3's
+  `.total` already represents.
+
 ## [0.8.3] — 2026-06-29
 
 ### Fixed
