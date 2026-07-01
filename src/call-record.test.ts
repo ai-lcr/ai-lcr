@@ -423,6 +423,46 @@ describe("onCall — prompt-cache aware cost", () => {
     expect(r.cachedInputTokens).toBe(800);
   });
 
+  it("reads cacheRead tokens off a V2-flat usage shape (@ai-sdk/anthropic@2.x)", async () => {
+    // @ai-sdk/anthropic@2.x's specificationVersion is "v2": doGenerate returns
+    // flat `{ inputTokens: number, outputTokens: number }` — not V3's nested
+    // `{ inputTokens: { total, cacheRead } }` — with the cache-read count riding
+    // alongside as a sibling `cachedInputTokens` field (mapped from Anthropic's
+    // `cache_read_input_tokens`). Regression test for the bug where this sibling
+    // field was ignored and every Anthropic-native cache hit reported as 0,
+    // zeroing the CACHE column on the dashboard even though the provider was
+    // actually serving cache hits.
+    const v2UsageWithCache = {
+      inputTokens: 1000,
+      outputTokens: 100,
+      cachedInputTokens: 800,
+    } as unknown as LanguageModelV3GenerateResult["usage"];
+
+    const records: CallRecord[] = [];
+    const lcr = createLCR({
+      models: {
+        m: [
+          {
+            model: okModel("anthropic", "hi", v2UsageWithCache),
+            label: "anthropic",
+            cost: { input: 3, output: 4, cacheRead: 0.3 },
+          },
+        ],
+      },
+      onCall: (r) => records.push(r),
+    });
+
+    await generateText({ model: lcr("m"), prompt: "x", ...noRetry });
+
+    const r = records[0]!;
+    expect(r.inputTokens).toBe(1000);
+    expect(r.outputTokens).toBe(100);
+    expect(r.cachedInputTokens).toBe(800);
+    // Same billing as the V3-nested equivalent above: 200 full @3 + 800 cached
+    // @0.3 + 100 output @4.
+    expect(r.costUsd).toBeCloseTo(1.24e-3, 12);
+  });
+
   it("falls back to the full input rate when cacheRead is not configured (back-compat)", async () => {
     const records: CallRecord[] = [];
     const lcr = createLCR({

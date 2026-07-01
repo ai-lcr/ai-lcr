@@ -4,6 +4,20 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.3] — 2026-06-29
+
+### Fixed
+
+- **Cache-read tokens from V2-spec providers (e.g. `@ai-sdk/anthropic@2.x`) now
+  captured correctly.** 0.8.2 fixed total input/output token extraction for
+  V2's flat usage shape but still hardcoded `cacheReadTokens: 0` on that path.
+  `@ai-sdk/anthropic@2.x` reports its cache-read count as a sibling field,
+  `usage.cachedInputTokens` (mapped from Anthropic's `cache_read_input_tokens`),
+  not nested under `inputTokens` like V3. Every Anthropic-native cache hit was
+  reported as a miss — the CACHE column read `–`/0% on the dashboard, and
+  `cacheRead`-priced routes underreported their savings, even while the
+  provider was actually serving cache hits.
+
 ## [0.8.2] — 2026-06-29
 
 ### Fixed
