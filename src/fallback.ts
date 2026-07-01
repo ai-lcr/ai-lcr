@@ -588,20 +588,9 @@ interface CallCtx {
 }
 
 /**
- * Extract token counts from a usage object in either spec format:
- *   - V3 (nested): `{ inputTokens: { total, cacheRead }, outputTokens: { total } }`
- *   - V2 (flat):   `{ inputTokens: number, outputTokens: number }`
- *
- * ai-lcr calls doStream/doGenerate directly on the underlying model, bypassing
- * the `ai` SDK's V2→V3 shim. So when a provider's specificationVersion is "v2"
- * (e.g. @ai-sdk/anthropic@2.x), the stream/generate result carries flat numbers
- * rather than nested objects — and `usage.inputTokens.total` would read as
- * undefined, collapsing every token count to 0. Handle both here.
- */
-/**
  * Extract token counts from a usage object in any supported spec format:
  *   - V1 (flat, legacy): `{ promptTokens: number, completionTokens: number }`
- *   - V2 (flat):         `{ inputTokens: number, outputTokens: number }`
+ *   - V2 (flat):         `{ inputTokens: number, outputTokens: number, cachedInputTokens? }`
  *   - V3 (nested):       `{ inputTokens: { total, cacheRead }, outputTokens: { total } }`
  *
  * ai-lcr calls doStream/doGenerate directly on the underlying model, bypassing
@@ -611,6 +600,12 @@ interface CallCtx {
  * ai-lcr's LanguageModelV3 types describe — and reading `.inputTokens.total`
  * on a V2 flat number or a V1 `promptTokens` object collapses every count to 0.
  * Handle all three here so any official SDK provider works regardless of its spec.
+ *
+ * V2's cache-read count isn't nested under `inputTokens` like V3 — @ai-sdk/anthropic@2.x
+ * reports it as a sibling field, `usage.cachedInputTokens` (mapped from Anthropic's
+ * `cache_read_input_tokens`). Missing this collapsed cache-read tracking to 0 for every
+ * Anthropic-native call, which zeroed the CACHE column on the dashboard and understated
+ * savings even though the provider was actually serving cache hits.
  */
 function extractUsageCounts(usage: LanguageModelV3GenerateResult["usage"] | undefined): {
   inputTokens: number;
@@ -621,9 +616,15 @@ function extractUsageCounts(usage: LanguageModelV3GenerateResult["usage"] | unde
   const u = usage as unknown as Record<string, unknown>;
   const it = u["inputTokens"];
   const ot = u["outputTokens"];
-  // V2: inputTokens and outputTokens are plain numbers
+  // V2: inputTokens and outputTokens are plain numbers; cache-read (if any) rides
+  // alongside them as `cachedInputTokens` (see @ai-sdk/anthropic@2.x).
   if (typeof it === "number") {
-    return { inputTokens: it, outputTokens: typeof ot === "number" ? ot : 0, cacheReadTokens: 0 };
+    const cachedInputTokens = u["cachedInputTokens"];
+    return {
+      inputTokens: it,
+      outputTokens: typeof ot === "number" ? ot : 0,
+      cacheReadTokens: typeof cachedInputTokens === "number" ? cachedInputTokens : 0,
+    };
   }
   // V3: nested objects with a `total` field
   if (it && typeof it === "object") {
