@@ -172,3 +172,34 @@ describe("createLCR — autoPrice", () => {
     ).toThrow(/discount must be in \[0, 1\)/);
   });
 });
+
+describe("getModelPrice — version separator", () => {
+  // Aggregators and makers disagree on this character for the same model:
+  // OpenRouter says `claude-sonnet-4.6`, Anthropic's API says `claude-sonnet-4-6`,
+  // and the table is keyed the maker's way. A miss here is invisible — autoPrice
+  // just leaves the entry unpriced and the row reports as free.
+  it("resolves an aggregator's dotted version to the maker's hyphenated key", () => {
+    const maker = getModelPrice("claude-sonnet-4-6");
+    expect(maker).toBeDefined();
+    expect(getModelPrice("claude-sonnet-4.6")).toEqual(maker);
+    expect(getModelPrice("anthropic/claude-sonnet-4.6")).toEqual(maker);
+    expect(getModelPrice("anthropic/claude-haiku-4.5")).toEqual(getModelPrice("claude-haiku-4-5"));
+  });
+
+  it("resolves in the other direction too, for makers keyed with dots", () => {
+    // Google's own ids use dots, so the swap has to work both ways.
+    const dotted = getModelPrice("gemini-3.7-flash");
+    expect(dotted).toBeDefined();
+    expect(getModelPrice("gemini-3-7-flash")).toEqual(dotted);
+  });
+
+  it("only swaps between digits, so other punctuation is untouched", () => {
+    expect(getModelPrice("gemini-3-flash-preview")).toBeDefined();
+    expect(getModelPrice("google/gemini-3-flash-preview")).toBeDefined();
+  });
+
+  it("still returns undefined for a model that is genuinely absent", () => {
+    expect(getModelPrice("acme/not-a-real-model-9.9")).toBeUndefined();
+    expect(getModelPrice("")).toBeUndefined();
+  });
+});

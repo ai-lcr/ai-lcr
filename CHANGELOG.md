@@ -4,6 +4,25 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.5] — 2026-08-20
+
+### Fixed
+
+- **`getModelPrice` now tolerates the version separator, so `autoPrice` stops
+  silently skipping Anthropic models.** Aggregators and makers disagree on one
+  character for the *same* model: OpenRouter says `anthropic/claude-sonnet-4.6`,
+  Anthropic's own API says `claude-sonnet-4-6`, and the bundled table is keyed
+  the maker's way. The lookup already stripped the `provider/` prefix but
+  compared the rest verbatim, so every dotted Anthropic id missed.
+
+  Nothing errored — `autoPrice` just left the entry unpriced, `estCostUsd` came
+  back undefined and the row reported **$0**. Real case: 360 `claude-sonnet-4.6`
+  calls showing as free on the dashboard.
+
+  All four spellings now resolve to the same entry, in both directions (Google's
+  own ids use dots, Anthropic's use hyphens). The swap only applies between two
+  digits, so `gemini-3-flash-preview` and `gpt-4.1-mini` are untouched.
+
 ## [0.8.4] — 2026-08-20
 
 ### Changed

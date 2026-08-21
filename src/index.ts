@@ -131,20 +131,36 @@ export type ProviderEntry =
     };
 
 /**
- * Look up a model's bundled official list price by id. Tries the id as given,
- * then with a leading `provider/` segment stripped (so `anthropic/claude-haiku-4-5`
- * resolves the same as `claude-haiku-4-5`). Returns undefined for unknown models.
- * The table ({@link MODEL_PRICES}) carries native-maker first-party rates only —
- * see `scripts/gen-text-prices.mjs`.
+ * Swap the separator inside a version number: `4.6` <-> `4-6`. Only between two
+ * digits, so `gemini-3-flash` and `gpt-4.1-mini` keep their other punctuation.
+ *
+ * Aggregators and makers disagree on this character for the SAME model —
+ * OpenRouter says `anthropic/claude-sonnet-4.6`, Anthropic's own API says
+ * `claude-sonnet-4-6` — and the bundled table is keyed the maker's way.
+ */
+function swapVersionSeparator(id: string): string {
+  return id.includes(".")
+    ? id.replace(/(\d)\.(\d)/g, "$1-$2")
+    : id.replace(/(\d)-(\d)/g, "$1.$2");
+}
+
+/**
+ * Look up a model's bundled official list price by id. Tries, in order: the id
+ * as given, the id with a leading `provider/` segment stripped, and each of
+ * those with the version separator swapped — so all four of
+ * `anthropic/claude-sonnet-4.6`, `anthropic/claude-sonnet-4-6`,
+ * `claude-sonnet-4.6` and `claude-sonnet-4-6` resolve to the same entry.
+ * Returns undefined for unknown models. The table ({@link MODEL_PRICES})
+ * carries native-maker first-party rates only — see `scripts/gen-text-prices.mjs`.
  */
 export function getModelPrice(modelId: string): ProviderCost | undefined {
   if (!modelId) return undefined;
-  const direct = MODEL_PRICES[modelId];
-  if (direct) return direct;
   const slash = modelId.indexOf("/");
-  if (slash !== -1) {
-    const bare = MODEL_PRICES[modelId.slice(slash + 1)];
-    if (bare) return bare;
+  const bare = slash === -1 ? undefined : modelId.slice(slash + 1);
+  for (const id of [modelId, bare]) {
+    if (!id) continue;
+    const hit = MODEL_PRICES[id] ?? MODEL_PRICES[swapVersionSeparator(id)];
+    if (hit) return hit;
   }
   return undefined;
 }
