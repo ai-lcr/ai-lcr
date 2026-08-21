@@ -4,6 +4,32 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.4] — 2026-08-20
+
+### Changed
+
+- **Bundled price table refreshed from LiteLLM — 289 → 313 models.** The table
+  is what `autoPrice` reads, so a model missing from it prices at zero and a
+  stale entry prices at the wrong rate; neither surfaces as an error.
+
+  Newly priced, including four that shipped since the last refresh and were
+  costing nothing on the dashboard: `claude-sonnet-5` (2 / 10 / 0.2),
+  `claude-opus-5` (5 / 25 / 0.5), `deepseek-v4-pro` (2.4 / 4.8 / 0.2),
+  `deepseek-v4-flash` (0.2 / 0.4 / 0.04), plus `gemini-3.5-flash-lite`,
+  `gemini-3.6-flash`, `gemini-3.7-flash`, `glm-5.1`, `glm-5.2`, the `gpt-5.6`
+  family and `claude-mythos-5`. USD per 1M tokens, input / output / cacheRead.
+
+  Corrected, where the old numbers were actively wrong: the **grok-4.20 family
+  drops from 2 / 6 to 1.25 / 2.50** — anything auto-priced on it was
+  over-reported by about 60% — `codestral-latest` 1 / 3 → 0.3 / 0.9, and
+  `grok-code-fast` 0.2 / 1.5 → 1 / 2.
+
+  Removed: LiteLLM dropped the `gpt-4o-*-realtime-preview` and `gpt-realtime*`
+  entries. They are audio models, outside what this table covers.
+
+  Routes that pass an explicit `cost` are unaffected — this only moves the
+  `autoPrice` baseline.
+
 ## [0.8.3] — 2026-06-29
 
 ### Fixed
