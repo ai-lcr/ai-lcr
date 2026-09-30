@@ -11,6 +11,7 @@ import {
   TEXT_MODEL_COUNT,
 } from "@/lib/prices";
 import PriceTable from "./PriceTable";
+import DeepSeekComparison from "./DeepSeekComparison";
 import SiteNav from "../components/SiteNav";
 
 export const metadata: Metadata = {
@@ -49,21 +50,24 @@ export default function Prices() {
             The <span className="accent">cheapest provider</span> for every model.
           </h1>
           <p className="sub" style={{ margin: "12px 0 0", maxWidth: "68ch" }}>
-            {TEXT_MODEL_COUNT} text LLMs + {MODEL_COUNT}&nbsp;image &amp; video models. Text per 1M tokens
+            {TEXT_MODEL_COUNT} searchable text LLMs, 2 DeepSeek models compared separately, and {MODEL_COUNT}&nbsp;image &amp; video models. Text per 1M tokens
             (in&nbsp;/&nbsp;out); media normalized to one reference output (
             <strong>{REFERENCE_LABEL}</strong>).
-            The <b style={{ color: "var(--green)" }}>green</b> cell is the cheapest route ai-lcr picks
-            first.
+            Below, <b style={{ color: "var(--blue)" }}>blue</b> highlights DeepSeek direct&apos;s
+            off-peak Pro cache advantage and <b style={{ color: "var(--green)" }}>green</b> highlights
+            Tokenify&apos;s lower generation prices.
           </p>
         </header>
 
+        <DeepSeekComparison />
         <PriceTable rows={rows} columns={columns} textRows={textRows} textColumns={textColumns} />
 
         <p style={{ color: "var(--faint)", fontSize: 12.5, marginTop: 24, lineHeight: 1.7 }}>
           <b style={{ color: "var(--muted)" }}>Notes.</b> Text rates are per 1M tokens (input /
           output). <b>Official</b> is the model maker&apos;s own first-party list price (OpenAI,
           Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>,{" "}
-          <b>TokenMart</b> and <b>DeepInfra</b> are pulled live from each provider&apos;s <code>/v1/models</code>. The{" "}
+          <b>TokenMart</b> and <b>DeepInfra</b> are pulled live from each provider&apos;s <code>/v1/models</code>.
+          DeepSeek is compared separately above because its official rate changes by time of day. The{" "}
           <b style={{ color: "var(--green)" }}>green</b> cell + <em>Best&nbsp;Value</em> column mark the
           cheapest buyable route and its discount versus Official. A listed price ≠ a working route — some
           discount upstreams aren&apos;t provisioned and 502 in practice, so re-probe before routing;

@@ -180,21 +180,42 @@ export const PROVIDERS: Provider[] = [
     billing: { kind: "mgmt-api", mgmtKeyEnv: "INFERENCE_MGMT_KEY" },
   },
   {
-    // DeepSeek's own official API — OpenAI-compatible. Inference checks are
-    // near-zero cost: deepseek-chat at $0.27/$1.10 per 1M i/o is ~$0.002/day
-    // at the 15-min cadence. No integrity suite needed — this is the vendor's
-    // own endpoint, not a discount aggregator.
+    // DeepSeek's own official API — OpenAI-compatible. Use the current Flash
+    // model id; the retired deepseek-v4-flash alias now routes to V4.1 Flash.
+    // No integrity suite needed for the vendor's own endpoint.
     id: "deepseek",
     label: "DeepSeek",
     base: "https://api.deepseek.com",
     apiKeyEnv: "DEEPSEEK_API_KEY",
     check: "inference",
     models: [
-      { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+      { id: "deepseek-flash", label: "DeepSeek V4.1 Flash" },
       { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
     ],
     link: "https://platform.deepseek.com",
   },
+  ...(process.env.TOKENIFY_API_KEY
+    ? [{
+        id: "tokenify",
+        label: "Tokenify",
+        base: "https://api.tokenify.dev",
+        apiKeyEnv: "TOKENIFY_API_KEY",
+        check: "inference" as const,
+        models: [
+          { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
+          { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro" },
+        ],
+        link: "https://www.tokenify.dev",
+        integrity: {
+          refBase: "https://api.deepseek.com",
+          refApiKeyEnv: "DEEPSEEK_API_KEY",
+          models: [
+            { id: "deepseek/deepseek-v4.1-flash", ref: "deepseek-flash" },
+            { id: "deepseek/deepseek-v4-pro", ref: "deepseek-v4-pro" },
+          ],
+        },
+      } satisfies Provider]
+    : []),
   {
     // Open-weights inference host (Llama/Qwen/DeepSeek/GLM/Kimi/MiniMax) — the
     // cheapest serving option for the Chinese open models. Cheaper than Novita

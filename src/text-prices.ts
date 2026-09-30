@@ -2,7 +2,7 @@
 // Source: LiteLLM's model_prices_and_context_window.json (BerriAI/litellm, MIT).
 //
 // Official first-party list prices for native model makers — openai · anthropic ·
-// gemini · xai · mistral · deepseek · qwen (Alibaba) · kimi (Moonshot) · minimax ·
+// gemini · xai · mistral · qwen (Alibaba) · kimi (Moonshot) · minimax ·
 // glm (Z.ai) — keyed by the BARE model id you pass to that vendor's AI SDK
 // provider. USD per 1M tokens (input / output, optional cacheRead). This is the
 // first-party list rate; aggregator/reseller routes (DeepInfra, Kunavo, TokenMart,
@@ -45,15 +45,6 @@ export const MODEL_PRICES: Record<string, ProviderCost> = {
   "codestral-mamba-latest": { input: 0.25, output: 0.25 },
   "daybreak-blue-latest": { input: 5, output: 30, cacheRead: 0.5 },
   "daybreak-red-latest": { input: 12.5, output: 75, cacheRead: 1.25 },
-  "deepseek-chat": { input: 0.28, output: 0.42, cacheRead: 0.028 },
-  "deepseek-coder": { input: 0.14, output: 0.28 },
-  "deepseek-r1": { input: 0.55, output: 2.19 },
-  "deepseek-reasoner": { input: 0.28, output: 0.42, cacheRead: 0.028 },
-  "deepseek-v3": { input: 0.27, output: 1.1, cacheRead: 0.07 },
-  "deepseek-v3.2": { input: 0.28, output: 0.4 },
-  "deepseek-v4-flash": { input: 0.2, output: 0.4, cacheRead: 0.04 },
-  "deepseek-v4-flash-0731": { input: 0.2, output: 0.4, cacheRead: 0.04 },
-  "deepseek-v4-pro": { input: 2.4, output: 4.8, cacheRead: 0.2 },
   "devstral-2512": { input: 0.4, output: 2 },
   "devstral-latest": { input: 0.4, output: 2 },
   "devstral-medium-2507": { input: 0.4, output: 2 },

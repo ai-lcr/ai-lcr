@@ -2094,7 +2094,7 @@
       "note": "WaveSpeed bills Ray 2 flat per-clip (~$0.20, 720p); Replicate/fal bill per-second — the flat rate wins at 5s but isn't a per-second comparison."
     }
   ],
-  "_textNote": "Text LLM cross-provider pricing, mirror of README.md 'Text model pricing' (verified 2026-05). inUsd/outUsd = USD per 1M tokens. OpenRouter passes list price (= official); Kunavo is a flat 20% off official (Anthropic + Google only); TokenMart varies 15–65% off and is shown only where the README gives an explicit effective rate. Ranked cheapest by blended in+out. Re-probe before routing — list price ≠ effective price.",
+  "_textNote": "Text LLM cross-provider pricing, mirror of README.md 'Text model pricing' (verified 2026-05). DeepSeek is compared separately on /prices because its official peak and off-peak rates cannot be represented by one Official column. inUsd/outUsd = USD per 1M tokens. OpenRouter passes list price (= official); Kunavo is a flat 20% off official (Anthropic + Google only); TokenMart varies 15–65% off and is shown only where the README gives an explicit effective rate. Ranked cheapest by blended in+out. Re-probe before routing — list price ≠ effective price.",
   "textProviders": {
     "official": {
       "label": "Official"
@@ -2955,63 +2955,6 @@
           "provider": "deepinfra",
           "inUsd": 2.5,
           "outUsd": 7.5
-        }
-      ]
-    },
-    {
-      "id": "deepseek/deepseek-v4-flash",
-      "name": "DeepSeek V4 Flash",
-      "vendor": "deepseek",
-      "license": "open",
-      "routes": [
-        {
-          "provider": "official",
-          "inUsd": 0.14,
-          "outUsd": 0.28
-        },
-        {
-          "provider": "openrouter",
-          "inUsd": 0.0983,
-          "outUsd": 0.1966
-        },
-        {
-          "provider": "tokenmart",
-          "inUsd": 0.0882,
-          "outUsd": 0.1764
-        },
-        {
-          "provider": "deepinfra",
-          "inUsd": 0.1,
-          "outUsd": 0.2
-        }
-      ]
-    },
-    {
-      "id": "deepseek/deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro",
-      "vendor": "deepseek",
-      "license": "open",
-      "note": "Official reflects DeepSeek's permanent price (the launch promo became standard on 2026-05-31, 1/4 of original list).",
-      "routes": [
-        {
-          "provider": "official",
-          "inUsd": 0.435,
-          "outUsd": 0.87
-        },
-        {
-          "provider": "openrouter",
-          "inUsd": 0.435,
-          "outUsd": 0.87
-        },
-        {
-          "provider": "tokenmart",
-          "inUsd": 0.435,
-          "outUsd": 0.87
-        },
-        {
-          "provider": "deepinfra",
-          "inUsd": 1.3,
-          "outUsd": 2.6
         }
       ]
     },

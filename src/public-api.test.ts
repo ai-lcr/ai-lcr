@@ -11,6 +11,9 @@ import * as api from "./index";
 const EXPECTED_EXPORTS = [
   // text router
   "createLCR",
+  "createTimeRoutedModel",
+  "isDeepSeekPeak",
+  "DEEPSEEK_PRICES",
   // bundled price table (zero-config pricing)
   "MODEL_PRICES",
   "getModelPrice",

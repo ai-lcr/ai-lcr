@@ -47,6 +47,7 @@ export const DEFAULT_PROVIDERS = {
   deepinfra: { baseURL: "https://api.deepinfra.com/v1/openai", apiKeyEnv: "DEEPINFRA_API_KEY" },
   tokenmart: { baseURL: "https://model.service-inference.ai/v1", apiKeyEnv: "INFERENCE_API_KEY" },
   deepseek: { baseURL: "https://api.deepseek.com", apiKeyEnv: "DEEPSEEK_API_KEY" },
+  tokenify: { baseURL: "https://api.tokenify.dev/v1", apiKeyEnv: "TOKENIFY_API_KEY" },
   kunavo: { baseURL: "https://api.kunavo.com/v1", apiKeyEnv: "KUNAVO_API_KEY" },
   runware: { baseURL: "https://api.runware.ai/v1", apiKeyEnv: "RUNWARE_API_KEY" },
   fal: { baseURL: "https://queue.fal.run", apiKeyEnv: "FAL_KEY" },
