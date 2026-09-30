@@ -4,7 +4,7 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.10.0] — 2026-09-30
+## [0.9.2] — 2026-09-30
 
 ### Added
 
