@@ -66,8 +66,10 @@ export default function Prices() {
           <b style={{ color: "var(--muted)" }}>Notes.</b> Text rates are per 1M tokens (input /
           output). <b>Official</b> is the model maker&apos;s own first-party list price (OpenAI,
           Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>,{" "}
-          <b>TokenMart</b> and <b>DeepInfra</b> are pulled live from each provider&apos;s <code>/v1/models</code>.
-          DeepSeek is compared separately above because its official rate changes by time of day. The{" "}
+          <b>TokenMart</b> and <b>DeepInfra</b> are sourced from each provider&apos;s <code>/v1/models</code>.
+          Tokenify&apos;s rates above were checked against its authenticated models API on Sep 30, 2026 PT.
+          This page is a dated snapshot, not a live quote. DeepSeek is compared separately above because
+          its official rate changes by time of day. The{" "}
           <b style={{ color: "var(--green)" }}>green</b> cell + <em>Best&nbsp;Value</em> column mark the
           cheapest buyable route and its discount versus Official. A listed price ≠ a working route — some
           discount upstreams aren&apos;t provisioned and 502 in practice, so re-probe before routing;

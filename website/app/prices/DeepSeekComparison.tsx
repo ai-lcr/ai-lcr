@@ -21,7 +21,7 @@ export default function DeepSeekComparison() {
           <p className={styles.eyebrow}>DeepSeek · time-of-day pricing</p>
           <h2 id="deepseek-pricing-title">Where does each route win?</h2>
         </div>
-        <span className={styles.date}>Rates checked Sep 29, 2026</span>
+        <span className={styles.date}>Rates checked Sep 30, 2026</span>
       </div>
 
       <div className={styles.takeaways}>
@@ -73,6 +73,20 @@ export default function DeepSeekComparison() {
           </tbody>
         </table>
       </div>
+
+      <aside className={styles.probe} aria-label="Tokenify live billing spot check">
+        <div className={styles.probeAmount}>
+          <span>3 live API calls · Sep 29 PT</span>
+          <strong>$0.000778</strong>
+          <span>Tokenify dashboard spend</span>
+        </div>
+        <p>
+          A repeated V4.1 Flash prompt returned <strong>4,736 cache-read input tokens</strong>.
+          The first call cost $0.000725; the repeated call cost $0.000043. A V4 Pro call cost
+          $0.000010. The three API charges sum to the $0.000778 increase shown in Tokenify&apos;s
+          dashboard. This is a small billing and cache spot check, not a model-quality benchmark.
+        </p>
+      </aside>
 
       <p className={styles.footnote}>
         DeepSeek peak pricing covers 35 hours per week. In Pacific Daylight Time: Sunday–Thursday

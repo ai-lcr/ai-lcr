@@ -102,6 +102,24 @@
 .table .directBest { color: var(--blue); font-weight: 700; background: color-mix(in srgb, var(--blue) 9%, transparent); }
 .table .resellerBest { color: var(--green); font-weight: 700; background: color-mix(in srgb, var(--green) 9%, transparent); }
 
+.probe {
+  display: grid;
+  grid-template-columns: minmax(185px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space);
+  margin-top: var(--space);
+  padding: var(--space);
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--green);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.probeAmount { display: grid; gap: 2px; }
+.probeAmount span { color: var(--faint); font-family: var(--font-mono); font-size: 11px; }
+.probeAmount strong { color: var(--green); font-family: var(--font-display); font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.probe p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.probe p strong { color: var(--text); font-weight: 650; }
+
 .footnote { margin: 12px 0 0; color: var(--faint); font-size: 12px; line-height: 1.65; }
 .footnote a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
 .footnote a:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
@@ -110,4 +128,5 @@
 @media (max-width: 640px) {
   .heading { align-items: start; flex-direction: column; gap: 6px; }
   .takeaways { grid-template-columns: 1fr; }
+  .probe { grid-template-columns: 1fr; }
 }
