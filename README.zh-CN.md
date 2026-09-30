@@ -69,34 +69,33 @@ const { text } = await generateText({
 
 ## 直连模型厂商官方 API（原生 provider）
 
-「provider」不一定是聚合器。模型厂商**自己的官方 API** 就是列表里的又一个 entry——往往是最便宜的那个（没有聚合器加价），也最不容易悄悄破坏原生特性（prompt 缓存、工具调用）。任何 AI SDK 的 provider 包都返回标准模型，所以厂商的原生 API 和 OpenAI 兼容的聚合器可以并排放在同一个列表里：
+「provider」不一定是聚合器。模型厂商**自己的官方 API** 就是列表里的又一个 entry。任何 AI SDK 的 provider 包都返回标准模型，所以厂商的原生 API 和 OpenAI 兼容的 reseller 可以并排放在同一个列表里：
 
 ```ts
-import { createLCR } from "ai-lcr";
+import { createLCR, DEFAULT_PROVIDERS } from "ai-lcr";
 import { createDeepSeek } from "@ai-sdk/deepseek";          // DeepSeek 官方 API
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY });
-const openrouter = createOpenAICompatible({
-  name: "openrouter",
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
+const tokenify = createOpenAICompatible({
+  name: "tokenify",
+  baseURL: DEFAULT_PROVIDERS.tokenify.baseURL,
+  apiKey: process.env[DEFAULT_PROVIDERS.tokenify.apiKeyEnv],
 });
 
 const lcr = createLCR({
-  autoSort: true,
   models: {
-    "deepseek-v4": [
-      // 官方 API 优先——无加价，原生特性齐全（缓存、错峰折扣）。
-      { model: deepseek("deepseek-chat"), label: "deepseek", cost: { input: 0.43, output: 0.87 } },
-      // 聚合器作为兜底，保可用性 + 广覆盖。
-      { model: openrouter("deepseek/deepseek-v4"), label: "openrouter", cost: { input: 0.43, output: 0.87 } },
+    "deepseek-v4.1-flash": [
+      { model: tokenify("deepseek/deepseek-v4.1-flash"), label: "tokenify" },
+      { model: deepseek("deepseek-flash"), label: "deepseek" },
     ],
   },
 });
 ```
 
-同样的模式适用于任何厂商的原生 SDK provider——`@ai-sdk/anthropic`、`@ai-sdk/google`、`@ai-sdk/openai`、`@ai-sdk/xai` 等等。`ProviderEntry` 接受 `AnyLanguageModel`——一个鸭子类型接口（`doGenerate` + `doStream` + `provider` + `modelId`），任何 AI SDK model 无论 V2 还是 V3 spec 都满足，集成边界无需 `as` 强转。原生 API 覆盖窄（只有该厂商自己的模型）但特性全；聚合器覆盖广。**官方优先 + 聚合器兜底** 正是 LCR 最自然的形态。
+DeepSeek 官方价格分高峰和非高峰。以上示例的 V4.1 Flash 优先走 Tokenify，官方 API 作 fallback。若要每次请求使用对应时段的价格，可把 `createTimeRoutedModel`、`isDeepSeekPeak` 和两套带 `DEEPSEEK_PRICES` 的 `createLCR` 配置组合使用；见[可直接复制的 Tokenify 接入说明](website/content/docs/providers/tokenify.mdx)。单独使用静态 `autoSort` 不会按时段切换。启用 `autoPrice` 时，DeepSeek 路由必须显式填写 `cost`，否则创建 router 时会报错，避免误将用量记成 $0。
+
+同样的模式适用于任何厂商的原生 SDK provider——`@ai-sdk/anthropic`、`@ai-sdk/google`、`@ai-sdk/openai`、`@ai-sdk/xai` 等等。`ProviderEntry` 接受 `AnyLanguageModel`——一个鸭子类型接口（`doGenerate` + `doStream` + `provider` + `modelId`），任何 AI SDK model 无论 V2 还是 V3 spec 都满足，集成边界无需 `as` 强转。原生 API 覆盖窄（只有该厂商自己的模型）但特性全；聚合器覆盖广。
 
 ## 开源权重模型的最便宜路由（DeepInfra）
 
@@ -162,6 +161,7 @@ const deepinfra = createOpenAICompatible({
 | `deepinfra` | `https://api.deepinfra.com/v1/openai` | `DEEPINFRA_API_KEY` |
 | `tokenmart` | `https://model.service-inference.ai/v1` | `INFERENCE_API_KEY` |
 | `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| `tokenify` | `https://api.tokenify.dev/v1` | `TOKENIFY_API_KEY` |
 | `kunavo` | `https://api.kunavo.com/v1` | `KUNAVO_API_KEY` |
 | `runware` | `https://api.runware.ai/v1` | `RUNWARE_API_KEY` |
 | `fal` | `https://queue.fal.run` | `FAL_KEY` |
@@ -295,9 +295,10 @@ export const lcrCallSink = createEnvSink(after);
 | Claude Opus 4.7 | $15.00 / $75.00 | 无折扣 | −20% | **$4.25 / $21.25** | ⭐ TokenMart |
 | Claude Sonnet 4.6 | $3.00 / $15.00 | 无折扣 | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
 | Claude Haiku 4.5 | $1.00 / $5.00 | 无折扣 | −20% | — | ⭐ Kunavo |
-| DeepSeek V4 | $0.43 / $0.87 | 无折扣 | 未提供 | — | ⭐ DeepSeek（官方） |
 
-Kunavo 提供 Anthropic + Google。DeepSeek / OpenAI / Grok / Mistral 路由到各自的**官方 API**（最便宜，原生特性齐全），以 OpenRouter 作为广覆盖兜底——一份配置即可混用原生厂商与聚合器。
+DeepSeek V4.1 Flash 和 V4 Pro 的官方价格分高峰／非高峰。按 2026-09-29 的报价，Tokenify 也给 V4.1 Flash 提供低峰价：fresh input 和 output 比官方低峰低 40%，比官方高峰低 50%；cache read 两个时段都持平。V4 Pro 不同：官方低峰 cache read 比 Tokenify 便宜一半；高峰时 Tokenify 的 fresh input 和 output 比官方便宜一半。见[逐项价格对照](https://ai-lcr.vercel.app/prices)及 [Tokenify 接入说明](website/content/docs/providers/tokenify.mdx)。
+
+Kunavo 提供 Anthropic + Google。DeepSeek V4.1 Flash 两个时段都由 Tokenify 领跑；V4 Pro 的最优价格取决于请求时间和 cache 用量。OpenAI / Grok / Mistral 可直连各自官方 API，并以 OpenRouter 作广覆盖兜底。
 
 > **注：** list 价 ≠ 有效价——请始终用 [probe](#给-provider-做体检能力--成本探测) 验证。截至 2026-05-28，Kunavo 在 Gemini（~1.1–1.4×）和 Claude（~1.0×）两条路上的 token 计数均已干净。现存问题：两个模型均忽略 `max_tokens`，Claude 隐藏 prompt 注入仍为间歇性——生产路由前请重新 probe。
 

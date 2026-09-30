@@ -33,8 +33,11 @@ For a vendor's own API the `cost` numbers are just the public list price. Set
 `autoPrice: true` and the router fills any entry that has no explicit `cost` from
 a **bundled price table** (`MODEL_PRICES`) — first-party rates for the native
 makers (OpenAI, Anthropic, Google, xAI, Mistral, plus the open-weights labs
-DeepSeek, Qwen, Kimi, MiniMax, GLM), keyed by the bare model id you already pass
-to the provider. A flat-rate reseller just adds `discount`:
+Qwen, Kimi, MiniMax, GLM), keyed by the bare model id you already pass
+to the provider. DeepSeek is excluded because its official prices change by
+time of day; `autoPrice` throws for a DeepSeek route without an explicit `cost`
+so its usage cannot be reported as free. Set `cost` for the window you use. A flat-rate reseller
+just adds `discount`:
 
 ```ts
 createLCR({
@@ -54,6 +57,14 @@ unpriced — so turning it on never silently re-prices a route you priced yourse
 Look a price up directly with `getModelPrice("claude-sonnet-4-6")`. The table
 carries native makers only; price open-weights hosts (DeepInfra) and breadth
 aggregators (OpenRouter) explicitly.
+
+### Prices that change by time of day
+
+`autoSort` runs when you create a router. For DeepSeek's peak and off-peak rates,
+create two routers with the appropriate `DEEPSEEK_PRICES` and wrap their models
+with `createTimeRoutedModel((at) => isDeepSeekPeak(at) ? peak("flash") : offPeak("flash"))`.
+Selection happens at the start of every generate or stream call. See the
+[complete DeepSeek and Tokenify example](/docs/providers/tokenify).
 
 ## Health-based fallback (streaming-safe)
 

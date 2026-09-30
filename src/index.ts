@@ -41,6 +41,8 @@ export type { CacheStore, CachedCall, CachedMeta, CacheOptions, MemoryCacheOptio
 export type { PromptCacheOptions } from "./prompt-cache";
 import { MODEL_PRICES } from "./text-prices";
 export { MODEL_PRICES } from "./text-prices";
+export { createTimeRoutedModel, isDeepSeekPeak } from "./time-routing";
+export { DEEPSEEK_PRICES } from "./deepseek-prices";
 
 // ── Image & video Least Cost Routing (parallel to the text router above) ──
 // The text router is LanguageModelV3-bound (token-billed). Media (image/video)
@@ -178,7 +180,8 @@ export interface LCRConfig {
    * table ({@link MODEL_PRICES}), looked up by the entry's `model.modelId`. A
    * native-vendor route then needs zero hand-typed pricing; a flat-discount
    * aggregator just adds `discount` (see {@link ProviderEntry}). Off by default —
-   * unpriced entries stay unpriced (the pre-existing behavior), so turning it on
+   * unknown entries stay unpriced (the pre-existing behavior), except DeepSeek
+   * models, whose time-varying tariff requires an explicit `cost`. Turning it on
    * never silently re-prices a model you priced yourself (explicit `cost` always
    * wins). Pairs naturally with `autoSort` and `onCost`/`onCall`.
    */
@@ -296,14 +299,23 @@ function applyDiscount(cost: ProviderCost, discount: number): ProviderCost {
 /**
  * When `autoPrice` is on and an entry left `cost` unset, fill it from the bundled
  * table by `model.modelId`, applying `discount` if given. Explicit `cost` and
- * unknown models pass through untouched (cost stays as-is / undefined). Always
+ * unknown models pass through untouched (cost stays as-is / undefined), except
+ * DeepSeek models, which require an explicit time-window price. Always
  * strips `discount` so the routing engine never sees it.
  */
 function withAutoPrice(p: NormalizedEntry, autoPrice: boolean): RoutedProvider {
   const { discount, ...rest } = p;
   if (!autoPrice || rest.cost !== undefined) return rest;
   const base = getModelPrice(rest.model.modelId);
-  if (!base) return rest;
+  if (!base) {
+    const bareId = rest.model.modelId.split("/").at(-1) ?? "";
+    if (/^deepseek(?:-|$)/i.test(bareId)) {
+      throw new Error(
+        `ai-lcr: DeepSeek model "${rest.model.modelId}" has time-varying prices; set cost explicitly using DEEPSEEK_PRICES and createTimeRoutedModel`,
+      );
+    }
+    return rest;
+  }
   return { ...rest, cost: discount !== undefined ? applyDiscount(base, discount) : base };
 }
 

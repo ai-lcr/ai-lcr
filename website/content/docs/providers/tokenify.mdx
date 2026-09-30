@@ -1,0 +1,57 @@
+---
+title: Tokenify
+description: Route DeepSeek V4.1 Flash or V4 Pro through Tokenify or DeepSeek direct as peak prices change.
+---
+
+Tokenify is an OpenAI-compatible reseller. Set `TOKENIFY_API_KEY` and `DEEPSEEK_API_KEY` on the server. Its DeepSeek model IDs differ from the official API IDs.
+
+Install `ai-lcr`, `@ai-sdk/deepseek`, and `@ai-sdk/openai-compatible` in your project.
+
+## Price-aware routing by time of day
+
+Create one router for each pricing window, then select at the start of **every request**. The same `model` can be reused in `generateText`, `streamText`, tools, and agents; a stream stays on its chosen route if it crosses a boundary. Tokenify's `/v1/models` now publishes a separate `pricing_offpeak` for V4.1 Flash. These are USD prices per million tokens, checked September 29, 2026.
+
+```ts
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createDeepSeek } from "@ai-sdk/deepseek";
+import {
+  createLCR, createTimeRoutedModel, isDeepSeekPeak,
+  DEEPSEEK_PRICES, DEFAULT_PROVIDERS,
+} from "ai-lcr";
+
+const tokenify = createOpenAICompatible({
+  name: "tokenify",
+  baseURL: DEFAULT_PROVIDERS.tokenify.baseURL,
+  apiKey: process.env[DEFAULT_PROVIDERS.tokenify.apiKeyEnv],
+});
+const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY });
+const direct = deepseek("deepseek-flash"); // Official V4.1 Flash
+const reseller = tokenify("deepseek/deepseek-v4.1-flash");
+
+const offPeak = createLCR({
+  models: { flash: [
+    { model: reseller, label: "tokenify", cost: DEEPSEEK_PRICES.flash.tokenifyOffPeak },
+    { model: direct, label: "deepseek", cost: DEEPSEEK_PRICES.flash.officialOffPeak },
+  ] },
+});
+const peak = createLCR({
+  models: { flash: [
+    { model: reseller, label: "tokenify", cost: DEEPSEEK_PRICES.flash.tokenifyPeak },
+    { model: direct, label: "deepseek", cost: DEEPSEEK_PRICES.flash.officialPeak },
+  ] },
+});
+
+export const flash = createTimeRoutedModel(
+  (at) => isDeepSeekPeak(at) ? peak("flash") : offPeak("flash"),
+);
+```
+
+Both Flash chains try Tokenify first. Its off-peak fresh input and output are 40% below DeepSeek's off-peak rates; at peak they are 50% below official peak rates. Cache reads tie in both windows. Each chain retains normal `ai-lcr` failover and recovery. `autoSort` alone sorts only when a router is created, so use `createTimeRoutedModel` to attach the correct price to each request.
+
+For V4 Pro, use official `deepseek-v4-pro`, Tokenify `deepseek/deepseek-v4-pro`, and `DEEPSEEK_PRICES.pro`. Tokenify publishes one fixed Pro price: off-peak, put DeepSeek first for its cheaper cache reads; at peak, put Tokenify first for its cheaper fresh input and output. [See the side-by-side table](/prices).
+
+In Pacific Daylight Time, DeepSeek's peak windows are Sunday–Thursday 18:00–21:00 and 23:00–03:00 the following day; Pacific Standard Time shifts one hour earlier. All other hours are off-peak. The [official rule](https://api-docs.deepseek.com/quick_start/pricing/) is Monday–Friday 01:00–04:00 and 06:00–10:00 UTC. `isDeepSeekPeak` uses UTC directly to avoid daylight-saving mistakes. The current rule states no holiday exception.
+
+The `cost` values are list-price estimates for `onCall` and `onCost`. Provider-reported charge, when present, takes precedence; billing at a boundary or future price change can differ from a request-start estimate. Check [Tokenify's models API](https://api.tokenify.dev/v1/models) (with your API key; `pricing_offpeak` is not yet shown in the dashboard's main price cards) and [DeepSeek's official prices](https://api-docs.deepseek.com/quick_start/pricing/) before deploying a long-lived configuration.
+
+DeepSeek retired V4 Flash. Its legacy `deepseek-v4-flash` ID now routes to V4.1 Flash on the official API. Tokenify lists V4 Flash separately, so do not assume those two IDs serve the same model version.

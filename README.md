@@ -69,34 +69,33 @@ const { text } = await generateText({
 
 ## Route to a model vendor's own API (native providers)
 
-A "provider" doesn't have to be an aggregator. A model vendor's **own official API** is just another entry in the list — often the cheapest, since there's no aggregator markup, and the least likely to silently break native features (prompt caching, tool calls). Any AI SDK provider package returns a standard model, so a vendor's native API and an OpenAI-compatible aggregator sit side by side in the same list:
+A "provider" doesn't have to be an aggregator. A model vendor's **own official API** is just another entry in the list. Any AI SDK provider package returns a standard model, so a vendor's native API and an OpenAI-compatible reseller sit side by side in the same list:
 
 ```ts
-import { createLCR } from "ai-lcr";
+import { createLCR, DEFAULT_PROVIDERS } from "ai-lcr";
 import { createDeepSeek } from "@ai-sdk/deepseek";          // DeepSeek's own API
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY });
-const openrouter = createOpenAICompatible({
-  name: "openrouter",
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
+const tokenify = createOpenAICompatible({
+  name: "tokenify",
+  baseURL: DEFAULT_PROVIDERS.tokenify.baseURL,
+  apiKey: process.env[DEFAULT_PROVIDERS.tokenify.apiKeyEnv],
 });
 
 const lcr = createLCR({
-  autoSort: true,
   models: {
-    "deepseek-v4": [
-      // Official API first — no markup, full native features (caching, off-peak discounts).
-      { model: deepseek("deepseek-chat"), label: "deepseek", cost: { input: 0.43, output: 0.87 } },
-      // Aggregator as a fallback for uptime + breadth.
-      { model: openrouter("deepseek/deepseek-v4"), label: "openrouter", cost: { input: 0.43, output: 0.87 } },
+    "deepseek-v4.1-flash": [
+      { model: tokenify("deepseek/deepseek-v4.1-flash"), label: "tokenify" },
+      { model: deepseek("deepseek-flash"), label: "deepseek" },
     ],
   },
 });
 ```
 
-The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. `ProviderEntry` accepts `AnyLanguageModel` — a duck-typed interface (`doGenerate` + `doStream` + `provider` + `modelId`) that any AI SDK model satisfies regardless of spec version (V2 or V3), so you never need `as`-casts at the integration boundary. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad. **Official-first + aggregator-fallback** is the natural LCR shape.
+DeepSeek's official rates change between peak and off-peak hours. The example above favors Tokenify for V4.1 Flash, with direct access as a fallback. To attach the right price to every request, use `createTimeRoutedModel` with `isDeepSeekPeak` and two `createLCR` configurations with the matching `DEEPSEEK_PRICES` values; see the [copyable Tokenify setup](website/content/docs/providers/tokenify.mdx). Static `autoSort` alone cannot select by time of day.
+
+The same pattern works for any vendor's native SDK provider — `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/openai`, `@ai-sdk/xai`, and so on. `ProviderEntry` accepts `AnyLanguageModel` — a duck-typed interface (`doGenerate` + `doStream` + `provider` + `modelId`) that any AI SDK model satisfies regardless of spec version (V2 or V3), so you never need `as`-casts at the integration boundary. Native APIs are narrow (only that vendor's models) but featureful; aggregators are broad.
 
 If you prefer the same "no copied env-var names" style as `DEFAULT_PROVIDERS`, use the optional native-provider loader. Install only the official SDKs you route to:
 
@@ -187,6 +186,7 @@ Available providers:
 | `deepinfra` | `https://api.deepinfra.com/v1/openai` | `DEEPINFRA_API_KEY` |
 | `tokenmart` | `https://model.service-inference.ai/v1` | `INFERENCE_API_KEY` |
 | `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| `tokenify` | `https://api.tokenify.dev/v1` | `TOKENIFY_API_KEY` |
 | `kunavo` | `https://api.kunavo.com/v1` | `KUNAVO_API_KEY` |
 | `runware` | `https://api.runware.ai/v1` | `RUNWARE_API_KEY` |
 | `fal` | `https://queue.fal.run` | `FAL_KEY` |
@@ -228,7 +228,7 @@ export const PROVIDERS = {
 
 ## Zero-config pricing (`autoPrice`)
 
-Typing `cost: { input, output }` for every provider is the tedious part. `autoPrice: true` fills any entry that has no explicit `cost` from a **bundled price table** (`MODEL_PRICES`) — official first-party rates for the native makers (OpenAI, Anthropic, Google, xAI, Mistral, plus the open-weights labs DeepSeek, Qwen, Kimi, MiniMax, GLM), keyed by the bare model id you already pass to the provider:
+Typing `cost: { input, output }` for every provider is the tedious part. `autoPrice: true` fills any entry that has no explicit `cost` from a **bundled price table** (`MODEL_PRICES`) — official first-party rates for the native makers (OpenAI, Anthropic, Google, xAI, Mistral, plus Qwen, Kimi, MiniMax, GLM), keyed by the bare model id you already pass to the provider. DeepSeek is excluded because its official rate changes by time of day; with `autoPrice` enabled, a DeepSeek route without explicit `cost` fails at configuration time rather than showing a $0 estimate. Set its `cost` for your billing window:
 
 ```ts
 const lcr = createLCR({
@@ -459,9 +459,10 @@ USD per 1M tokens, input / output. Official rates as of 2026-05 — verify curre
 | Claude Opus 4.7 | $15.00 / $75.00 | no discount | −20% | **$4.25 / $21.25** | ⭐ TokenMart |
 | Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
 | Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −20% | — | ⭐ Kunavo |
-| DeepSeek V4 | $0.43 / $0.87 | no discount | not carried | — | ⭐ DeepSeek (official) |
 
-Kunavo carries Anthropic + Google. DeepSeek / OpenAI / Grok / Mistral route to their **own official APIs** (cheapest, full native features) with OpenRouter as a broad fallback — one config can mix native vendors and aggregators.
+DeepSeek V4.1 Flash and V4 Pro have peak/off-peak official rates. As of September 29, 2026, Tokenify also publishes off-peak pricing for V4.1 Flash: its fresh input/output are 40% below DeepSeek off-peak and 50% below DeepSeek peak, while cache reads tie. V4 Pro is different: DeepSeek's off-peak cache reads cost half as much as Tokenify's; at peak Tokenify halves fresh input/output. See the [side-by-side comparison](https://ai-lcr.vercel.app/prices) and [Tokenify setup](website/content/docs/providers/tokenify.mdx).
+
+Kunavo carries Anthropic + Google. For DeepSeek V4.1 Flash, Tokenify now leads in both pricing windows; for V4 Pro, the best-priced route depends on request timing and cache usage. OpenAI / Grok / Mistral can route to their own official APIs with OpenRouter as a broad fallback — one config can mix native vendors and aggregators.
 
 > **Note:** List price ≠ effective price — always verify with the [probe](#vetting-a-provider-capability--cost-probe). As of 2026-05-28, Kunavo token counts are clean for both Gemini (~1.1–1.4×) and Claude (~1.0×). Remaining caveats: `max_tokens` is still ignored on both models, and hidden-prompt injection appears intermittently for Claude — re-probe before routing in production. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
 

@@ -4,6 +4,19 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.2] — 2026-09-30
+
+### Added
+
+- Tokenify OpenAI-compatible provider configuration and a copyable DeepSeek V4.1 Flash integration.
+- `createTimeRoutedModel` and `isDeepSeekPeak` to select a configured route at request start as DeepSeek's peak window changes.
+- `DEEPSEEK_PRICES` with current official and Tokenify peak/off-peak Flash and Pro rates, plus a side-by-side comparison page.
+
+### Changed
+
+- Removed DeepSeek from the static `autoPrice` table because its rates change by time of day. A DeepSeek route using `autoPrice` without an explicit `cost` now fails at configuration time instead of silently reporting $0; set `cost` using `DEEPSEEK_PRICES` for each window.
+- CI now uses Node.js 22 and 24, matching the package's AI SDK 7 runtime requirement.
+
 ## [0.8.5] — 2026-08-20
 
 ### Fixed

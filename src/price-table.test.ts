@@ -43,7 +43,9 @@ describe("MODEL_PRICES (bundled table)", () => {
     // These are in the README pricing table — guard against a generator that
     // silently drops the very models the docs promise.
     expect(MODEL_PRICES["claude-haiku-4-5"]).toBeDefined();
-    expect(MODEL_PRICES["deepseek-chat"]).toBeDefined();
+    // DeepSeek switches tariffs by time; a static autoPrice would misstate the bill.
+    expect(MODEL_PRICES["deepseek-flash"]).toBeUndefined();
+    expect(MODEL_PRICES["deepseek-v4-pro"]).toBeUndefined();
   });
 
   it("includes the open-weights makers (Qwen · Kimi · MiniMax · GLM)", () => {
@@ -140,6 +142,15 @@ describe("createLCR — autoPrice", () => {
     await generateText({ model: lcr("chat"), prompt: "hi", ...noRetry });
 
     expect(costs[0]!.costUsd).toBe(0);
+  });
+
+  it("requires an explicit time-window cost for DeepSeek under autoPrice", () => {
+    for (const id of ["deepseek-flash", "deepseek/deepseek-v4.1-flash", "deepseek-ai/DeepSeek-V4-Flash"]) {
+      expect(() => createLCR({
+        autoPrice: true,
+        models: { flash: [{ model: model(id, "deepseek") }] },
+      })).toThrow(/DeepSeek model .*time-varying prices.*set cost explicitly/);
+    }
   });
 
   it("orders providers cheapest-first using table-filled prices (autoPrice + autoSort)", async () => {
