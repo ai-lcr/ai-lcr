@@ -21,7 +21,7 @@ Key facts for integrating:
 - [How routing works](/docs/routing): cheapest-first, zero-config autoPrice, failover policy, recovery, circuit breaker (cooldown)
 - [Cost tracking](/docs/cost-tracking): CallRecord, savings baseline + baselineKind, estCostUsd drift, prompt-cache-aware cost, requestId rollup, HTTP sink, dashboard
 - [Image & video](/docs/image-video): createMediaLCR, async submit/poll, ranking-vs-billing, writing your own adapter
-- [Providers](/docs/providers): OpenRouter, Kunavo, Tokenify, TokenMart, DeepInfra, fal, Runware setup + caveats
+- [Providers](/docs/providers): OpenRouter, Kunavo, Tokenify, DeepInfra, fal, Runware setup + caveats
 - [Integrations](/docs/integrations): AI SDK, Mastra
 
 ## Source

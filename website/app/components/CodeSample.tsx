@@ -2,24 +2,33 @@
 // highlighter so the homepage shows the real API surface, not just `npm install`.
 import type { ReactNode } from "react";
 
-const CODE = `import { createLCR } from "ai-lcr";
+const CODE = `import { createLCR, DEFAULT_PROVIDERS } from "ai-lcr";
 import { generateText } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createDeepSeek } from "@ai-sdk/deepseek";
 
+const tokenify = createOpenAICompatible({
+  name: "tokenify",
+  baseURL: DEFAULT_PROVIDERS.tokenify.baseURL,
+  apiKey: process.env.TOKENIFY_API_KEY,
+});
+const deepseek = createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY });
+
+// DeepSeek V4.1 Flash peak rates; switch chains by time of day for off-peak.
 const lcr = createLCR({
   autoSort: true,                  // order each model's providers cheapest-first
   models: {
-    "claude-sonnet-4-6": [
-      { model: tokenmart("…"),  cost: { input: 2.55, output: 12.75 } },
-      { model: openrouter("…"), cost: { input: 2.70, output: 13.50 } },
-      { model: anthropic("…"),  cost: { input: 3.00, output: 15.00 } },
+    "deepseek-flash": [
+      { model: tokenify("deepseek/deepseek-v4.1-flash"), cost: { input: 0.15, output: 0.60 } },
+      { model: deepseek("deepseek-flash"), cost: { input: 0.30, output: 1.20 } },
     ],
   },
-  onCost: ({ provider, costUsd }) => log(provider, costUsd),  // real $ per call
+  onCost: ({ provider, costUsd }) => console.log(provider, costUsd),
 });
 
 // a standard AI SDK model — drop into streamText, generateObject, tools, agents
 const { text } = await generateText({
-  model: lcr("claude-sonnet-4-6"),
+  model: lcr("deepseek-flash"),
   prompt: "Explain Least Cost Routing in one sentence.",
 });`;
 

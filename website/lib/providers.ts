@@ -91,19 +91,8 @@ export type Provider = {
     /** Models to run the suite against. */
     models: IntegrityModel[];
   };
-  /**
-   * Daily billing-drift audit — verifies the advertised discount is what's
-   * actually billed. Two flavors:
-   *   - "mgmt-api": the provider exposes a read-only billing API (TokenMart's
-   *     Management API). We reconcile a recent full day's real USD cost against
-   *     its real token counts: effective $/1M = cost / tokens. Must equal the
-   *     /v1/models sticker.
-   *   - "inline-estimated-cost": the provider returns `usage.estimated_cost` per
-   *     response (DeepInfra). We confirm it equals advertised_price × tokens.
-   */
-  billing?:
-    | { kind: "mgmt-api"; mgmtKeyEnv: string }
-    | { kind: "inline-estimated-cost" };
+  /** Check provider-reported cost against the advertised model price. */
+  billing?: { kind: "inline-estimated-cost" };
   /**
    * The provider's OWN public status page. When set, the detail page pulls its
    * per-component state and shows it alongside our probes — complementary, not a
@@ -141,43 +130,6 @@ export const PROVIDERS: Provider[] = [
         { id: "claude-haiku-4-5", ref: "anthropic/claude-haiku-4.5", anthropicNative: true },
       ],
     },
-  },
-  {
-    id: "tokenmart",
-    label: "TokenMart",
-    base: "https://model.service-inference.ai",
-    apiKeyEnv: "INFERENCE_API_KEY",
-    check: "inference",
-    // Mainstream models this key can actually serve (verified by live
-    // max_tokens probe, 2026-06-01). GPT and Qwen upstreams are now
-    // provisioned (gpt-5.5/gpt-5-nano/qwen3.5-flash serve fine). Caveat:
-    // Google's cheap "lite" tiers — gemini-2.5-flash-lite, gemini-3.1-flash-lite,
-    // gemini-3.5-flash — currently 502 ("Upstream authentication error"
-    // ERR_PROVIDER_005), so we monitor gemini-2.5-flash (serves) as the cheap
-    // Gemini rep and watch the lite tier on OpenRouter instead.
-    models: [
-      { id: "claude-sonnet-4-6" },
-      { id: "claude-haiku-4-5-20251001" },
-      { id: "gemini-3-flash-preview" },
-      { id: "gemini-2.5-flash" },
-      { id: "gemini-2.5-pro" },
-      { id: "glm-4.6" },
-      { id: "qwen3.5-flash" },
-      { id: "gpt-5-nano" },
-      { id: "gpt-5.5" },
-    ],
-    link: "https://thetokenmart.ai",
-    integrity: {
-      refBase: "https://openrouter.ai/api",
-      refApiKeyEnv: "OPENROUTER_API_KEY",
-      models: [
-        { id: "gemini-2.5-pro", ref: "google/gemini-2.5-pro" },
-        { id: "claude-sonnet-4-6", ref: "anthropic/claude-sonnet-4.6", anthropicNative: true },
-      ],
-    },
-    // Read-only Management API (sk-mgmt-v1-…) — reconciles real billed cost vs
-    // the /v1/models sticker each day. See scripts/verify-billing.py.
-    billing: { kind: "mgmt-api", mgmtKeyEnv: "INFERENCE_MGMT_KEY" },
   },
   {
     // DeepSeek's own official API — OpenAI-compatible. Use the current Flash
@@ -246,8 +198,7 @@ export const PROVIDERS: Provider[] = [
     // lives here (Kunavo has no GPT text models). We also monitor a cheap
     // Anthropic + Gemini rep here against real first-party upstreams: it gives
     // a same-model cross-provider comparison vs the discount gateways, and
-    // covers gemini-2.5-flash-lite — the cheapest Gemini, which TokenMart's key
-    // can't serve (502).
+    // covers gemini-2.5-flash-lite, the cheapest Gemini tier.
     id: "openrouter",
     label: "OpenRouter",
     base: "https://openrouter.ai/api",

@@ -7,7 +7,6 @@ import Select from "./Select";
 const PROVIDER_LABEL: Record<string, string> = {
   openrouter: "OpenRouter",
   kunavo: "Kunavo",
-  tokenmart: "TokenMart",
 };
 
 function money(n: number): string {
@@ -45,7 +44,7 @@ export default function SavingsCalculator({ models }: { models: TextSaving[] }) 
         </label>
 
         <label className="calc__field">
-          <span className="calc__lbl">Monthly spend at list price</span>
+          <span className="calc__lbl">Monthly spend through OpenRouter</span>
           <div className="calc__money">
             <span className="calc__cur">$</span>
             <input
@@ -80,7 +79,7 @@ export default function SavingsCalculator({ models }: { models: TextSaving[] }) 
       </div>
 
       <p className="calc__note">
-        Estimate: list price (OpenRouter) vs the cheapest <b>verified</b> route, blended input + output.
+        Estimate: the listed OpenRouter route vs the cheapest <b>verified</b> route, blended input + output.
         Your real mix and volume shift the number — see the full table on{" "}
         <a href="/prices">Prices</a>.
       </p>

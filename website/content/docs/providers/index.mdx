@@ -15,7 +15,6 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 ## Supported providers
 
 - **[OpenRouter](/docs/providers/openrouter)** — widest coverage, the safe fallback.
-- **[TokenMart](/docs/providers/tokenmart)** — cheap mainstream catalog.
 - **[Tokenify](/docs/providers/tokenify)** — DeepSeek via an OpenAI-compatible reseller; compare peak and off-peak prices before routing.
 - **[DeepInfra](/docs/providers/deepinfra)** — open-weights host.
 - **[Kunavo](/docs/providers/kunavo)** — discounted partner models; also image + video.
@@ -76,10 +75,9 @@ const lcr = createLCR({
   autoSort: true,
   models: {
     // one logical model → cheapest provider that serves it, with fallback
-    "gemini-2.5-flash": [
-      { model: tokenmart("gemini-2.5-flash"), label: "tokenmart", cost: { input: 0.3, output: 1.2 } },
-      { model: kunavo("gemini-2.5-flash"), label: "kunavo", cost: { input: 0.3, output: 1.25 } },
-      { model: openrouter("google/gemini-2.5-flash"), label: "openrouter", cost: { input: 0.3, output: 2.5 } },
+    "deepseek-flash": [
+      { model: tokenify("deepseek/deepseek-v4.1-flash"), label: "tokenify", cost: { input: 0.15, output: 0.60 } },
+      { model: deepseek("deepseek-flash"), label: "deepseek", cost: { input: 0.30, output: 1.20 } },
     ],
     "deepseek-v4-flash": [
       { model: deepinfra("deepseek-ai/DeepSeek-V4-Flash"), label: "deepinfra", cost: { input: 0.27, output: 0.4 } },

@@ -252,17 +252,17 @@ export const TEXT_MODEL_COUNT = data.textModels.length;
 export interface TextSaving {
   id: string;
   name: string;
-  /** OpenRouter (list) blended in+out per 1M, or the dearest route if no OR. */
+  /** OpenRouter blended in+out per 1M, or the dearest route if no OR. */
   listBlended: number;
   cheapestBlended: number;
   cheapestProvider: string;
-  /** % saved on blended in+out vs list. */
+  /** % saved on blended in+out vs the comparison route. */
   discountPct: number;
 }
 
 /**
- * Per-model savings vs list price, for the homepage savings calculator.
- * "List" = OpenRouter (which passes vendor list pricing through). Models with
+ * Per-model savings vs OpenRouter, for the homepage savings calculator.
+ * The reference is OpenRouter when available. Models with
  * only one route (no cheaper alternative) are dropped.
  */
 export function textSavings(): TextSaving[] {

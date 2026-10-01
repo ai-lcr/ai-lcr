@@ -17,13 +17,13 @@ order** — the router tries them top to bottom.
 ```ts
 models: {
   smart: [
-    { model: tokenmart("gemini-2.5-flash"), label: "tokenmart", cost: { input: 0.3, output: 1.2 } },
-    { model: openrouter("google/gemini-2.5-flash"), label: "openrouter", cost: { input: 0.3, output: 2.5 } },
+    { model: tokenify("deepseek/deepseek-v4.1-flash"), label: "tokenify", cost: { input: 0.15, output: 0.60 } },
+    { model: deepseek("deepseek-flash"), label: "deepseek", cost: { input: 0.30, output: 1.20 } },
   ],
 }
 ```
 
-Set `autoSort: true` and the router sorts each list **cheapest-first by `cost`**
+These example rates are for DeepSeek V4.1 Flash at peak; [switch routes by time of day](/docs/providers/tokenify) when using its off-peak rates. Set `autoSort: true` and the router sorts each list **cheapest-first by `cost`**
 for you, so you can list providers in any order. Without `autoSort`, you control
 priority by hand — useful when you'd rather rank by reliability than price.
 

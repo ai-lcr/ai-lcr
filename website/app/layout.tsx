@@ -22,7 +22,7 @@ const body = Hanken_Grotesk({
 });
 
 const description =
-  "Route every model call to the cheapest provider that can serve it, fall back automatically on failure, and track real cost. One config across OpenRouter, TokenMart, fal & Runware. Built for the Vercel AI SDK.";
+  "Route every model call to the cheapest provider that can serve it, fall back automatically on failure, and track real cost. One config across OpenRouter, Tokenify, DeepSeek, fal & Runware. Built for the Vercel AI SDK.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
