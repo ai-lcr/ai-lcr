@@ -17,7 +17,7 @@ import SiteNav from "../components/SiteNav";
 export const metadata: Metadata = {
   title: "ai-lcr — Cheapest provider per model (text, image & video)",
   description:
-    "Official cheapest-provider recommendation across OpenRouter, Kunavo, TokenMart, DeepInfra, fal and Runware. Text LLMs priced per 1M tokens (input / output); image & video normalized to one 16:9 1080p image / 5-second clip so providers compare directly. Filter by open-weight vs proprietary, vendor, and modality.",
+    "Official cheapest-provider recommendation across OpenRouter, Kunavo, Tokenify, DeepSeek, DeepInfra, fal and Runware. Text LLMs priced per 1M tokens (input / output); image & video normalized to one 16:9 1080p image / 5-second clip so providers compare directly. Filter by open-weight vs proprietary, vendor, and modality.",
 };
 
 // Static table — no DB, no live data. Safe to prerender.
@@ -65,8 +65,8 @@ export default function Prices() {
         <p style={{ color: "var(--faint)", fontSize: 12.5, marginTop: 24, lineHeight: 1.7 }}>
           <b style={{ color: "var(--muted)" }}>Notes.</b> Text rates are per 1M tokens (input /
           output). <b>Official</b> is the model maker&apos;s own first-party list price (OpenAI,
-          Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.); <b>OpenRouter</b>,{" "}
-          <b>TokenMart</b> and <b>DeepInfra</b> are sourced from each provider&apos;s <code>/v1/models</code>.
+          Anthropic, Google, Z.ai, DeepSeek, Moonshot, etc.). <b>OpenRouter</b> and{" "}
+          <b>DeepInfra</b> prices come from their <code>/v1/models</code> APIs.
           Tokenify&apos;s rates above were checked against its authenticated models API on Sep 30, 2026 PT.
           This page is a dated snapshot, not a live quote. DeepSeek is compared separately above because
           its official rate changes by time of day. The{" "}

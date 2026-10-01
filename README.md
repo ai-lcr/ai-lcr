@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr keeps a cheapest-first list of providers per model — serves the cheapest (saving ~40%), fails over to the next on error, and snaps back to the cheapest after ~60s" width="720">
+  <img src="assets/ai-lcr-hero.svg" alt="ai-lcr routes DeepSeek V4.1 Flash through Tokenify at peak (50% less for fresh input), fails over to DeepSeek direct on error, and returns after recovery" width="720">
 </p>
 
 The same model costs different amounts on different providers — and no single provider is cheapest for everything. `ai-lcr` keeps a cheapest-first list per model, routes to the cheapest healthy one (⭐ below), and falls through on failure — the way phone carriers have done [Least Cost Routing](https://en.wikipedia.org/wiki/Least-cost_routing) for decades.
@@ -164,7 +164,7 @@ DeepInfra carries open weights only — no first-party Claude / GPT / Gemini. Fo
 
 ## Skip the boilerplate (`DEFAULT_PROVIDERS`)
 
-Every project that routes through OpenRouter, DeepInfra, TokenMart, DeepSeek, etc. redeclares the same `baseURL` + `apiKeyEnv` pair. `DEFAULT_PROVIDERS` is a bundled dictionary — import what you need instead of copy-pasting URLs:
+Every project that routes through OpenRouter, DeepInfra, Tokenify, DeepSeek, etc. redeclares the same `baseURL` + `apiKeyEnv` pair. `DEFAULT_PROVIDERS` is a bundled dictionary — import what you need instead of copy-pasting URLs:
 
 ```ts
 import { DEFAULT_PROVIDERS } from "ai-lcr";
@@ -184,7 +184,6 @@ Available providers:
 |---|---|---|
 | `openrouter` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
 | `deepinfra` | `https://api.deepinfra.com/v1/openai` | `DEEPINFRA_API_KEY` |
-| `tokenmart` | `https://model.service-inference.ai/v1` | `INFERENCE_API_KEY` |
 | `deepseek` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
 | `tokenify` | `https://api.tokenify.dev/v1` | `TOKENIFY_API_KEY` |
 | `kunavo` | `https://api.kunavo.com/v1` | `KUNAVO_API_KEY` |
@@ -248,7 +247,7 @@ const lcr = createLCR({
 Three rules keep it predictable:
 
 - **Off by default.** Unpriced entries stay unpriced (the pre-existing behavior), so turning `autoPrice` on never silently re-prices a model — and an **explicit `cost` always wins** over the table.
-- **`discount` is the reseller knob.** A flat-% aggregator (Kunavo −20%) becomes `discount: 0.2` instead of a hand-typed number; it scales input, output, and `cacheRead` alike, and only applies when the table fills the entry. Variable-discount providers (TokenMart) still want explicit per-model `cost`.
+- **`discount` is the reseller knob.** A flat-% aggregator (Kunavo −20%) becomes `discount: 0.2` instead of a hand-typed number; it scales input, output, and `cacheRead` alike, and only applies when the table fills the entry. Variable-discount providers still want explicit per-model `cost`.
 - **Native makers only.** The table carries first-party list prices, keyed by each maker's own bare id (`qwen-plus`, `glm-4.6`, `kimi-k2.5`, `MiniMax-M2`). It's the autoPrice baseline when you route through that maker's own API. Open-weights *hosts* (DeepInfra uses HF-style ids like `Qwen/Qwen3-…`) and breadth aggregators (OpenRouter) aren't keyed here — price those with explicit `cost` or `discount`.
 
 Look a price up yourself with `getModelPrice("claude-sonnet-4-6")`. The table is generated from [LiteLLM's price map](https://github.com/BerriAI/litellm) (MIT) — refresh with `node scripts/gen-text-prices.mjs`.
@@ -320,9 +319,9 @@ const lcr = createLCR({
 ```
 
 ```text
-✓ text  tokenmart                      412ms  $0.0003
-⚠ text  tokenmart→openrouter           910ms  $0.0004  ⤷ tokenmart 502
-✗ text  deepseek→tokenmart→openrouter  1240ms FAILED   ⤷ deepseek 401, tokenmart 502, openrouter 429
+✓ text  tokenify                      412ms  $0.0003
+⚠ text  tokenify→deepseek           910ms  $0.0004  ⤷ tokenify 502
+✗ text  tokenify→deepseek  1240ms FAILED   ⤷ tokenify 502, deepseek 429
 ```
 
 `✓` served on the first try · `⚠` failed over but recovered · `✗` every provider failed. The `⤷` shows which provider died and why.
@@ -443,48 +442,16 @@ One-click Vercel deploy (any Postgres: Neon, Supabase, RDS, local); records carr
 Any OpenAI-compatible endpoint works — and so does any AI SDK provider package, including a model vendor's own official API.
 
 - **Model vendors' own APIs (native):** route straight to [DeepSeek](https://platform.deepseek.com), [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Google](https://ai.google.dev), [xAI](https://x.ai), etc. via their AI SDK provider packages — no markup, full native features. See [Route to a model vendor's own API](#route-to-a-model-vendors-own-api-native-providers).
-- **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** every model) · [TokenMart](https://thetokenmart.ai) (15–65% off, varies by model)
-- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [TokenMart](https://thetokenmart.ai) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo (generations + `*-edit` reference-image endpoints) + Runware + fal. Video: fal (async queue), Kunavo (async `POST /v1/videos` + poll, sync fallback), and Runware (async `videoInference` + `getResponse` poll) — all three on the async `submit`/`poll` path
+- **Text aggregators:** [OpenRouter](https://openrouter.ai) (widest coverage, list pricing) · [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off** for supported models) · [Tokenify](https://www.tokenify.dev) (DeepSeek V4.1 Flash and V4 Pro; compare peak and off-peak rates)
+- **Image / video:** [Kunavo](https://kunavo.com/?ref=victorimf) (**20% off**) · [fal.ai](https://fal.ai) · [Runware](https://runware.ai) — routing via `createMediaLCR`. Image: Kunavo (generations + `*-edit` reference-image endpoints) + Runware + fal. Video: fal (async queue), Kunavo (async `POST /v1/videos` + poll, sync fallback), and Runware (async `videoInference` + `getResponse` poll) — all three on the async `submit`/`poll` path
 
 ## Text model pricing
 
-USD per 1M tokens, input / output. Official rates as of 2026-05 — verify current rates with each provider. OpenRouter passes list price through; Kunavo is a flat 20% off the official rate. TokenMart prices vary by model (15–65% off list) — verify current rates at [thetokenmart.ai](https://thetokenmart.ai).
-
-| Model | Official (in / out) | OpenRouter | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | Cheapest |
-|---|---|---|---|---|---|
-| Gemini 3 Flash | $0.50 / $3.00 | no discount | −20% | — | ⭐ Kunavo |
-| Gemini 3 Pro / 3.1 Pro | $2.00 / $12.00 | no discount | −20% | −20% → **$2.40 / $9.60** | ⭐ Kunavo |
-| Gemini 2.5 Pro | $1.25 / $10.00 | no discount | −20% | — | ⭐ Kunavo |
-| Gemini 2.5 Flash | $0.30 / $2.50 | no discount | −20% | — | ⭐ Kunavo |
-| Claude Opus 4.7 | $15.00 / $75.00 | no discount | −20% | **$4.25 / $21.25** | ⭐ TokenMart |
-| Claude Sonnet 4.6 | $3.00 / $15.00 | no discount | −20% | −15% → **$2.55 / $12.75** | ⭐ Kunavo |
-| Claude Haiku 4.5 | $1.00 / $5.00 | no discount | −20% | — | ⭐ Kunavo |
-
-DeepSeek V4.1 Flash and V4 Pro have peak/off-peak official rates. As of September 29, 2026, Tokenify also publishes off-peak pricing for V4.1 Flash: its fresh input/output are 40% below DeepSeek off-peak and 50% below DeepSeek peak, while cache reads tie. V4 Pro is different: DeepSeek's off-peak cache reads cost half as much as Tokenify's; at peak Tokenify halves fresh input/output. See the [side-by-side comparison](https://ai-lcr.vercel.app/prices) and [Tokenify setup](website/content/docs/providers/tokenify.mdx).
-
-Kunavo carries Anthropic + Google. For DeepSeek V4.1 Flash, Tokenify now leads in both pricing windows; for V4 Pro, the best-priced route depends on request timing and cache usage. OpenAI / Grok / Mistral can route to their own official APIs with OpenRouter as a broad fallback — one config can mix native vendors and aggregators.
-
-> **Note:** List price ≠ effective price — always verify with the [probe](#vetting-a-provider-capability--cost-probe). As of 2026-05-28, Kunavo token counts are clean for both Gemini (~1.1–1.4×) and Claude (~1.0×). Remaining caveats: `max_tokens` is still ignored on both models, and hidden-prompt injection appears intermittently for Claude — re-probe before routing in production. Effective cost is why `ai-lcr` should rank by measured behavior, not the sticker price.
-
-> **Note:** TokenMart token counts are also verified clean (same backend as Inference.ai, all checks passed 2026-05-27: tool calls, `max_tokens`, no injection, token ~1.0×, prompt caching) — a reliable second provider for Claude at −15% list. Re-probe before routing in production.
+See the [price comparison](https://ai-lcr.vercel.app/prices) for the current dated snapshot of buyable text routes. DeepSeek V4.1 Flash and V4 Pro are compared separately because official prices change by time of day. Tokenify's V4.1 Flash fresh input and output were 40% below DeepSeek direct off-peak and 50% below direct peak when checked on September 30, 2026 PT; V4 Pro's official off-peak cache reads were cheaper. [Tokenify setup](website/content/docs/providers/tokenify.mdx) shows how to switch routes per request. Check live provider prices and status before using a long-lived configuration.
 
 ## Image model pricing
 
-USD per image, as of 2026-05 (provider list / retail; verify current rates). Kunavo is 20% off official. fal and Runware are compute providers — `ai-lcr` picks the cheapest per model (⭐).
-
-| Model | fal.ai | Runware | [Kunavo](https://kunavo.com/?ref=victorimf) | [TokenMart](https://thetokenmart.ai) | Cheapest |
-|---|---|---|---|---|---|
-| Nano Banana 2 | $0.080 | $0.069 | $0.054 | **$0.050** | ⭐ TokenMart |
-| Nano Banana Pro | $0.080 | — | $0.107 | — | ⭐ fal |
-| GPT-Image-2 | $0.210 | $0.094 | $0.102 | — | ⭐ Runware |
-| Imagen 4 Ultra | $0.060 | $0.060 | — | — | ⭐ fal / Runware |
-| Ideogram V3 | $0.060 | $0.060 | — | — | ⭐ fal / Runware |
-| Seedream 4 | $0.030 | — | — | — | ⭐ fal |
-| Flux 1.1 Pro | $0.040 | $0.040 | — | — | ⭐ fal / Runware |
-| Flux Dev | $0.025 | $0.025 | — | — | ⭐ fal / Runware |
-| Flux Schnell | $0.0030 | $0.0013 | — | — | ⭐ Runware |
-| Qwen-Image | — | $0.0038 | — | — | ⭐ Runware |
-| FLUX.2 Klein 4B | — | $0.0006 | — | — | ⭐ Runware |
+See the [image and video table](https://ai-lcr.vercel.app/prices) for normalized per-output prices across Kunavo, fal, Runware, WaveSpeed and Replicate. Provider SKUs can differ in resolution, duration and quality, so review each row's note before routing.
 
 ## Video model pricing
 
@@ -615,33 +582,13 @@ API_KEY=$KUNAVO_API_KEY BASE=https://api.kunavo.com \
   REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
   bash scripts/check-provider.sh
 
-# TokenMart (Inference AI) uses bare, un-prefixed model IDs
-API_KEY=$INFERENCE_API_KEY BASE=https://model.service-inference.ai \
-  MODEL_1=gemini-3-flash-preview      REF_1=google/gemini-3-flash-preview \
-  MODEL_2=claude-sonnet-4-6           REF_2=anthropic/claude-sonnet-4.6 \
-  CACHE_MODEL=claude-sonnet-4-6 \
-  REF_API_KEY=$OPENROUTER_API_KEY REF_BASE=https://openrouter.ai/api \
-  bash scripts/check-provider.sh
 ```
 
 A `FAIL` on injection or token over-counting means that provider is **not** a safe least-cost target for that model — keep it off that model's cheapest-first list until it's fixed, then re-probe.
 
-### Trust matrix (probed 2026-05-27)
+### Kunavo probe notes (2026-05-27 to 2026-05-28)
 
-Two OpenAI-compatible providers, same probe, same day. Cells cover both families (G = Gemini, C = Claude).
-
-| Check | Kunavo | [TokenMart](https://thetokenmart.ai) |
-|---|---|---|
-| Tool calls (single + multi-step `content: null`) | G ⚠️ intermittent¹ · C ✅ | ✅ both |
-| Token count vs OpenRouter baseline | G ✅ ~1.1–1.4× · C ✅ ~1.0× | ✅ both ~1.0× |
-| Hidden-prompt injection | G ✅ none · C ❌ intermittent² | ✅ none |
-| `max_tokens` honored | ❌ ignored (both) | ✅ both |
-| Prompt caching (`cache_control`) | C ❌ not applied (endpoint also hung mid-probe) | C ✅ `cache_read` > 0 |
-
-¹ Kunavo Gemini returned a clean tool call on one run and **dropped tools entirely** on the next identical request — not a stable pass.
-² Kunavo Claude reacted to a phantom "fake system prompt" on one run and stayed clean on another — the injection is intermittent, not removed.
-
-**Verdict:** TokenMart passes every check on both Gemini and Claude with stable, repeatable results — route freely. Kunavo: token counts are now clean for Claude (re-probed 2026-05-28); at −20% list, Kunavo is the cheapest option for Claude. Remaining caveats: `max_tokens` is ignored on both models, hidden-prompt injection appears intermittently for Claude, and Gemini drops tool calls intermittently — re-probe before routing a new model in production.
+The probe found clean token counts for Gemini (~1.1–1.4× OpenRouter) and Claude (~1.0×). Gemini tool calls sometimes disappear; Claude sometimes reacts to a hidden prompt. Both models ignored `max_tokens` in these runs. Re-probe each model before routing in production.
 
 ## Roadmap
 

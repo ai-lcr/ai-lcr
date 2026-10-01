@@ -22,8 +22,8 @@ const lcr = createLCR({
   autoSort: true,
   models: { /* … */ },
   onCall: (rec) => console.log(formatCallRecord(rec)),
-  // ✓ text  tokenmart  840ms (ttft 96ms)  $0.0004  (saved $0.0011)
-  // ⚠ text  tokenmart→openrouter  910ms  $0.0004  ⤷ tokenmart 502
+  // ✓ text  tokenify  840ms (ttft 96ms)  $0.0004  (saved $0.0011)
+  // ⚠ text  tokenify→deepseek  910ms  $0.0004  ⤷ tokenify 502
 });
 ```
 
@@ -96,17 +96,17 @@ cheapest route isn't always the snappiest.
 
 ## Prompt-cache-aware cost
 
-If you use Anthropic-style prompt caching, cached input tokens bill far cheaper
+If your provider reports prompt-cache reads, cached input tokens can bill far cheaper
 than fresh input. Tell ai-lcr by adding `cacheRead` (USD per 1M cached input
 tokens) to a provider's `cost`:
 
 ```ts
 models: {
-  "claude-sonnet-4-6": [
+  "deepseek-flash": [
     {
-      model: tokenmart("claude-sonnet-4-6"),
-      label: "tokenmart",
-      cost: { input: 3.0, output: 15.0, cacheRead: 0.3 }, // cached reads at 1/10th
+      model: tokenify("deepseek/deepseek-v4.1-flash"),
+      label: "tokenify",
+      cost: { input: 0.15, output: 0.60, cacheRead: 0.006 }, // Flash peak rates; cached reads are cheaper
     },
   ],
 }

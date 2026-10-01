@@ -16,15 +16,14 @@ const C = {
   red: "#ff5f6e",
 };
 
-// Cheapest $0.30 vs the priciest $0.50 → −40%. Keep SAVE in sync with the rows.
-const SAVE = "−40%";
+// DeepSeek V4.1 Flash peak fresh-input price: Tokenify $0.15 vs direct $0.30.
+const SAVE = "−50%";
 const ROW_X = 116;
 const ROW_W = 312;
 const ROW_H = 42;
 const ROWS = [
-  { name: "TokenMart", price: "$0.30 / 1M", y: 70 },
-  { name: "OpenRouter", price: "$0.43 / 1M", y: 124 },
-  { name: "Anthropic API", price: "$0.50 / 1M", y: 178 },
+  { name: "Tokenify", price: "$0.15 / 1M input", y: 70 },
+  { name: "DeepSeek direct", price: "$0.30 / 1M input", y: 124 },
 ];
 const REQ = { x: 18, y: 145, w: 60 }; // request token (vertically centred on the ladder)
 
@@ -37,9 +36,9 @@ type Phase = {
 };
 
 const PHASES: Phase[] = [
-  { active: 0, down: null, flash: null, tone: C.green, caption: "Serves the cheapest healthy provider — −40% vs the priciest route." },
+  { active: 0, down: null, flash: null, tone: C.green, caption: "Flash peak input: Tokenify saves 50% vs DeepSeek direct." },
   { active: 1, down: 0, flash: null, tone: C.amber, caption: "Cheapest errors → fails over to the next, mid-request." },
-  { active: 0, down: null, flash: 0, tone: C.green, caption: "Re-probes the cheapest every ~60s → snaps back to the −40% route." },
+  { active: 0, down: null, flash: 0, tone: C.green, caption: "Re-probes Tokenify every ~60s, then routes back when healthy." },
 ];
 const DURS = [2800, 2600, 2200];
 
@@ -67,8 +66,8 @@ export default function RoutingDiagram({ maxWidth = 520 }: { maxWidth?: number }
   const wirePath = `M${REQ.x + REQ.w + 4},${REQ.y} C${REQ.x + REQ.w + 26},${REQ.y} ${ROW_X - 20},${cy} ${ROW_X},${cy}`;
 
   return (
-    <svg viewBox="0 0 480 270" role="img" width="100%"
-      aria-label="How ai-lcr routes: it serves the cheapest provider (−40% vs the priciest), fails over to the next when it errors, and snaps back to the cheapest once it recovers."
+    <svg viewBox="0 0 480 230" role="img" width="100%"
+      aria-label="How ai-lcr routes DeepSeek V4.1 Flash at peak: Tokenify is 50% cheaper for fresh input, fails over to DeepSeek direct when it errors, and returns to Tokenify after recovery."
       style={{ maxWidth, margin: "8px auto", display: "block" }}>
       <defs>
         <filter id="rd-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -140,8 +139,8 @@ export default function RoutingDiagram({ maxWidth = 520 }: { maxWidth?: number }
       })}
 
       {/* caption */}
-      <circle cx={18} cy={236} r={3.4} fill={p.tone} filter="url(#rd-glow)" />
-      <text x={30} y={240} fill={C.muted} fontSize={11}>{p.caption}</text>
+      <circle cx={18} cy={205} r={3.4} fill={p.tone} filter="url(#rd-glow)" />
+      <text x={30} y={209} fill={C.muted} fontSize={11}>{p.caption}</text>
     </svg>
   );
 }

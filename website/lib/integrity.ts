@@ -304,70 +304,6 @@ function modelsUrl(p: Provider): string {
 const BILLING_TOLERANCE = 0.06; // 6% — billed should equal sticker; allows rounding
 
 /**
- * TokenMart-style billing audit: reconcile a recent full day's REAL USD cost
- * (Management API) against its REAL token counts. effective $/1M = cost/tokens
- * must equal the /v1/models sticker, or the "discount" is illusory. One
- * CheckResult per model with enough volume to be meaningful.
- */
-async function mgmtBillingChecks(p: Provider, mgmtKeyEnv: string): Promise<CheckResult[]> {
-  const mk = (model: string, status: CheckStatus, detail: string): CheckResult => ({
-    provider: p.id, model, check_name: "billing_drift", status, detail,
-  });
-  const key = process.env[p.apiKeyEnv];
-  const mgmtKey = process.env[mgmtKeyEnv];
-  if (!mgmtKey) return [mk("(billing)", "skip", `missing env ${mgmtKeyEnv}`)];
-  if (!key) return [mk("(billing)", "skip", `missing env ${p.apiKeyEnv}`)];
-
-  // yesterday (UTC) — a full settled day of daily-snapshot billing data.
-  const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  const auth = { Authorization: `Bearer ${mgmtKey}` };
-  try {
-    const [advR, costR, usageR] = await Promise.all([
-      getJson(modelsUrl(p), { Authorization: `Bearer ${key}` }),
-      getJson(`${p.base}/manage/cost/breakdown?date=${day}`, auth),
-      getJson(`${p.base}/manage/usage/timeseries?period=7d&groupBy=model`, auth),
-    ]);
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const adv: Record<string, { i?: number; o?: number }> = {};
-    for (const m of ((advR.json as any)?.data ?? [])) {
-      const t = m?.pricing?.tokens;
-      if (t) adv[m.id] = { i: t.input_per_1m, o: t.output_per_1m };
-    }
-    const cost: Record<string, any> = {};
-    for (const x of ((costR.json as any)?.breakdown ?? [])) cost[x.model] = x.costByMetric;
-    const usage: Record<string, any> = {};
-    for (const r of (Array.isArray(usageR.json) ? (usageR.json as any[]) : [])) {
-      if (r?.date === day) usage[r.group] = r.byMetric;
-    }
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-
-    const models = Object.keys(cost).filter((m) => adv[m] && usage[m]);
-    if (models.length === 0) {
-      return [mk("(billing)", "skip", `no billed usage for ${day}`)];
-    }
-    return models.map((model) => {
-      const u = usage[model], c = cost[model], a = adv[model];
-      const parts: string[] = [];
-      let verdict: CheckStatus = "skip";
-      for (const [side, tokKey, advv] of [["in", "input_tokens", a.i], ["out", "output_tokens", a.o]] as const) {
-        const tok = u[tokKey] ?? 0;
-        const spent = c[tokKey] ?? 0;
-        if (tok < 100 || advv == null) continue; // too little volume to trust
-        const eff = (spent / tok) * 1e6;
-        const drift = eff / advv - 1;
-        const ok = Math.abs(drift) <= BILLING_TOLERANCE;
-        parts.push(`${side} $${eff.toFixed(4)} vs $${advv} (${(drift * 100).toFixed(0)}%)`);
-        verdict = ok ? (verdict === "fail" ? "fail" : "pass") : "fail";
-      }
-      if (parts.length === 0) return mk(model, "skip", `${day}: insufficient volume`);
-      return mk(model, verdict, `${day}: ${parts.join(", ")}`);
-    });
-  } catch (e) {
-    return [mk("(billing)", "fail", errMsg(e))];
-  }
-}
-
-/**
  * DeepInfra-style billing audit: the provider returns `usage.estimated_cost`
  * per response — confirm it equals advertised price × tokens. One CheckResult
  * per monitored model.
@@ -414,7 +350,6 @@ async function inlineCostBillingChecks(p: Provider): Promise<CheckResult[]> {
 
 async function billingChecks(p: Provider): Promise<CheckResult[]> {
   if (!p.billing) return [];
-  if (p.billing.kind === "mgmt-api") return mgmtBillingChecks(p, p.billing.mgmtKeyEnv);
   return inlineCostBillingChecks(p);
 }
 

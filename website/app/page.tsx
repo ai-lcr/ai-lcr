@@ -217,7 +217,7 @@ export default async function Home() {
           <p className="sub reveal" style={{ animationDelay: "0.14s" }}>
             <strong>Route each call to the cheapest provider that can serve it</strong>, and
             fall back automatically when one fails. One config across OpenRouter,
-            TokenMart, fal &amp; Runware — lowest price per token, every time. Built for the
+            Tokenify, DeepSeek, fal &amp; Runware — lowest price per token, every time. Built for the
             Vercel AI SDK.
           </p>
 
@@ -263,8 +263,9 @@ export default async function Home() {
             </div>
           </div>
           <p className="caption">
-            ai-lcr takes the <b>cheapest healthy provider</b> — saving ~40% — and when
-            one goes offline, reroutes mid-flight to the next cheapest. No dropped calls.
+            At peak, Tokenify costs 50% less than DeepSeek direct for V4.1 Flash fresh input and
+            output. ai-lcr takes the <b>cheapest healthy provider</b> and reroutes to the next one
+            when it fails. No dropped calls.
           </p>
         </section>
 
