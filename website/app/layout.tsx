@@ -26,7 +26,7 @@ const description =
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://ai-lcr.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://ailcr.vercel.app"
   ),
   title: "ai-lcr — Least Cost Routing for LLMs",
   description,
