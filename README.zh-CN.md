@@ -283,11 +283,11 @@ export const lcrCallSink = createEnvSink(after);
 
 ## 文本模型价格
 
-[价格对比页](https://ai-lcr.vercel.app/prices)列出当前有可购买路线的 text model 报价快照。DeepSeek V4.1 Flash 和 V4 Pro 单独按时段比较：截至 2026-09-30 PT，Tokenify 的 V4.1 Flash fresh input 和 output 比 DeepSeek 官方低峰低 40%，比高峰低 50%；V4 Pro 在官方低峰的 cache read 则更便宜。[Tokenify 接入说明](website/content/docs/providers/tokenify.mdx)展示了如何按每次请求的时间选择路线。长期使用前请重新核对报价与 provider 状态。
+[价格对比页](https://ailcr.vercel.app/prices)列出当前有可购买路线的 text model 报价快照。DeepSeek V4.1 Flash 和 V4 Pro 单独按时段比较：截至 2026-09-30 PT，Tokenify 的 V4.1 Flash fresh input 和 output 比 DeepSeek 官方低峰低 40%，比高峰低 50%；V4 Pro 在官方低峰的 cache read 则更便宜。[Tokenify 接入说明](website/content/docs/providers/tokenify.mdx)展示了如何按每次请求的时间选择路线。长期使用前请重新核对报价与 provider 状态。
 
 ## 图像模型价格
 
-[图像与视频价格表](https://ai-lcr.vercel.app/prices)按相同参考输出归一化比较 Kunavo、fal、Runware、WaveSpeed 和 Replicate。各家的 resolution、duration 和 quality SKU 可能不同，路由前请看每行注释。
+[图像与视频价格表](https://ailcr.vercel.app/prices)按相同参考输出归一化比较 Kunavo、fal、Runware、WaveSpeed 和 Replicate。各家的 resolution、duration 和 quality SKU 可能不同，路由前请看每行注释。
 
 ## 视频模型价格
 

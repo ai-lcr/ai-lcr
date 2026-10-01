@@ -447,11 +447,11 @@ Any OpenAI-compatible endpoint works — and so does any AI SDK provider package
 
 ## Text model pricing
 
-See the [price comparison](https://ai-lcr.vercel.app/prices) for the current dated snapshot of buyable text routes. DeepSeek V4.1 Flash and V4 Pro are compared separately because official prices change by time of day. Tokenify's V4.1 Flash fresh input and output were 40% below DeepSeek direct off-peak and 50% below direct peak when checked on September 30, 2026 PT; V4 Pro's official off-peak cache reads were cheaper. [Tokenify setup](website/content/docs/providers/tokenify.mdx) shows how to switch routes per request. Check live provider prices and status before using a long-lived configuration.
+See the [price comparison](https://ailcr.vercel.app/prices) for the current dated snapshot of buyable text routes. DeepSeek V4.1 Flash and V4 Pro are compared separately because official prices change by time of day. Tokenify's V4.1 Flash fresh input and output were 40% below DeepSeek direct off-peak and 50% below direct peak when checked on September 30, 2026 PT; V4 Pro's official off-peak cache reads were cheaper. [Tokenify setup](website/content/docs/providers/tokenify.mdx) shows how to switch routes per request. Check live provider prices and status before using a long-lived configuration.
 
 ## Image model pricing
 
-See the [image and video table](https://ai-lcr.vercel.app/prices) for normalized per-output prices across Kunavo, fal, Runware, WaveSpeed and Replicate. Provider SKUs can differ in resolution, duration and quality, so review each row's note before routing.
+See the [image and video table](https://ailcr.vercel.app/prices) for normalized per-output prices across Kunavo, fal, Runware, WaveSpeed and Replicate. Provider SKUs can differ in resolution, duration and quality, so review each row's note before routing.
 
 ## Video model pricing
 
