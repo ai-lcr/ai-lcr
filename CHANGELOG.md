@@ -4,6 +4,12 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.3] — 2026-10-08
+
+### Added
+
+- Sonnet 5.5 native and OpenRouter price lookup for `autoPrice`: $2 input, $10 output, and $0.10 cache read per million tokens. The generator preserves the verified October 7 cache-read reduction.
+
 ## [0.9.2] — 2026-09-30
 
 ### Added

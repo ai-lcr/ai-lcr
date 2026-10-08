@@ -39,6 +39,7 @@ export const MODEL_PRICES: Record<string, ProviderCost> = {
   "claude-sonnet-4-5-20250929": { input: 3, output: 15, cacheRead: 0.3 },
   "claude-sonnet-4-6": { input: 3, output: 15, cacheRead: 0.3 },
   "claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1 },
   "codestral-2405": { input: 1, output: 3 },
   "codestral-2508": { input: 0.3, output: 0.9 },
   "codestral-latest": { input: 0.3, output: 0.9 },

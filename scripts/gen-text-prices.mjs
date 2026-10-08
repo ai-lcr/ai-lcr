@@ -109,6 +109,11 @@ for (const [key, v] of Object.entries(src)) {
   table.set(id, cost);
 }
 
+// Verified first-party releases can precede LiteLLM's catalog updates. Keep
+// Sonnet 5.5's Oct 7 cache-read reduction when regenerating the bundled table.
+// https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide
+table.set("claude-sonnet-5-5", { input: 2, output: 10, cacheRead: 0.1 });
+
 const entries = [...table.entries()].sort(([a], [b]) => a.localeCompare(b));
 const fmt = (c) =>
   c.cacheRead !== undefined

@@ -74,6 +74,26 @@ describe("getModelPrice", () => {
 });
 
 describe("createLCR — autoPrice", () => {
+  it("prices Sonnet 5.5 cache reads through native and aggregator ids", async () => {
+    for (const id of ["claude-sonnet-5-5", "anthropic/claude-sonnet-5.5"]) {
+      expect(getModelPrice(id)).toEqual({ input: 2, output: 10, cacheRead: 0.1 });
+      const costs: CostEvent[] = [];
+      const native = model(id, "native", { input: 1000, output: 100 });
+      native.doGenerate = async () => ({
+        content: [{ type: "text", text: "ok" }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1000, noCache: 100, cacheRead: 900, cacheWrite: undefined },
+          outputTokens: { total: 100, text: 100, reasoning: undefined },
+        },
+        warnings: [],
+      });
+      const lcr = createLCR({ autoPrice: true, models: { chat: [{ model: native, label: "native" }] }, onCost: (e) => costs.push(e) });
+      await generateText({ model: lcr("chat"), prompt: "hi", ...noRetry });
+      expect(costs[0]!.costUsd).toBeCloseTo((100 * 2 + 900 * 0.1 + 100 * 10) / 1e6, 12);
+    }
+  });
+
   it("fills cost from the table when an entry has no explicit cost", async () => {
     const costs: CostEvent[] = [];
     const lcr = createLCR({
