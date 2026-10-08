@@ -2380,6 +2380,25 @@
       ]
     },
     {
+      "id": "anthropic/claude-sonnet-5.5",
+      "name": "Claude Sonnet 5.5",
+      "vendor": "anthropic",
+      "license": "proprietary",
+      "note": "$0.10/M prompt-cache reads (October 7, 2026 rate). Official and OpenRouter list pricing verified October 8, 2026.",
+      "routes": [
+        {
+          "provider": "official",
+          "inUsd": 2.0,
+          "outUsd": 10.0
+        },
+        {
+          "provider": "openrouter",
+          "inUsd": 2.0,
+          "outUsd": 10.0
+        }
+      ]
+    },
+    {
       "id": "anthropic/claude-opus-4-6",
       "name": "Claude Opus 4.6",
       "vendor": "anthropic",
