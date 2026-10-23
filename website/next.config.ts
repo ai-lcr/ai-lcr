@@ -16,6 +16,22 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pg"],
 };
 
-export default withPlausibleProxy({
+const plausibleConfig = withPlausibleProxy({
   customDomain: "https://plausible.ideamarketfit.com",
 })(withMDX(nextConfig));
+
+const plausibleRewrites = plausibleConfig.rewrites!;
+// Events use the POST handler; keep script proxying and remove the external rewrite.
+plausibleConfig.rewrites = async () => {
+  const rewrites = await plausibleRewrites();
+  const keep = (rules: { source: string }[] = []) =>
+    rules.filter(({ source }) => source !== "/proxy/api/event");
+  if (Array.isArray(rewrites)) return keep(rewrites) as typeof rewrites;
+  return {
+    beforeFiles: keep(rewrites.beforeFiles),
+    afterFiles: keep(rewrites.afterFiles),
+    fallback: keep(rewrites.fallback),
+  } as typeof rewrites;
+};
+
+export default plausibleConfig;
