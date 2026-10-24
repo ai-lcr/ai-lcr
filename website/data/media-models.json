@@ -16,6 +16,10 @@
       "label": "Runware",
       "link": "https://runware.ai"
     },
+    "tokenify": {
+      "label": "Tokenify",
+      "link": "https://www.tokenify.dev/docs/images/"
+    },
     "wavespeed": {
       "label": "WaveSpeed",
       "link": "https://wavespeed.ai"
@@ -883,11 +887,17 @@
       "vendor": "bytedance",
       "license": "proprietary",
       "kind": "generate",
+      "note": "2K or larger (minimum 3.69 MP); same flat per-image price across supported sizes. Tokenify has been tested with a billed image request.",
       "routes": [
         {
           "provider": "official",
           "unit": "image",
           "cents": 3.5
+        },
+        {
+          "provider": "tokenify",
+          "unit": "image",
+          "cents": 2.8
         },
         {
           "provider": "runware",
@@ -903,6 +913,68 @@
           "provider": "replicate",
           "unit": "image",
           "cents": 3.5
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedream-5-flash",
+      "name": "Seedream 5.0 Flash",
+      "modality": "image",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "1K–2K output; Tokenify matches BytePlus direct at 1.8¢ and undercuts Runware/fal.",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 1.8
+        },
+        {
+          "provider": "tokenify",
+          "unit": "image",
+          "cents": 1.8
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 1.926
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 2.7
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedream-5-pro",
+      "name": "Seedream 5.0 Pro (2K)",
+      "modality": "image",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "note": "2K tier (above 2.61 MP): Tokenify 7.2¢, Runware 9.63¢, fal 13.5¢. At 1K–1.5K Tokenify charges 3.6¢ instead; ai-art records the actual charge returned by Tokenify.",
+      "routes": [
+        {
+          "provider": "official",
+          "unit": "image",
+          "cents": 9
+        },
+        {
+          "provider": "tokenify",
+          "unit": "image",
+          "cents": 7.2
+        },
+        {
+          "provider": "runware",
+          "unit": "image",
+          "cents": 9.63
+        },
+        {
+          "provider": "fal",
+          "unit": "image",
+          "cents": 13.5
         }
       ]
     },

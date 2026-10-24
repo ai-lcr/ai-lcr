@@ -10,16 +10,46 @@
  *     `@art/models` registry (audited against provider model pages 2026-05).
  *   - kunavo: read programmatically from `GET https://api.kunavo.com/v1/models`
  *     (`.kunavo.billing.perCallMicroCents` ÷ 1e6 → cents), 2026-05-29.
- *   - tokenmart: serves NO image/video models (47 text-only models) — excluded.
+ *   - tokenify: image prices from the public Tokenify image documentation,
+ *     checked 2026-10-24 against its models API.
  *
  * Only models where 2+ providers compete are listed (that's where routing has a
- * choice). The long tail of fal/runware-only models (Flux, Seedream, Kling, WAN,
- * Sora, Hunyuan, …) lives in ai-art's registry; Kunavo does not carry them, so
- * their "cheapest provider" is the fal-vs-runware call ai-art already encodes.
+ * choice). The remaining long tail of fal/runware-only models lives in ai-art's
+ * registry.
  */
 import type { MediaRegistry } from "./media";
 
 export const MEDIA_PRICING: MediaRegistry = {
+  // ── ByteDance Seedream 5 image ──────────────────────────────
+  "bytedance/seedream-5-lite": {
+    id: "bytedance/seedream-5-lite",
+    modality: "image",
+    official: { unit: "image", cents: 3.5 },
+    routes: [
+      { provider: "tokenify", externalId: "bytedance/seedream-5.0-lite", pricing: { unit: "image", cents: 2.8 } },
+      { provider: "runware", externalId: "bytedance:seedream@5.0-lite", pricing: { unit: "image", cents: 3.5 } },
+    ],
+  },
+  "bytedance/seedream-5-flash": {
+    id: "bytedance/seedream-5-flash",
+    modality: "image",
+    official: { unit: "image", cents: 1.8 },
+    routes: [
+      { provider: "tokenify", externalId: "bytedance/seedream-5.0-flash", pricing: { unit: "image", cents: 1.8 } },
+      { provider: "runware", externalId: "bytedance:seedream@5.0-flash", pricing: { unit: "image", cents: 1.926 } },
+      { provider: "fal", externalId: "bytedance/seedream/v5/flash/text-to-image", pricing: { unit: "image", cents: 2.7 } },
+    ],
+  },
+  "bytedance/seedream-5-pro": {
+    id: "bytedance/seedream-5-pro",
+    modality: "image",
+    official: { unit: "image", cents: 9 },
+    routes: [
+      { provider: "tokenify", externalId: "bytedance/seedream-5.0-pro", pricing: { unit: "image", cents: 7.2 }, note: "2K; 1K–1.5K is 3.6¢" },
+      { provider: "runware", externalId: "bytedance:seedream@5.0-pro", pricing: { unit: "image", cents: 9.63 }, note: "2K" },
+      { provider: "fal", externalId: "bytedance/seedream/v5/pro/text-to-image", pricing: { unit: "image", cents: 13.5 }, note: "2K" },
+    ],
+  },
   // ── Google image (Gemini "Nano Banana" family) ──────────────
   "google/nano-banana": {
     id: "google/nano-banana",
