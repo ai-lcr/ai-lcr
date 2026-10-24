@@ -99,6 +99,20 @@ describe("MEDIA_PRICING contract", () => {
       expect(row.cheapest.refCents).toBeCloseTo(min, 9);
     }
   });
+
+  it("routes Seedream generation by the matching per-image prices", () => {
+    for (const [modelId, cents, official] of [
+      ["bytedance/seedream-5-lite", 2.8, 3.5],
+      ["bytedance/seedream-5-flash", 1.8, 1.8],
+      ["bytedance/seedream-5-pro", 7.2, 9],
+    ] as const) {
+      const def = MEDIA_PRICING[modelId]!;
+      expect(cheapestRoute(def).provider).toBe("tokenify");
+      expect(cheapestRoute(def).refCents).toBe(cents);
+      expect(def.official?.cents).toBe(official);
+      expect(OFFICIAL_PRICES[modelId]?.cents).toBe(official);
+    }
+  });
 });
 
 describe("OFFICIAL_PRICES contract", () => {
