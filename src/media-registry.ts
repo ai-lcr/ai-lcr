@@ -11,7 +11,8 @@
  *   - kunavo: read programmatically from `GET https://api.kunavo.com/v1/models`
  *     (`.kunavo.billing.perCallMicroCents` ÷ 1e6 → cents), 2026-05-29.
  *   - tokenify: image prices from the public Tokenify image documentation,
- *     checked 2026-10-24 against its models API.
+ *     checked 2026-10-24 against its models API. Seedance Mini estimates use
+ *     live 16:9 jobs in both input modes (2026-11-17).
  *
  * Only models where 2+ providers compete are listed (that's where routing has a
  * choice). The remaining long tail of fal/runware-only models lives in ai-art's
@@ -20,6 +21,31 @@
 import type { MediaRegistry } from "./media";
 
 export const MEDIA_PRICING: MediaRegistry = {
+  "bytedance/seedance-2-0-mini": {
+    id: "bytedance/seedance-2-0-mini",
+    modality: "video",
+    routes: [
+      {
+        provider: "tokenify",
+        externalId: "bytedance/seedance-2.0-mini",
+        pricing: { unit: "second", cents: 4.58325, videoRates: {
+          "480p": { cents: 2.131175, withVideoCents: 1.347175 },
+          "720p": { cents: 4.58325, withVideoCents: 2.99375 },
+        } },
+        note: "720p estimate for text/image input. Billed at $2.10/M output tokens, or $1.26/M with video input.",
+      },
+      {
+        provider: "runware",
+        externalId: "bytedance:seedance@2.0-mini",
+        pricing: { unit: "second", cents: 8.1, videoRates: {
+          "480p": { cents: 3.6, withVideoCents: 4.3 },
+          "720p": { cents: 8.1, withVideoCents: 10.6 },
+        } },
+        note: "720p text/image rate. A video input is charged at the video-to-video rate.",
+      },
+    ],
+  },
+
   // ── ByteDance Seedream 5 image ──────────────────────────────
   "bytedance/seedream-5-lite": {
     id: "bytedance/seedream-5-lite",

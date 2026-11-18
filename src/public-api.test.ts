@@ -53,6 +53,7 @@ const EXPECTED_EXPORTS = [
   "createKunavoMediaAdapter",
   "createRunwareMediaAdapter",
   "createFalMediaAdapter",
+  "createTokenifyVideoAdapter",
 ] as const;
 
 describe("public API surface", () => {

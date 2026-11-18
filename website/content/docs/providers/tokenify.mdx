@@ -55,3 +55,7 @@ In Pacific Daylight Time, DeepSeek's peak windows are Sunday–Thursday 18:00–
 The `cost` values are list-price estimates for `onCall` and `onCost`. Provider-reported charge, when present, takes precedence; billing at a boundary or future price change can differ from a request-start estimate. Check [Tokenify's models API](https://api.tokenify.dev/v1/models) (with your API key; `pricing_offpeak` is not yet shown in the dashboard's main price cards) and [DeepSeek's official prices](https://api-docs.deepseek.com/quick_start/pricing/) before deploying a long-lived configuration.
 
 DeepSeek retired V4 Flash. Its legacy `deepseek-v4-flash` ID now routes to V4.1 Flash on the official API. Tokenify lists V4 Flash separately, so do not assume those two IDs serve the same model version.
+
+## Seedance 2.0 Mini video
+
+Pass `createTokenifyVideoAdapter({ apiKey })` as the `tokenify` adapter in `createMediaLCR` with `MEDIA_PRICING`. Submit `bytedance/seedance-2-0-mini` with a prompt, `resolution` (`480p` or `720p`), and a duration of 4–15 seconds. Use `image_url` for a first frame or `video_url` for a source clip. Save the returned handle and poll until it settles. Tokenify charges $2.10 per million output tokens from a prompt or image and $1.26 per million with video input. The router uses the charge reported on the finished job when available. [Tokenify's rate card](https://www.tokenify.dev/models/seedance-2-0-mini/).

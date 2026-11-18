@@ -40,6 +40,25 @@ export interface RunwareMediaConfig {
 }
 
 const DEFAULT_BASE = "https://api.runware.ai/v1";
+const SEEDANCE_MINI_DIMENSIONS: Record<string, Record<string, [number, number]>> = {
+  "480p": { "16:9": [864, 496], "4:3": [752, 560], "1:1": [640, 640], "3:4": [560, 752], "9:16": [496, 864], "21:9": [992, 432] },
+  "720p": { "16:9": [1280, 720], "4:3": [1112, 834], "1:1": [960, 960], "3:4": [834, 1112], "9:16": [720, 1280], "21:9": [1470, 630] },
+};
+
+function seedanceMiniInput(input: Record<string, unknown>): Record<string, unknown> {
+  const { prompt, resolution = "720p", aspect_ratio = "16:9", image_url, video_url, duration, generate_audio } = input;
+  const dimensions = SEEDANCE_MINI_DIMENSIONS[String(resolution)]?.[String(aspect_ratio)];
+  if (!Array.isArray(dimensions)) throw new Error("Runware Seedance Mini requires a supported resolution and aspect ratio");
+  const [width, height] = dimensions;
+  return {
+    positivePrompt: prompt,
+    duration,
+    settings: { audio: generate_audio ?? true },
+    ...(video_url ? { resolution, inputs: { referenceVideos: [video_url] } }
+      : image_url ? { resolution, inputs: { frameImages: [{ image: image_url, frame: "first" }] } }
+        : { width, height }),
+  };
+}
 
 interface RunwareImageResult {
   imageURL?: string;
@@ -163,7 +182,8 @@ export function createRunwareMediaAdapter(config: RunwareMediaConfig): MediaAdap
       await postTask({
         outputType: "URL",
         includeCost: true,
-        ...req.input,
+        ...(req.externalId === "bytedance:seedance@2.0-mini" && typeof req.input.prompt === "string"
+          ? seedanceMiniInput(req.input) : req.input),
         taskType: "videoInference",
         taskUUID,
         model: req.externalId,
