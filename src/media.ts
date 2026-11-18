@@ -32,6 +32,16 @@ export interface MediaPricing {
   unit: MediaUnit;
   /** Price in US cents for one `unit`. Fractional allowed (0.13 = $0.0013). */
   cents: number;
+  /** Per-second estimates by output resolution, when a model has multiple video tiers. */
+  videoRates?: Record<string, { cents: number; withVideoCents?: number }>;
+}
+
+function pricingForInput(pricing: MediaPricing, input?: Record<string, unknown>): MediaPricing {
+  const resolution = input?.["resolution"];
+  const tier = typeof resolution === "string" ? pricing.videoRates?.[resolution] : undefined;
+  if (typeof tier?.cents !== "number") return pricing;
+  const hasVideo = typeof input?.["video_url"] === "string" && input["video_url"].length > 0;
+  return { unit: pricing.unit, cents: (hasVideo ? tier.withVideoCents : undefined) ?? tier.cents };
 }
 
 /** One provider's route for a model. */
@@ -193,7 +203,8 @@ export function billableUnits(
 
 /** Price a settled generation on `pricing`, from its actual usage (cents). */
 export function priceCents(pricing: MediaPricing, ctx: BillableContext): number {
-  return pricing.cents * billableUnits(pricing.unit, ctx).value;
+  const { unit, cents } = pricingForInput(pricing, ctx.input);
+  return cents * billableUnits(unit, ctx).value;
 }
 
 // ── Cheapest-first ranking (the LCR core) ─────────────────────
@@ -353,6 +364,8 @@ export interface MediaStatusResult {
  */
 export interface MediaAdapter {
   provider: string;
+  /** Set false when an accepted job can still bill after the caller's deadline. */
+  failoverOnTimeout?: boolean;
   run(req: MediaGenerateRequest): Promise<MediaGenerateResult>;
   submit?(req: MediaSubmitRequest): Promise<MediaSubmitResult>;
   checkStatus?(req: MediaStatusRequest): Promise<MediaStatusResult>;
@@ -606,7 +619,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
   // pre-computed number) is what's resolved here: the USD figure is priced at
   // settle time against the same actual usage as the cost, so an 8-second clip
   // is baselined at 8 seconds of the official rate, not the 5s reference.
-  function resolve(modelId: string): {
+  function resolve(modelId: string, input?: Record<string, unknown>): {
     def: MediaModelDef;
     ranked: RankedRoute[];
     baseline?: Baseline;
@@ -615,11 +628,14 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     if (!def) {
       throw new Error(`ai-lcr: unknown media model "${modelId}" — add it to the registry`);
     }
-    const ranked = rankRoutes(def, reference);
+    const ranked = rankRoutes({
+      ...def,
+      routes: def.routes.map((route) => ({ ...route, pricing: pricingForInput(route.pricing, input) })),
+    }, reference);
     const official = def.official ?? officialPrices[modelId];
     const baseline: Baseline | undefined =
       official !== undefined
-        ? { pricing: official, kind: "official" }
+        ? { pricing: pricingForInput(official, input), kind: "official" }
         : ranked.length > 0
           ? { pricing: ranked[ranked.length - 1]!.pricing, kind: "priciest-route" }
           : undefined;
@@ -833,11 +849,6 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
   // Routes that can serve async = have an adapter wired AND that adapter
   // implements `submit`. (Image-only adapters omit `submit`, so they're skipped
   // here even though they serve the sync path.)
-  const asyncRanked = (modelId: string): RankedRoute[] => {
-    const { ranked } = resolve(modelId);
-    return ranked.filter((r) => typeof adapters[r.provider]?.submit === "function");
-  };
-
   // Try to submit to the cheapest of `routes`, recording each failed attempt.
   // Returns the handle on the first success. Throws (after emitting a fail
   // record) when none accept it or a non-retryable error is hit — but only if
@@ -904,7 +915,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     input: Record<string, unknown>,
     options?: MediaSubmitOptions,
   ): Promise<MediaJobHandle> {
-    const { ranked, baseline } = resolve(modelId);
+    const { ranked, baseline } = resolve(modelId, input);
     const usable = ranked.filter((r) => typeof adapters[r.provider]?.submit === "function");
     if (usable.length === 0) {
       throw new Error(
@@ -933,8 +944,9 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
     // through so the eventual settled record shows the whole chain. Returns a
     // fresh handle to keep polling; emits a fail record + throws when exhausted.
     const failover = async (attempts: CallRecord["attempts"]): Promise<MediaPollResult> => {
-      const { baseline } = resolve(handle.modelId);
-      const next = asyncRanked(handle.modelId).filter((r) =>
+      const { ranked, baseline } = resolve(handle.modelId, handle.input);
+      const next = ranked.filter((r) =>
+        typeof adapters[r.provider]?.submit === "function" &&
         handle.fallbacks.some((f) => f.provider === r.provider && f.externalId === r.externalId),
       );
       const newHandle = await submitFrom(
@@ -1000,7 +1012,7 @@ export function createMediaLCR(config: MediaLCRConfig): MediaLCR {
           new Error(
             `ai-lcr: ${handle.provider} job ${handle.requestId} hit its timeout — still "${status.status}" after ${elapsedMs}ms (deadline ${handle.deadlineAt - handle.startedAt}ms)`,
           ),
-          true,
+          adapter.failoverOnTimeout !== false,
         );
       }
       return { done: false, status: status.status, handle };

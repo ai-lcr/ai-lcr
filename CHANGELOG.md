@@ -4,6 +4,14 @@ All notable changes to `ai-lcr` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.4] — 2026-11-17
+
+### Added
+
+- Async Tokenify video adapter and Seedance 2.0 Mini routing with price estimates for 480p and 720p. Finished jobs report the provider's charge.
+- Runware fallback for a confirmed failure. A Tokenify job still running at the deadline does not start a duplicate fallback job.
+- The public media price table includes Seedance 2.0 Mini.
+
 ## [0.9.3] — 2026-10-08
 
 ### Added

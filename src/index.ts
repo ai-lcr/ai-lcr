@@ -95,6 +95,7 @@ export { OFFICIAL_PRICES } from "./media-official";
 export { createKunavoMediaAdapter } from "./adapters/kunavo-media";
 export { createRunwareMediaAdapter } from "./adapters/runware-media";
 export { createFalMediaAdapter } from "./adapters/fal-media";
+export { createTokenifyVideoAdapter, type TokenifyVideoConfig } from "./adapters/tokenify-video";
 
 /**
  * Any object with the `doGenerate` + `doStream` shape — accepts LanguageModelV3

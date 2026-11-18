@@ -18,7 +18,7 @@
     },
     "tokenify": {
       "label": "Tokenify",
-      "link": "https://www.tokenify.dev/docs/images/"
+      "link": "https://www.tokenify.dev/docs/models/"
     },
     "wavespeed": {
       "label": "WaveSpeed",
@@ -1747,6 +1747,27 @@
           "cents": 225
         }
       ]
+    },
+    {
+      "id": "bytedance/seedance-2-0-mini",
+      "name": "Seedance 2.0 Mini",
+      "modality": "video",
+      "vendor": "bytedance",
+      "license": "proprietary",
+      "kind": "generate",
+      "routes": [
+        {
+          "provider": "tokenify",
+          "unit": "second",
+          "cents": 4.58325
+        },
+        {
+          "provider": "runware",
+          "unit": "second",
+          "cents": 8.1
+        }
+      ],
+      "note": "720p, 16:9 from text or an image. Tokenify bills $2.10/M output tokens or $1.26/M with video input. Its per-second figure is an estimate from a live job. Mini also supports 480p."
     },
     {
       "id": "bytedance/seedance-2-0-fast",
